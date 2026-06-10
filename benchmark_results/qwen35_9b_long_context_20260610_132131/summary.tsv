@@ -1,0 +1,5 @@
+input_len	output_len	batch_size	avg_latency_s	p50_s	p90_s	p99_s	request_per_s	output_tokens_per_s	total_tokens_per_s	json
+4096	4096	1	95.551129	95.548174	95.559280	95.561779	0.010466	42.867102	85.734204	/home/xsl/pra26/vllm-cuda/benchmark_results/qwen35_9b_long_context_20260610_132131/latency_in4096_out4096.json
+8192	4096	1	96.502810	96.504883	96.509256	96.510241	0.010362	42.444360	127.333079	/home/xsl/pra26/vllm-cuda/benchmark_results/qwen35_9b_long_context_20260610_132131/latency_in8192_out4096.json
+16384	4096	1	99.912058	99.903071	99.932457	99.939069	0.010009	40.996053	204.980264	/home/xsl/pra26/vllm-cuda/benchmark_results/qwen35_9b_long_context_20260610_132131/latency_in16384_out4096.json
+32768	4096	1	105.237065	105.262105	105.267513	105.268730	0.009502	38.921648	350.294833	/home/xsl/pra26/vllm-cuda/benchmark_results/qwen35_9b_long_context_20260610_132131/latency_in32768_out4096.json
