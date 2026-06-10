@@ -1,0 +1,29 @@
+{
+  "args": {
+    "model": "/data/Competitions/PRA26/Qwen3.5-9B",
+    "input_len": 32768,
+    "output_len": 2,
+    "warmup_input_len": 128,
+    "warmup_output_len": 1,
+    "max_model_len": 32776,
+    "max_num_batched_tokens": 32768,
+    "max_num_seqs": 1,
+    "gpu_memory_utilization": 0.9,
+    "dtype": "auto",
+    "tensor_parallel_size": 1,
+    "gdn_prefill_backend": "auto",
+    "enforce_eager": false,
+    "seed": 0,
+    "max_records": 256,
+    "output_dir": "benchmark_results/gdn_vllm_profile_32k"
+  },
+  "latency_s_including_profiler_overhead": 6.991235162131488,
+  "generated_tokens": 2,
+  "torch_profiler_dir": "/home/xsl/pra26/vllm-cuda/benchmark_results/gdn_vllm_profile_32k/torch_profiler",
+  "gdn_summary": {
+    "num_recorded_calls": 0,
+    "calls_by_phase": {},
+    "layers_seen": [],
+    "first_call_by_phase": {}
+  }
+}

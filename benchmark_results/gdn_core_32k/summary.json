@@ -1,0 +1,331 @@
+{
+  "device": "NVIDIA L40",
+  "state_dtype": "torch.float32",
+  "gdn_dims": {
+    "num_k_heads": 16,
+    "num_v_heads": 32,
+    "head_k_dim": 128,
+    "head_v_dim": 128,
+    "conv_dim": 8192,
+    "conv_kernel": 4
+  },
+  "prefill": {
+    "avg_cuda_event_ms": 13.420543670654297,
+    "inputs": {
+      "mixed_qkv": {
+        "shape": [
+          32768,
+          8192
+        ],
+        "dtype": "torch.bfloat16",
+        "device": "cuda:0",
+        "stride": [
+          8192,
+          1
+        ],
+        "is_contiguous": true
+      },
+      "b": {
+        "shape": [
+          32768,
+          32
+        ],
+        "dtype": "torch.bfloat16",
+        "device": "cuda:0",
+        "stride": [
+          32,
+          1
+        ],
+        "is_contiguous": true
+      },
+      "a": {
+        "shape": [
+          32768,
+          32
+        ],
+        "dtype": "torch.bfloat16",
+        "device": "cuda:0",
+        "stride": [
+          32,
+          1
+        ],
+        "is_contiguous": true
+      },
+      "core_attn_out": {
+        "shape": [
+          32768,
+          32,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "device": "cuda:0",
+        "stride": [
+          4096,
+          128,
+          1
+        ],
+        "is_contiguous": true
+      }
+    },
+    "metadata": {
+      "num_prefills": 1,
+      "num_prefill_tokens": 32768,
+      "num_decodes": 0,
+      "num_decode_tokens": 0,
+      "num_actual_tokens": 32768,
+      "has_initial_state": {
+        "shape": [
+          1
+        ],
+        "dtype": "torch.bool",
+        "device": "cuda:0",
+        "stride": [
+          1
+        ],
+        "is_contiguous": true,
+        "values": [
+          false
+        ]
+      },
+      "non_spec_query_start_loc": {
+        "shape": [
+          2
+        ],
+        "dtype": "torch.int32",
+        "device": "cuda:0",
+        "stride": [
+          1
+        ],
+        "is_contiguous": true,
+        "values": [
+          0,
+          32768
+        ]
+      },
+      "prefill_query_start_loc": {
+        "shape": [
+          2
+        ],
+        "dtype": "torch.int32",
+        "device": "cuda:0",
+        "stride": [
+          1
+        ],
+        "is_contiguous": true,
+        "values": [
+          0,
+          32768
+        ]
+      },
+      "chunk_indices": {
+        "shape": [
+          512,
+          2
+        ],
+        "dtype": "torch.int32",
+        "device": "cuda:0",
+        "stride": [
+          2,
+          1
+        ],
+        "is_contiguous": true
+      },
+      "chunk_offsets": {
+        "shape": [
+          2
+        ],
+        "dtype": "torch.int64",
+        "device": "cuda:0",
+        "stride": [
+          1
+        ],
+        "is_contiguous": true,
+        "values": [
+          0,
+          512
+        ]
+      },
+      "non_spec_state_indices_tensor": {
+        "shape": [
+          1
+        ],
+        "dtype": "torch.int32",
+        "device": "cuda:0",
+        "stride": [
+          1
+        ],
+        "is_contiguous": true,
+        "values": [
+          2047
+        ]
+      },
+      "prefill_state_indices": {
+        "shape": [
+          1
+        ],
+        "dtype": "torch.int32",
+        "device": "cuda:0",
+        "stride": [
+          1
+        ],
+        "is_contiguous": true,
+        "values": [
+          2047
+        ]
+      },
+      "prefill_has_initial_state": {
+        "shape": [
+          1
+        ],
+        "dtype": "torch.bool",
+        "device": "cuda:0",
+        "stride": [
+          1
+        ],
+        "is_contiguous": true,
+        "values": [
+          false
+        ]
+      },
+      "chunk_indices_head": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          0,
+          6
+        ],
+        [
+          0,
+          7
+        ]
+      ]
+    },
+    "trace_file": "benchmark_results/gdn_core_32k/prefill_trace.json.gz",
+    "profile_table": "benchmark_results/gdn_core_32k/prefill_profiler_table.txt"
+  },
+  "decode": {
+    "avg_cuda_event_ms": 0.5361881637573243,
+    "inputs": {
+      "mixed_qkv": {
+        "shape": [
+          1,
+          8192
+        ],
+        "dtype": "torch.bfloat16",
+        "device": "cuda:0",
+        "stride": [
+          8192,
+          1
+        ],
+        "is_contiguous": true
+      },
+      "b": {
+        "shape": [
+          1,
+          32
+        ],
+        "dtype": "torch.bfloat16",
+        "device": "cuda:0",
+        "stride": [
+          32,
+          1
+        ],
+        "is_contiguous": true
+      },
+      "a": {
+        "shape": [
+          1,
+          32
+        ],
+        "dtype": "torch.bfloat16",
+        "device": "cuda:0",
+        "stride": [
+          32,
+          1
+        ],
+        "is_contiguous": true
+      },
+      "core_attn_out": {
+        "shape": [
+          1,
+          32,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "device": "cuda:0",
+        "stride": [
+          4096,
+          128,
+          1
+        ],
+        "is_contiguous": true
+      }
+    },
+    "metadata": {
+      "num_prefills": 0,
+      "num_prefill_tokens": 0,
+      "num_decodes": 1,
+      "num_decode_tokens": 1,
+      "num_actual_tokens": 1,
+      "has_initial_state": null,
+      "non_spec_query_start_loc": {
+        "shape": [
+          2
+        ],
+        "dtype": "torch.int32",
+        "device": "cuda:0",
+        "stride": [
+          1
+        ],
+        "is_contiguous": true,
+        "values": [
+          0,
+          1
+        ]
+      },
+      "prefill_query_start_loc": null,
+      "chunk_indices": null,
+      "chunk_offsets": null,
+      "non_spec_state_indices_tensor": {
+        "shape": [
+          1
+        ],
+        "dtype": "torch.int32",
+        "device": "cuda:0",
+        "stride": [
+          1
+        ],
+        "is_contiguous": true,
+        "values": [
+          2048
+        ]
+      },
+      "prefill_state_indices": null,
+      "prefill_has_initial_state": null
+    },
+    "trace_file": "benchmark_results/gdn_core_32k/decode_trace.json.gz",
+    "profile_table": "benchmark_results/gdn_core_32k/decode_profiler_table.txt"
+  }
+}

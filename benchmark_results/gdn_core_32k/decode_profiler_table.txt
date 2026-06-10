@@ -1,0 +1,30 @@
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                             standalone_gdn_core/decode         0.00%       0.000us         0.00%       0.000us       0.000us     405.830us      5307.05%     405.830us     405.830us             1  
+          fused_sigmoid_gating_delta_rule_update_kernel         0.00%       0.000us         0.00%       0.000us       0.000us       3.456us        45.19%       3.456us       3.456us             1  
+                           _causal_conv1d_update_kernel         0.00%       0.000us         0.00%       0.000us       0.000us       1.631us        21.33%       1.631us       1.631us             1  
+                                              aten::cat         0.86%      23.394us         1.58%      42.848us      42.848us       1.504us        19.67%       1.504us       1.504us             1  
+void at::native::(anonymous namespace)::CatArrayBatc...         0.00%       0.000us         0.00%       0.000us       0.000us       1.504us        19.67%       1.504us       1.504us             1  
+                                            aten::copy_         0.44%      11.836us         0.98%      26.421us      26.421us       1.056us        13.81%       1.056us       1.056us             1  
+                         Memcpy DtoD (Device -> Device)         0.00%       0.000us         0.00%       0.000us       0.000us       1.056us        13.81%       1.056us       1.056us             1  
+                             standalone_gdn_core/decode        27.04%     731.493us        99.77%       2.699ms       2.699ms       0.000us         0.00%       2.560us       2.560us             1  
+                                        aten::transpose         0.50%      13.521us         0.61%      16.380us      16.380us       0.000us         0.00%       0.000us       0.000us             1  
+                                       aten::as_strided         0.57%      15.376us         0.57%      15.376us       0.961us       0.000us         0.00%       0.000us       0.000us            16  
+                                            aten::slice         1.09%      29.591us         1.26%      33.953us       4.244us       0.000us         0.00%       0.000us       0.000us             8  
+                                             aten::view         0.52%      14.001us         0.52%      14.001us       2.000us       0.000us         0.00%       0.000us       0.000us             7  
+                                               aten::to         0.05%       1.355us         0.05%       1.355us       0.678us       0.000us         0.00%       0.000us       0.000us             2  
+                                        aten::unsqueeze         0.16%       4.274us         0.20%       5.346us       5.346us       0.000us         0.00%       0.000us       0.000us             1  
+                                Activity Buffer Request        64.59%       1.747ms        64.59%       1.747ms       1.747ms       0.000us         0.00%       0.000us       0.000us             1  
+                                       cuLaunchKernelEx         1.08%      29.223us         1.08%      29.223us      14.612us       0.000us         0.00%       0.000us       0.000us             2  
+                                          aten::squeeze         0.75%      20.167us         0.93%      25.266us       8.422us       0.000us         0.00%       0.000us       0.000us             3  
+                                 aten::split_with_sizes         0.30%       8.165us         0.38%      10.149us      10.149us       0.000us         0.00%       0.000us       0.000us             1  
+                                          aten::reshape         0.19%       5.013us         0.39%      10.669us       3.556us       0.000us         0.00%       0.000us       0.000us             3  
+                                       cudaLaunchKernel         0.72%      19.454us         0.72%      19.454us      19.454us       0.000us         0.00%       0.000us       0.000us             1  
+                                        aten::new_empty         0.12%       3.282us         0.38%      10.165us      10.165us       0.000us         0.00%       0.000us       0.000us             1  
+                                            aten::empty         0.25%       6.883us         0.25%       6.883us       6.883us       0.000us         0.00%       0.000us       0.000us             1  
+                                        cudaMemcpyAsync         0.54%      14.585us         0.54%      14.585us      14.585us       0.000us         0.00%       0.000us       0.000us             1  
+                                  cudaDeviceSynchronize         0.23%       6.258us         0.23%       6.258us       6.258us       0.000us         0.00%       0.000us       0.000us             1  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 2.705ms
+Self CUDA time total: 7.647us

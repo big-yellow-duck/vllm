@@ -1,0 +1,318 @@
+{
+  "device": "NVIDIA L40",
+  "state_dtype": "torch.float32",
+  "config": {
+    "source": "benchmark_results/qwen35_27b_gdn_config.json",
+    "hidden_size": 5120,
+    "num_k_heads": 16,
+    "num_v_heads": 48,
+    "head_k_dim": 128,
+    "head_v_dim": 128,
+    "conv_kernel": 4,
+    "num_hidden_layers": 64,
+    "num_gdn_layers": 48,
+    "mamba_ssm_dtype": "float32",
+    "dtype": "bfloat16"
+  },
+  "gdn_dims": {
+    "num_hidden_layers": 64,
+    "num_gdn_layers": 48,
+    "num_k_heads": 16,
+    "num_v_heads": 48,
+    "head_k_dim": 128,
+    "head_v_dim": 128,
+    "key_dim": 2048,
+    "value_dim": 6144,
+    "conv_dim": 10240,
+    "conv_kernel": 4
+  },
+  "prefill": {
+    "avg_cuda_event_ms": 2.3193600177764893,
+    "inputs": {
+      "mixed_qkv": {
+        "shape": [
+          64,
+          10240
+        ],
+        "dtype": "torch.bfloat16",
+        "device": "cuda:0",
+        "stride": [
+          10240,
+          1
+        ],
+        "is_contiguous": true
+      },
+      "b": {
+        "shape": [
+          64,
+          48
+        ],
+        "dtype": "torch.bfloat16",
+        "device": "cuda:0",
+        "stride": [
+          48,
+          1
+        ],
+        "is_contiguous": true
+      },
+      "a": {
+        "shape": [
+          64,
+          48
+        ],
+        "dtype": "torch.bfloat16",
+        "device": "cuda:0",
+        "stride": [
+          48,
+          1
+        ],
+        "is_contiguous": true
+      },
+      "core_attn_out": {
+        "shape": [
+          64,
+          48,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "device": "cuda:0",
+        "stride": [
+          6144,
+          128,
+          1
+        ],
+        "is_contiguous": true
+      }
+    },
+    "metadata": {
+      "num_prefills": 1,
+      "num_prefill_tokens": 64,
+      "num_decodes": 0,
+      "num_decode_tokens": 0,
+      "num_actual_tokens": 64,
+      "has_initial_state": {
+        "shape": [
+          1
+        ],
+        "dtype": "torch.bool",
+        "device": "cuda:0",
+        "stride": [
+          1
+        ],
+        "is_contiguous": true,
+        "values": [
+          false
+        ]
+      },
+      "non_spec_query_start_loc": {
+        "shape": [
+          2
+        ],
+        "dtype": "torch.int32",
+        "device": "cuda:0",
+        "stride": [
+          1
+        ],
+        "is_contiguous": true,
+        "values": [
+          0,
+          64
+        ]
+      },
+      "prefill_query_start_loc": {
+        "shape": [
+          2
+        ],
+        "dtype": "torch.int32",
+        "device": "cuda:0",
+        "stride": [
+          1
+        ],
+        "is_contiguous": true,
+        "values": [
+          0,
+          64
+        ]
+      },
+      "chunk_indices": {
+        "shape": [
+          1,
+          2
+        ],
+        "dtype": "torch.int32",
+        "device": "cuda:0",
+        "stride": [
+          2,
+          1
+        ],
+        "is_contiguous": true
+      },
+      "chunk_offsets": {
+        "shape": [
+          2
+        ],
+        "dtype": "torch.int64",
+        "device": "cuda:0",
+        "stride": [
+          1
+        ],
+        "is_contiguous": true,
+        "values": [
+          0,
+          1
+        ]
+      },
+      "non_spec_state_indices_tensor": {
+        "shape": [
+          1
+        ],
+        "dtype": "torch.int32",
+        "device": "cuda:0",
+        "stride": [
+          1
+        ],
+        "is_contiguous": true,
+        "values": [
+          3
+        ]
+      },
+      "prefill_state_indices": {
+        "shape": [
+          1
+        ],
+        "dtype": "torch.int32",
+        "device": "cuda:0",
+        "stride": [
+          1
+        ],
+        "is_contiguous": true,
+        "values": [
+          3
+        ]
+      },
+      "prefill_has_initial_state": {
+        "shape": [
+          1
+        ],
+        "dtype": "torch.bool",
+        "device": "cuda:0",
+        "stride": [
+          1
+        ],
+        "is_contiguous": true,
+        "values": [
+          false
+        ]
+      },
+      "chunk_indices_head": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    "trace_file": null
+  },
+  "decode": {
+    "avg_cuda_event_ms": 0.8581119775772095,
+    "inputs": {
+      "mixed_qkv": {
+        "shape": [
+          1,
+          10240
+        ],
+        "dtype": "torch.bfloat16",
+        "device": "cuda:0",
+        "stride": [
+          10240,
+          1
+        ],
+        "is_contiguous": true
+      },
+      "b": {
+        "shape": [
+          1,
+          48
+        ],
+        "dtype": "torch.bfloat16",
+        "device": "cuda:0",
+        "stride": [
+          48,
+          1
+        ],
+        "is_contiguous": true
+      },
+      "a": {
+        "shape": [
+          1,
+          48
+        ],
+        "dtype": "torch.bfloat16",
+        "device": "cuda:0",
+        "stride": [
+          48,
+          1
+        ],
+        "is_contiguous": true
+      },
+      "core_attn_out": {
+        "shape": [
+          1,
+          48,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "device": "cuda:0",
+        "stride": [
+          6144,
+          128,
+          1
+        ],
+        "is_contiguous": true
+      }
+    },
+    "metadata": {
+      "num_prefills": 0,
+      "num_prefill_tokens": 0,
+      "num_decodes": 1,
+      "num_decode_tokens": 1,
+      "num_actual_tokens": 1,
+      "has_initial_state": null,
+      "non_spec_query_start_loc": {
+        "shape": [
+          2
+        ],
+        "dtype": "torch.int32",
+        "device": "cuda:0",
+        "stride": [
+          1
+        ],
+        "is_contiguous": true,
+        "values": [
+          0,
+          1
+        ]
+      },
+      "prefill_query_start_loc": null,
+      "chunk_indices": null,
+      "chunk_offsets": null,
+      "non_spec_state_indices_tensor": {
+        "shape": [
+          1
+        ],
+        "dtype": "torch.int32",
+        "device": "cuda:0",
+        "stride": [
+          1
+        ],
+        "is_contiguous": true,
+        "values": [
+          4
+        ]
+      },
+      "prefill_state_indices": null,
+      "prefill_has_initial_state": null
+    },
+    "trace_file": null
+  }
+}

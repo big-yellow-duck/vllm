@@ -3,6 +3,8 @@
 """Inference-only Qwen3-Next/Qwen3.5 model."""
 
 import functools
+import json
+import os
 from typing import Literal
 
 import torch
@@ -81,6 +83,102 @@ if GDN_AITER_TRITON_AVAILABLE:
     )
 
 logger = init_logger(__name__)
+_GDN_SHAPE_LOG_COUNT = 0
+
+
+def _gdn_tensor_shape_metadata(tensor: torch.Tensor | None) -> dict | None:
+    if tensor is None:
+        return None
+    return {
+        "shape": list(tensor.shape),
+        "dtype": str(tensor.dtype),
+        "device": str(tensor.device),
+        "stride": list(tensor.stride()),
+        "is_contiguous": tensor.is_contiguous(),
+    }
+
+
+def _gdn_attention_metadata_summary(
+    metadata: GDNAttentionMetadata | None,
+) -> dict | None:
+    if metadata is None:
+        return None
+    return {
+        "num_prefills": metadata.num_prefills,
+        "num_prefill_tokens": metadata.num_prefill_tokens,
+        "num_decodes": metadata.num_decodes,
+        "num_decode_tokens": metadata.num_decode_tokens,
+        "num_spec_decodes": metadata.num_spec_decodes,
+        "num_spec_decode_tokens": metadata.num_spec_decode_tokens,
+        "num_actual_tokens": metadata.num_actual_tokens,
+        "has_initial_state": _gdn_tensor_shape_metadata(metadata.has_initial_state),
+        "non_spec_query_start_loc": _gdn_tensor_shape_metadata(
+            metadata.non_spec_query_start_loc
+        ),
+        "prefill_query_start_loc": _gdn_tensor_shape_metadata(
+            metadata.prefill_query_start_loc
+        ),
+        "chunk_indices": _gdn_tensor_shape_metadata(metadata.chunk_indices),
+        "chunk_offsets": _gdn_tensor_shape_metadata(metadata.chunk_offsets),
+        "non_spec_state_indices_tensor": _gdn_tensor_shape_metadata(
+            metadata.non_spec_state_indices_tensor
+        ),
+        "prefill_state_indices": _gdn_tensor_shape_metadata(
+            metadata.prefill_state_indices
+        ),
+        "prefill_has_initial_state": _gdn_tensor_shape_metadata(
+            metadata.prefill_has_initial_state
+        ),
+    }
+
+
+def _maybe_log_gdn_shape_event(
+    *,
+    layer_name: str,
+    use_aiter: bool,
+    qkv_or_qkvz: torch.Tensor,
+    b_or_ba: torch.Tensor,
+    a_or_z_out: torch.Tensor,
+    core_attn_out: torch.Tensor,
+    layer: object,
+    metadata: GDNAttentionMetadata | None,
+) -> None:
+    log_path = os.getenv("VLLM_GDN_SHAPE_LOG_PATH")
+    log_to_logger = os.getenv("VLLM_LOG_GDN_SHAPES") == "1"
+    if not log_path and not log_to_logger:
+        return
+
+    global _GDN_SHAPE_LOG_COUNT
+    limit = int(os.getenv("VLLM_GDN_SHAPE_LOG_LIMIT", "256"))
+    if _GDN_SHAPE_LOG_COUNT >= limit:
+        return
+    _GDN_SHAPE_LOG_COUNT += 1
+
+    event = {
+        "layer": layer_name,
+        "use_aiter": use_aiter,
+        "qkv_or_qkvz": _gdn_tensor_shape_metadata(qkv_or_qkvz),
+        "b_or_ba": _gdn_tensor_shape_metadata(b_or_ba),
+        "a_or_z_out": _gdn_tensor_shape_metadata(a_or_z_out),
+        "core_attn_out": _gdn_tensor_shape_metadata(core_attn_out),
+        "metadata": _gdn_attention_metadata_summary(metadata),
+        "gdn_dims": {
+            "num_k_heads": getattr(layer, "num_k_heads", None),
+            "num_v_heads": getattr(layer, "num_v_heads", None),
+            "head_k_dim": getattr(layer, "head_k_dim", None),
+            "head_v_dim": getattr(layer, "head_v_dim", None),
+            "key_dim": getattr(layer, "key_dim", None),
+            "value_dim": getattr(layer, "value_dim", None),
+            "conv_kernel_size": getattr(layer, "conv_kernel_size", None),
+            "tp_size": getattr(layer, "tp_size", None),
+        },
+    }
+
+    if log_path:
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(event) + "\n")
+    if log_to_logger:
+        logger.info("GDN shape event: %s", event)
 
 
 # TODO(arpera): remove ``_is_libs_cu13_install_intact`` and its caller in
@@ -1720,6 +1818,19 @@ def qwen_gdn_attention_core(
     layer_name = _resolve_layer_name(layer_name)
     forward_context: ForwardContext = get_forward_context()
     self = forward_context.no_compile_layers[layer_name]
+    attn_metadata = None
+    if isinstance(forward_context.attn_metadata, dict):
+        attn_metadata = forward_context.attn_metadata.get(layer_name)
+    _maybe_log_gdn_shape_event(
+        layer_name=layer_name,
+        use_aiter=use_aiter,
+        qkv_or_qkvz=qkv_or_qkvz,
+        b_or_ba=b_or_ba,
+        a_or_z_out=a_or_z_out,
+        core_attn_out=core_attn_out,
+        layer=self,
+        metadata=attn_metadata,
+    )
     if use_aiter:
         self._forward_core_rocm(
             qkvz=qkv_or_qkvz,
