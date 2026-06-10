@@ -7,9 +7,8 @@
 **IMPORTANT**! This applies to all tests happens in this repo.
 If not specified, you should use Model weight in `/data/Competitions/PRA26/Qwen3.5-9B` directly.
 If not specified, all requests to vllm should be **sent one by one** (batch size = 1).
-The python env is in `/home/xsl/pra26/vllm-cuda`, you can run `source .venv/bin/activate` to use the python venv, instead of using system conda.
-We are chating on the login node, there is not GPU for you to test. Please use slurm (srun for example) to submit test job.
-
+The python env is in `.venv`, you can run `source .venv/bin/activate` to use the python venv, instead of using system conda.
+We are testing HIP vllm. The AMD GPU is on **login node** and there is no need to submit the task with slurm. You can run python scripts directly.
 
 
 ## 1. Contribution Policy (Mandatory)
