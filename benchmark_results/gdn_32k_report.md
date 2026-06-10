@@ -110,6 +110,78 @@ GDN-related rows from the full vLLM profiler:
 - `fused_recurrent_gated_delta_rule_packed_decode_kernel`: 24 calls, `221.665 us` total, `9.236 us` avg
 - `_causal_conv1d_update_kernel`: 24 calls, `62.146 us` total, `2.589 us` avg
 
+## Prefill forward breakdown
+
+The prefill breakdown uses the GPU annotation range
+`execute_context_1(32768)_generation_0(0)`, whose CUDA time is
+`5.316855 s`. For module-level percentages, GDN uses the profiler row
+`vllm::qwen_gdn_attention_core` CUDA total, while full attention uses the
+FlashAttention prefill kernels inside the prefill range.
+
+Analysis command for strict kernel-name buckets:
+
+```bash
+.venv/bin/python benchmarks/analyze_qwen35_decode_profile.py benchmark_results/gdn_vllm_profile_32k_warm32k --phase prefill --json-output benchmark_results/gdn_vllm_profile_32k_warm32k/prefill_breakdown.json --markdown-output benchmark_results/gdn_vllm_profile_32k_warm32k/prefill_breakdown.md
+```
+
+Results for one 32K prefill forward:
+
+| category | time | pct of prefill forward |
+| --- | ---: | ---: |
+| prefill forward total | `5316.855008 ms` | `100.00%` |
+| full attention | `650.487388 ms` | `12.23%` |
+| GDN core, profiler CUDA total | `346.132 ms` | `6.51%` |
+| other, residual to forward total | `4320.235620 ms` | `81.25%` |
+
+The strict kernel-name bucket file reports named GDN kernels at
+`323.281031 ms`, `6.08%`; the gap to the profiler CUDA-total GDN number is
+CUDA time attributed to the GDN record-function range but not to the explicit
+GDN kernel-name list.
+
+Dominant prefill kernels:
+
+- BF16 GEMM kernels: `3976.407966 ms`, `74.79%` of prefill forward
+- FlashAttention prefill split-kv: `650.487388 ms`, `12.23%`
+- GDN named kernels: `323.281031 ms`, `6.08%`
+- `triton_poi_fused_mul_silu_slice_3`: `87.338357 ms`, `1.64%`
+
+## Decode forward breakdown
+
+The decode breakdown was computed from the torch profiler trace by selecting the
+GPU annotation range `execute_context_0(0)_generation_1(1)` and summing
+CUDA `kernel`, `gpu_memcpy`, and `gpu_memset` events fully inside that range.
+
+Analysis command:
+
+```bash
+.venv/bin/python benchmarks/analyze_qwen35_decode_profile.py benchmark_results/gdn_vllm_profile_32k_warm32k --json-output benchmark_results/gdn_vllm_profile_32k_warm32k/decode_breakdown.json --markdown-output benchmark_results/gdn_vllm_profile_32k_warm32k/decode_breakdown.md
+```
+
+Classification:
+
+- full attention: `flash_fwd_splitkv*` kernels
+- GDN: `fused_recurrent_gated_delta_rule_packed_decode_kernel` and `_causal_conv1d_update_kernel`
+- other: remaining CUDA kernels/copies/sets; the residual profiler gap inside the decode GPU annotation is also counted as other for the end-to-end percentage
+
+Results for one decode forward after the 32K warmup/prefill:
+
+| category | time | pct of decode forward |
+| --- | ---: | ---: |
+| decode forward total | `25.046954 ms` | `100.00%` |
+| full attention | `1.854617 ms` | `7.40%` |
+| GDN | `0.283811 ms` | `1.13%` |
+| other CUDA events | `22.807012 ms` | `91.06%` |
+| unattributed profiler gap | `0.101514 ms` | `0.41%` |
+| other including gap | `22.908526 ms` | `91.46%` |
+
+Dominant decode kernels:
+
+- cuBLAS GEMV kernels: `22.046970 ms`, `88.02%` of decode forward
+- FlashAttention split-kv: `1.719449 ms`, `6.86%`
+- FlashAttention combine: `0.135168 ms`, `0.54%`
+- GDN recurrent delta-rule decode: `0.221665 ms`, `0.88%`
+- GDN conv update: `0.062146 ms`, `0.25%`
+
 ## Notes
 
 - The full vLLM process uses spawn workers, so the script-level monkey patch did not capture in-worker GDN tensor metadata. The metadata above comes from the standalone GDN-core script using the same `_forward_core` path and vLLM metadata builder.

@@ -1,0 +1,520 @@
+{
+  "trace_path": "benchmark_results/gdn_vllm_profile_32k_warm32k/torch_profiler/rank0.1781074976606780412.pt.trace.json.gz",
+  "phase": "prefill",
+  "range_name": "execute_context_1(32768)_generation_0(0)",
+  "forward_time_us": 5316855.008,
+  "forward_time_ms": 5316.855008,
+  "cuda_event_time_sum_us": 5309388.148000001,
+  "cuda_event_time_sum_ms": 5309.388148000001,
+  "unattributed_gap_us": 7466.859999999404,
+  "unattributed_gap_ms": 7.466859999999404,
+  "cuda_events_count": 905,
+  "buckets": [
+    {
+      "name": "full_attention",
+      "time_us": 650487.3879999999,
+      "time_ms": 650.4873879999999,
+      "pct_of_forward_gpu_range": 12.234439100205757,
+      "kernel_or_memcpy_calls": 8
+    },
+    {
+      "name": "gdn",
+      "time_us": 323281.0309999999,
+      "time_ms": 323.2810309999999,
+      "pct_of_forward_gpu_range": 6.0803055662337115,
+      "kernel_or_memcpy_calls": 192
+    },
+    {
+      "name": "other",
+      "time_us": 4335619.729000001,
+      "time_ms": 4335.619729000001,
+      "pct_of_forward_gpu_range": 81.54481780068133,
+      "kernel_or_memcpy_calls": 705
+    }
+  ],
+  "other_including_unattributed_gap": {
+    "time_us": 4343086.589000001,
+    "time_ms": 4343.0865890000005,
+    "pct_of_forward_gpu_range": 81.68525533356053
+  },
+  "top_events": [
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_tn",
+      "category": "other",
+      "time_us": 2987609.8830000004,
+      "time_ms": 2987.6098830000005,
+      "pct_of_forward_gpu_range": 56.19129877539817,
+      "calls": 96
+    },
+    {
+      "name": "ampere_bf16_s1688gemm_bf16_128x64_sliced1x2_ldg8_f2f_tn",
+      "category": "other",
+      "time_us": 988798.0830000001,
+      "time_ms": 988.7980830000001,
+      "pct_of_forward_gpu_range": 18.597424257614815,
+      "calls": 32
+    },
+    {
+      "name": "void flash::flash_fwd_splitkv_kernel<Flash_fwd_kernel_traits<256, 64, 64, 4, false, false, cutlass::bfloat16_t, Flash_kernel_traits<256, 64, 64, 4, cutlass::bfloat16_t> >, true, false, false, false, true, false, false, false>(flash::Flash_fwd_params)",
+      "category": "full_attention",
+      "time_us": 650487.3879999999,
+      "time_ms": 650.4873879999999,
+      "pct_of_forward_gpu_range": 12.234439100205757,
+      "calls": 8
+    },
+    {
+      "name": "triton_poi_fused_mul_silu_slice_3",
+      "category": "other",
+      "time_us": 87338.357,
+      "time_ms": 87.338357,
+      "pct_of_forward_gpu_range": 1.6426695267895481,
+      "calls": 24
+    },
+    {
+      "name": "chunk_fwd_kernel_o",
+      "category": "gdn",
+      "time_us": 70035.045,
+      "time_ms": 70.035045,
+      "pct_of_forward_gpu_range": 1.3172269112966564,
+      "calls": 24
+    },
+    {
+      "name": "chunk_gated_delta_rule_fwd_kernel_h_blockdim64",
+      "category": "gdn",
+      "time_us": 58576.949,
+      "time_ms": 58.576949,
+      "pct_of_forward_gpu_range": 1.1017217680727094,
+      "calls": 24
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_copy__fused_add_rms_norm_4",
+      "category": "other",
+      "time_us": 57712.994999999995,
+      "time_ms": 57.71299499999999,
+      "pct_of_forward_gpu_range": 1.0854724252055434,
+      "calls": 24
+    },
+    {
+      "name": "recompute_w_u_fwd_kernel",
+      "category": "gdn",
+      "time_us": 54166.161,
+      "time_ms": 54.166161,
+      "pct_of_forward_gpu_range": 1.0187631770755257,
+      "calls": 24
+    },
+    {
+      "name": "_causal_conv1d_fwd_kernel",
+      "category": "gdn",
+      "time_us": 46766.71800000001,
+      "time_ms": 46.76671800000001,
+      "pct_of_forward_gpu_range": 0.8795936306262351,
+      "calls": 24
+    },
+    {
+      "name": "_fused_post_conv_kernel",
+      "category": "gdn",
+      "time_us": 43238.18200000001,
+      "time_ms": 43.23818200000001,
+      "pct_of_forward_gpu_range": 0.8132285333141814,
+      "calls": 24
+    },
+    {
+      "name": "merge_16x16_to_64x64_inverse_kernel",
+      "category": "gdn",
+      "time_us": 32330.712999999992,
+      "time_ms": 32.330712999999996,
+      "pct_of_forward_gpu_range": 0.6080796439126819,
+      "calls": 24
+    },
+    {
+      "name": "triton_per_fused__to_copy__unsafe_view_add_clone_mean_mul_pow_rsqrt_silu_view_0",
+      "category": "other",
+      "time_us": 30482.94000000001,
+      "time_ms": 30.48294000000001,
+      "pct_of_forward_gpu_range": 0.5733265239344291,
+      "calls": 24
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_fused_add_rms_norm_2",
+      "category": "other",
+      "time_us": 27982.357999999997,
+      "time_ms": 27.982357999999998,
+      "pct_of_forward_gpu_range": 0.5262952997194087,
+      "calls": 24
+    },
+    {
+      "name": "triton_poi_fused_mul_silu_slice_2",
+      "category": "other",
+      "time_us": 27770.035,
+      "time_ms": 27.770035,
+      "pct_of_forward_gpu_range": 0.5223019051340659,
+      "calls": 8
+    },
+    {
+      "name": "triton_poi_fused__to_copy__unsafe_view_add_clone_mean_mm_mul_pow_rsqrt_silu_t_view_1",
+      "category": "other",
+      "time_us": 19268.496,
+      "time_ms": 19.268496,
+      "pct_of_forward_gpu_range": 0.36240401461028515,
+      "calls": 24
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_copy__fused_add_rms_norm_3",
+      "category": "other",
+      "time_us": 18815.944000000003,
+      "time_ms": 18.815944000000002,
+      "pct_of_forward_gpu_range": 0.35389236628963194,
+      "calls": 8
+    },
+    {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "category": "other",
+      "time_us": 18709.158,
+      "time_ms": 18.709158,
+      "pct_of_forward_gpu_range": 0.3518839233315425,
+      "calls": 27
+    },
+    {
+      "name": "chunk_scaled_dot_kkt_fwd_kernel",
+      "category": "gdn",
+      "time_us": 17307.25,
+      "time_ms": 17.30725,
+      "pct_of_forward_gpu_range": 0.3255166818346309,
+      "calls": 24
+    },
+    {
+      "name": "ampere_bf16_s1688gemm_bf16_64x64_sliced1x4_ldg8_f2f_tn",
+      "category": "other",
+      "time_us": 11323.822999999999,
+      "time_ms": 11.323822999999999,
+      "pct_of_forward_gpu_range": 0.21297972171446505,
+      "calls": 24
+    },
+    {
+      "name": "triton_poi_fused_mul_sigmoid_view_0",
+      "category": "other",
+      "time_us": 9454.676000000001,
+      "time_ms": 9.454676000000001,
+      "pct_of_forward_gpu_range": 0.17782459716832663,
+      "calls": 8
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_fused_add_rms_norm_1",
+      "category": "other",
+      "time_us": 9218.288,
+      "time_ms": 9.218288000000001,
+      "pct_of_forward_gpu_range": 0.17337858538797302,
+      "calls": 8
+    },
+    {
+      "name": "triton_poi_fused_5",
+      "category": "other",
+      "time_us": 6098.112000000001,
+      "time_ms": 6.098112000000001,
+      "pct_of_forward_gpu_range": 0.11469396834829015,
+      "calls": 24
+    },
+    {
+      "name": "triton_poi_fused__to_copy_add_cat_clone_rms_norm_slice_split_split_with_sizes_view_9",
+      "category": "other",
+      "time_us": 5806.4580000000005,
+      "time_ms": 5.806458,
+      "pct_of_forward_gpu_range": 0.10920850749669343,
+      "calls": 8
+    },
+    {
+      "name": "triton_poi_fused_zeros_6",
+      "category": "other",
+      "time_us": 4736.909,
+      "time_ms": 4.736909,
+      "pct_of_forward_gpu_range": 0.08909231101605394,
+      "calls": 16
+    },
+    {
+      "name": "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul>)",
+      "category": "other",
+      "time_us": 4266.946,
+      "time_ms": 4.266946,
+      "pct_of_forward_gpu_range": 0.08025319467203346,
+      "calls": 24
+    },
+    {
+      "name": "triton_red_fused_6",
+      "category": "other",
+      "time_us": 4018.718,
+      "time_ms": 4.018718,
+      "pct_of_forward_gpu_range": 0.07558449485557232,
+      "calls": 8
+    },
+    {
+      "name": "void vllm::reshape_and_cache_flash_kernel<__nv_bfloat16, __nv_bfloat16, (vllm::Fp8KVCacheDataType)0>(__nv_bfloat16 const*, __nv_bfloat16 const*, __nv_bfloat16*, __nv_bfloat16*, long const*, long, long, long, long, long, int, int, int, float const*, float const*, int)",
+      "category": "other",
+      "time_us": 3063.663,
+      "time_ms": 3.063663,
+      "pct_of_forward_gpu_range": 0.05762171425382605,
+      "calls": 8
+    },
+    {
+      "name": "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, false, true, true, false, 6, false, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float> >(cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>)",
+      "category": "other",
+      "time_us": 2862.669,
+      "time_ms": 2.862669,
+      "pct_of_forward_gpu_range": 0.05384139675978916,
+      "calls": 1
+    },
+    {
+      "name": "triton_poi_fused_zeros_5",
+      "category": "other",
+      "time_us": 2076.001,
+      "time_ms": 2.076001,
+      "pct_of_forward_gpu_range": 0.039045657571559644,
+      "calls": 7
+    },
+    {
+      "name": "triton_poi_fused__to_copy_add_cat_clone_mul_rms_norm_slice_split_split_with_sizes_sub_unsqueeze_view_8",
+      "category": "other",
+      "time_us": 1805.949,
+      "time_ms": 1.805949,
+      "pct_of_forward_gpu_range": 0.03396648953719221,
+      "calls": 8
+    },
+    {
+      "name": "_zero_kv_blocks_kernel",
+      "category": "other",
+      "time_us": 1736.124,
+      "time_ms": 1.736124,
+      "pct_of_forward_gpu_range": 0.03265321317560368,
+      "calls": 1
+    },
+    {
+      "name": "triton_poi_fused__to_copy_add_cat_rms_norm_slice_split_with_sizes_view_11",
+      "category": "other",
+      "time_us": 1294.3239999999998,
+      "time_ms": 1.2943239999999998,
+      "pct_of_forward_gpu_range": 0.024343789666118346,
+      "calls": 8
+    },
+    {
+      "name": "chunk_local_cumsum_scalar_kernel",
+      "category": "gdn",
+      "time_us": 860.0129999999999,
+      "time_ms": 0.8600129999999999,
+      "pct_of_forward_gpu_range": 0.016175220101093266,
+      "calls": 24
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_rms_norm_0",
+      "category": "other",
+      "time_us": 798.732,
+      "time_ms": 0.798732,
+      "pct_of_forward_gpu_range": 0.015022640241236384,
+      "calls": 1
+    },
+    {
+      "name": "void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool)",
+      "category": "other",
+      "time_us": 560.008,
+      "time_ms": 0.5600080000000001,
+      "pct_of_forward_gpu_range": 0.010532692713218333,
+      "calls": 1
+    },
+    {
+      "name": "triton_poi_fused__to_copy_add_cat_mul_rms_norm_slice_split_split_with_sizes_sub_unsqueeze_view_10",
+      "category": "other",
+      "time_us": 522.5350000000001,
+      "time_ms": 0.5225350000000001,
+      "pct_of_forward_gpu_range": 0.009827896363804699,
+      "calls": 8
+    },
+    {
+      "name": "triton_poi_fused_zeros_2",
+      "category": "other",
+      "time_us": 293.893,
+      "time_ms": 0.29389299999999996,
+      "pct_of_forward_gpu_range": 0.005527572212478884,
+      "calls": 1
+    },
+    {
+      "name": "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1})",
+      "category": "other",
+      "time_us": 240.931,
+      "time_ms": 0.240931,
+      "pct_of_forward_gpu_range": 0.004531457029343163,
+      "calls": 25
+    },
+    {
+      "name": "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<4> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<4> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<4> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<4> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1})",
+      "category": "other",
+      "time_us": 178.69299999999998,
+      "time_ms": 0.178693,
+      "pct_of_forward_gpu_range": 0.0033608778071083324,
+      "calls": 24
+    },
+    {
+      "name": "triton_poi_fused_clone_copy_index_select_slice_split_7",
+      "category": "other",
+      "time_us": 138.36899999999997,
+      "time_ms": 0.13836899999999996,
+      "pct_of_forward_gpu_range": 0.0026024595327840084,
+      "calls": 8
+    },
+    {
+      "name": "_compute_slot_mapping_kernel",
+      "category": "other",
+      "time_us": 137.315,
+      "time_ms": 0.137315,
+      "pct_of_forward_gpu_range": 0.002582635783623761,
+      "calls": 4
+    },
+    {
+      "name": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}, std::array<char*, 2ul>, 4, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<1>, at::native::memory::StoreWithCast<1> >(int, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}, std::array<char*, 2ul>, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<1>, at::native::memory::StoreWithCast<1>)",
+      "category": "other",
+      "time_us": 135.10500000000005,
+      "time_ms": 0.13510500000000006,
+      "pct_of_forward_gpu_range": 0.0025410698579651776,
+      "calls": 51
+    },
+    {
+      "name": "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::masked_fill_kernel(at::TensorIterator&, c10::Scalar const&)::{lambda()#1}::operator()() const::{lambda()#7}::operator()() const::{lambda(float, bool)#1}>(at::TensorIteratorBase&, at::native::(anonymous namespace)::masked_fill_kernel(at::TensorIterator&, c10::Scalar const&)::{lambda()#1}::operator()() const::{lambda()#7}::operator()() const::{lambda(float, bool)#1} const&)::{lambda(int)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::masked_fill_kernel(at::TensorIterator&, c10::Scalar const&)::{lambda()#1}::operator()() const::{lambda()#7}::operator()() const::{lambda(float, bool)#1}>(at::TensorIteratorBase&, at::native::(anonymous namespace)::masked_fill_kernel(at::TensorIterator&, c10::Scalar const&)::{lambda()#1}::operator()() const::{lambda()#7}::operator()() const::{lambda(float, bool)#1} const&)::{lambda(int)#1})",
+      "category": "other",
+      "time_us": 85.47300000000001,
+      "time_ms": 0.08547300000000001,
+      "pct_of_forward_gpu_range": 0.0016075856849846976,
+      "calls": 24
+    },
+    {
+      "name": "Memset (Device)",
+      "category": "other",
+      "time_us": 64.069,
+      "time_ms": 0.064069,
+      "pct_of_forward_gpu_range": 0.0012050168737646344,
+      "calls": 32
+    },
+    {
+      "name": "Memcpy HtoD (Pageable -> Device)",
+      "category": "other",
+      "time_us": 50.878,
+      "time_ms": 0.050878,
+      "pct_of_forward_gpu_range": 0.0009569190794830114,
+      "calls": 13
+    },
+    {
+      "name": "void at::native::vectorized_elementwise_kernel<4, at::native::bitwise_not_kernel_cuda(at::TensorIteratorBase&)::{lambda(bool)#1}, std::array<char*, 2ul> >(int, at::native::bitwise_not_kernel_cuda(at::TensorIteratorBase&)::{lambda(bool)#1}, std::array<char*, 2ul>)",
+      "category": "other",
+      "time_us": 44.48300000000001,
+      "time_ms": 0.04448300000000001,
+      "pct_of_forward_gpu_range": 0.0008366412086293254,
+      "calls": 24
+    },
+    {
+      "name": "triton_poi_fused_4",
+      "category": "other",
+      "time_us": 42.147,
+      "time_ms": 0.042147,
+      "pct_of_forward_gpu_range": 0.0007927054609648665,
+      "calls": 7
+    },
+    {
+      "name": "Memcpy HtoD (Pinned -> Device)",
+      "category": "other",
+      "time_us": 37.024,
+      "time_ms": 0.037024,
+      "pct_of_forward_gpu_range": 0.0006963515075038134,
+      "calls": 13
+    },
+    {
+      "name": "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<int>, std::array<char*, 1ul> >(int, at::native::FillFunctor<int>, std::array<char*, 1ul>)",
+      "category": "other",
+      "time_us": 7.005999999999999,
+      "time_ms": 0.007005999999999999,
+      "pct_of_forward_gpu_range": 0.00013176962677105975,
+      "calls": 7
+    },
+    {
+      "name": "triton_poi_fused_1",
+      "category": "other",
+      "time_us": 5.44,
+      "time_ms": 0.00544,
+      "pct_of_forward_gpu_range": 0.00010231612469805383,
+      "calls": 1
+    },
+    {
+      "name": "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<2> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<2> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<2> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<2> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1})",
+      "category": "other",
+      "time_us": 5.088,
+      "time_ms": 0.0050880000000000005,
+      "pct_of_forward_gpu_range": 9.56956695705327e-05,
+      "calls": 1
+    },
+    {
+      "name": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}, std::array<char*, 2ul>, 4, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<1>, at::native::memory::StoreWithCast<1> >(int, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}, std::array<char*, 2ul>, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<1>, at::native::memory::StoreWithCast<1>)",
+      "category": "other",
+      "time_us": 4.897,
+      "time_ms": 0.004897,
+      "pct_of_forward_gpu_range": 9.210332033940617e-05,
+      "calls": 3
+    },
+    {
+      "name": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<int>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<int>, std::array<char*, 3ul>)",
+      "category": "other",
+      "time_us": 4.704,
+      "time_ms": 0.004704,
+      "pct_of_forward_gpu_range": 8.847335488596418e-05,
+      "calls": 4
+    },
+    {
+      "name": "void at::native::vectorized_elementwise_kernel<4, at::native::compare_scalar_kernel<int>(at::TensorIteratorBase&, at::native::(anonymous namespace)::OpType, int)::{lambda(int)#1}, std::array<char*, 2ul> >(int, at::native::compare_scalar_kernel<int>(at::TensorIteratorBase&, at::native::(anonymous namespace)::OpType, int)::{lambda(int)#1}, std::array<char*, 2ul>)",
+      "category": "other",
+      "time_us": 3.7750000000000004,
+      "time_ms": 0.003775,
+      "pct_of_forward_gpu_range": 7.100061962043258e-05,
+      "calls": 3
+    },
+    {
+      "name": "void at::native::unrolled_elementwise_kernel<at::native::CUDAFunctor_add<int>, std::array<char*, 3ul>, 4, TrivialOffsetCalculator<2, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithoutCast, at::native::memory::StoreWithoutCast>(int, at::native::CUDAFunctor_add<int>, std::array<char*, 3ul>, TrivialOffsetCalculator<2, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithoutCast, at::native::memory::StoreWithoutCast)",
+      "category": "other",
+      "time_us": 3.008,
+      "time_ms": 0.003008,
+      "pct_of_forward_gpu_range": 5.6574798362453286e-05,
+      "calls": 3
+    },
+    {
+      "name": "void at::native::vectorized_elementwise_kernel<2, at::native::CUDAFunctor_add<long>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<long>, std::array<char*, 3ul>)",
+      "category": "other",
+      "time_us": 2.4,
+      "time_ms": 0.0024,
+      "pct_of_forward_gpu_range": 4.5139466778553157e-05,
+      "calls": 1
+    },
+    {
+      "name": "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int)#1})",
+      "category": "other",
+      "time_us": 1.823,
+      "time_ms": 0.001823,
+      "pct_of_forward_gpu_range": 3.428718664054267e-05,
+      "calls": 1
+    },
+    {
+      "name": "void at::native::unrolled_elementwise_kernel<at::native::CUDAFunctorOnSelf_add<int>, std::array<char*, 2ul>, 4, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithoutCast, at::native::memory::StoreWithoutCast>(int, at::native::CUDAFunctorOnSelf_add<int>, std::array<char*, 2ul>, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithoutCast, at::native::memory::StoreWithoutCast)",
+      "category": "other",
+      "time_us": 1.024,
+      "time_ms": 0.001024,
+      "pct_of_forward_gpu_range": 1.9259505825516014e-05,
+      "calls": 1
+    }
+  ],
+  "classification": {
+    "full_attention": [
+      "kernel names containing flash_fwd_splitkv",
+      "operator names containing _vllm_fa2_C::varlen_fwd"
+    ],
+    "gdn": [
+      "kernel names containing gated_delta_rule",
+      "known GDN prefill/decode helper kernels",
+      "operator/range names containing qwen_gdn_attention_core or gdn_decode"
+    ],
+    "other": [
+      "all remaining CUDA kernel/memcpy/memset events"
+    ]
+  }
+}
