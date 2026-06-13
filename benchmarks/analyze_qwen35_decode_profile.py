@@ -51,7 +51,11 @@ def _find_trace(profile_path: Path) -> Path:
 
 
 def _classify_event(name: str) -> str:
-    if "flash_fwd_splitkv" in name or "_vllm_fa2_C::varlen_fwd" in name:
+    if (
+        "flash_fwd_splitkv" in name
+        or "_vllm_fa2_C::varlen_fwd" in name
+        or "kernel_paged_attention_2d" in name
+    ):
         return "full_attention"
     if (
         "gated_delta_rule" in name
@@ -177,6 +181,7 @@ def _analyze_range(
             "full_attention": [
                 "kernel names containing flash_fwd_splitkv",
                 "operator names containing _vllm_fa2_C::varlen_fwd",
+                "kernel names containing kernel_paged_attention_2d",
             ],
             "gdn": [
                 "kernel names containing gated_delta_rule",

@@ -7,6 +7,7 @@ from typing import ClassVar
 
 import torch
 
+import vllm.envs as envs
 from vllm._aiter_ops import rocm_aiter_ops
 from vllm.config import VllmConfig
 from vllm.config.cache import CacheDType
@@ -72,6 +73,10 @@ class RocmAttentionMetadata:
     # DFlash drafting sets this to False via CommonAttentionMetadata.
     causal: bool = True
 
+    # 0 means use the SplitKV heuristic. 1 disables SplitKV. Values > 1 fix
+    # the split count, matching FlashAttention's CUDA graph behavior.
+    max_num_splits: int = 0
+
 
 class RocmAttentionMetadataBuilder(AttentionMetadataBuilder[RocmAttentionMetadata]):
     _cudagraph_support: ClassVar[AttentionCGSupport] = AttentionCGSupport.ALWAYS
@@ -93,6 +98,15 @@ class RocmAttentionMetadataBuilder(AttentionMetadataBuilder[RocmAttentionMetadat
         )
         self.num_heads_kv = model_config.get_num_kv_heads(vllm_config.parallel_config)
         self.headdim = model_config.get_head_size()
+        self.compilation_config = vllm_config.compilation_config
+        self.attention_config = vllm_config.attention_config
+        self.use_full_cuda_graph = (
+            self.compilation_config.cudagraph_mode.has_full_cudagraphs()
+        )
+        self.max_cudagraph_size = self.compilation_config.max_cudagraph_capture_size
+        self.max_num_splits = (
+            self.attention_config.flash_attn_max_num_splits_for_cuda_graph
+        )
 
     def build_for_cudagraph_capture(
         self, common_attn_metadata: CommonAttentionMetadata
@@ -143,6 +157,17 @@ class RocmAttentionMetadataBuilder(AttentionMetadataBuilder[RocmAttentionMetadat
             suffix_kv_lens = None
             prefix_scheduler_metadata = None
 
+        max_num_splits = 0
+        if (
+            self.use_full_cuda_graph
+            and self.max_cudagraph_size is not None
+            and num_actual_tokens <= self.max_cudagraph_size
+        ):
+            max_num_splits = self.max_num_splits
+
+        if envs.VLLM_BATCH_INVARIANT:
+            max_num_splits = 1
+
         attn_metadata = RocmAttentionMetadata(
             num_actual_tokens=num_actual_tokens,
             max_query_len=max_query_len,
@@ -158,6 +183,7 @@ class RocmAttentionMetadataBuilder(AttentionMetadataBuilder[RocmAttentionMetadat
             suffix_kv_lens=suffix_kv_lens,
             prefix_scheduler_metadata=prefix_scheduler_metadata,
             causal=common_attn_metadata.causal,
+            max_num_splits=max_num_splits,
         )
         return attn_metadata
 
@@ -453,6 +479,7 @@ class RocmAttentionImpl(AttentionImpl):
             output_scale=output_scale,
             sinks=self.sinks,
             causal=attn_metadata.causal,
+            max_num_splits=attn_metadata.max_num_splits,
         )
 
         return output
