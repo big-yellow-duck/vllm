@@ -459,11 +459,13 @@ def chunked_prefill_paged_decode(
 
         from vllm.platforms.rocm import on_gfx1x
 
-        # Split kv is currently only tuned for gfx1x with head dim 256.
+        # Split-KV is profitable on gfx1x for the validated 128- and 256-wide
+        # heads. Keep smaller heads on the standard kernel until model-level
+        # benchmarks justify widening this gate further.
         use_splitkv_decode = (
             on_gfx1x()
             and query.dtype in (torch.float16, torch.bfloat16)
-            and head_size == 256
+            and head_size in (128, 256)
             and not use_alibi_slopes
             and sliding_window == 0
             and sinks is None

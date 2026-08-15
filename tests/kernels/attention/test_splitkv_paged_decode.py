@@ -110,6 +110,7 @@ def _ref_paged_decode(
     not torch.accelerator.is_available(), reason="split-KV decode test requires a GPU"
 )
 @pytest.mark.parametrize("num_query_heads,num_kv_heads", [(4, 4), (16, 4)])
+@pytest.mark.parametrize("head_size", [128, 256])
 @pytest.mark.parametrize("block_size", [16, 32, 528])
 @pytest.mark.parametrize("batch_size", [1, 3, 5])
 @pytest.mark.parametrize(
@@ -124,6 +125,7 @@ def _ref_paged_decode(
 def test_paged_attention_2d_splitkv_decode(
     num_query_heads: int,
     num_kv_heads: int,
+    head_size: int,
     block_size: int,
     batch_size: int,
     seq_lens: list[int],
@@ -131,7 +133,6 @@ def test_paged_attention_2d_splitkv_decode(
     set_random_seed(0)
     torch.set_default_device(DEVICE_TYPE)
 
-    head_size = 256
     dtype = torch.bfloat16
     seq_lens_tensor = torch.tensor(seq_lens[:batch_size], dtype=torch.int32)
     max_seq_len = int(seq_lens_tensor.max().item())
