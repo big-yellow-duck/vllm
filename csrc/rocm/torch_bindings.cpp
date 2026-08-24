@@ -52,6 +52,14 @@ TORCH_LIBRARY_EXPAND(TORCH_EXTENSION_NAME, rocm_ops) {
   rocm_ops.impl("wvSplitKQ", torch::kCUDA, &wvSplitKQ);
 #endif  // VLLM_SKIP_SKINNY_GEMMS
 
+#ifdef VLLM_ROCM_RDNA4_FP8
+  rocm_ops.def(
+      "rdna4_fp8_block_scaled_mm_decode(Tensor a, Tensor weight, "
+      "Tensor a_scale, Tensor weight_scale) -> Tensor");
+  rocm_ops.impl("rdna4_fp8_block_scaled_mm_decode", torch::kCUDA,
+                &rdna4_fp8_block_scaled_mm_decode);
+#endif
+
 #ifdef VLLM_ROCM_GFX1100
   // W4A16 GPTQ kernels for AMD RDNA3 (gfx1100).
   rocm_ops.def(

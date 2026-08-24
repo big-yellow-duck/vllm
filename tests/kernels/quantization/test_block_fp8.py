@@ -19,6 +19,10 @@ from vllm.model_executor.kernels.linear.scaled_mm.b12x import (
     _run_b12x_fp8_block_scaled_mm,
 )
 from vllm.model_executor.kernels.linear.scaled_mm.cutlass import cutlass_scaled_mm
+from vllm.model_executor.kernels.linear.scaled_mm.rdna4 import (
+    RDNA4Fp8BlockScaledMMKernel,
+    should_use_rdna4_bm32,
+)
 from vllm.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
     w8a8_triton_block_scaled_mm,
@@ -408,3 +412,54 @@ def test_w8a8_block_fp8_b12x_matmul(M, N, K):
     )
     assert rel_diff < 0.002
     assert cosine >= 0.9999
+
+
+@pytest.mark.parametrize(
+    "m,n,k,expected",
+    [
+        (63, 5120, 3072, False),
+        (64, 5120, 3072, True),
+        (128, 17408, 5120, True),
+        (129, 5120, 8704, False),
+        (224, 8192, 5120, False),
+        (225, 8192, 5120, True),
+        (256, 17408, 5120, True),
+        (257, 8192, 5120, False),
+        (523, 5120, 8704, True),
+        (523, 17408, 5120, False),
+        (784, 7168, 5120, False),
+        (784, 8192, 5120, True),
+    ],
+)
+def test_rdna4_bm32_route(m, n, k, expected):
+    assert should_use_rdna4_bm32(m, n, k) is expected
+
+
+@pytest.mark.parametrize("m", [1, 2, 72, 129, 249])
+@torch.inference_mode()
+def test_rdna4_block_fp8_hybrid_matches_triton(m):
+    supported, reason = RDNA4Fp8BlockScaledMMKernel.is_supported()
+    if not supported:
+        pytest.skip(reason)
+
+    n, k = 128, 256
+    generator = torch.Generator(device="cuda").manual_seed(m)
+    a = (torch.randn((m, k), device="cuda", generator=generator) * 0.25).to(
+        torch.float8_e4m3fn
+    )
+    weight = (torch.randn((n, k), device="cuda", generator=generator) * 0.25).to(
+        torch.float8_e4m3fn
+    )
+    a_scale = (
+        torch.rand((m, k // 128), device="cuda", generator=generator) * 0.05 + 0.001
+    )
+    weight_scale = (
+        torch.rand((n // 128, k // 128), device="cuda", generator=generator) * 0.05
+        + 0.001
+    )
+
+    reference = w8a8_triton_block_scaled_mm(
+        a, weight, a_scale, weight_scale, [128, 128], torch.bfloat16
+    )
+    output = torch.ops.vllm.rdna4_fp8_block_scaled_mm(a, weight, a_scale, weight_scale)
+    torch.testing.assert_close(output, reference, rtol=0.01, atol=0.01)

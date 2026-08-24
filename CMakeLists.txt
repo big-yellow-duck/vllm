@@ -1529,6 +1529,29 @@ if(VLLM_GPU_LANG STREQUAL "HIP")
     list(APPEND VLLM_ROCM_EXT_FLAGS "-DVLLM_SKIP_SKINNY_GEMMS")
   endif()
 
+  set(VLLM_RDNA4_ARCHES ${VLLM_GPU_ARCHES})
+  list(FILTER VLLM_RDNA4_ARCHES INCLUDE REGEX "gfx1200|gfx1201")
+  if(VLLM_RDNA4_ARCHES)
+    set(VLLM_RDNA4_FP8_SRC "csrc/rocm/rdna4_fp8_block_scaled_mm.cu")
+    hipify_sources_target(
+      VLLM_RDNA4_FP8_HIP_SRC _rocm_C_rdna4_fp8 "${VLLM_RDNA4_FP8_SRC}")
+    unset(_VLLM_LAST_HIPIFY_TARGET)
+    add_library(_rocm_C_rdna4_fp8 OBJECT ${VLLM_RDNA4_FP8_HIP_SRC})
+    add_dependencies(_rocm_C_rdna4_fp8 hipify_all)
+    set_source_files_properties(
+      ${VLLM_RDNA4_FP8_HIP_SRC} PROPERTIES LANGUAGE ${VLLM_GPU_LANG})
+    set_target_properties(_rocm_C_rdna4_fp8 PROPERTIES
+      ${VLLM_GPU_LANG}_ARCHITECTURES "${VLLM_RDNA4_ARCHES}"
+      POSITION_INDEPENDENT_CODE ON)
+    target_include_directories(
+      _rocm_C_rdna4_fp8 PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/csrc)
+    target_compile_options(_rocm_C_rdna4_fp8 PRIVATE
+      $<$<COMPILE_LANGUAGE:${VLLM_GPU_LANG}>:${VLLM_ROCM_EXT_FLAGS}>)
+    target_compile_definitions(
+      _rocm_C_rdna4_fp8 PRIVATE "-DTORCH_EXTENSION_NAME=_rocm_C")
+    target_link_libraries(_rocm_C_rdna4_fp8 PRIVATE torch)
+  endif()
+
   set(VLLM_ROCM_HAS_GFX1100 OFF)
   if(VLLM_GPU_ARCHES MATCHES "gfx1100")
     set(VLLM_ROCM_HAS_GFX1100 ON)
@@ -1552,6 +1575,11 @@ if(VLLM_GPU_LANG STREQUAL "HIP")
     target_link_libraries(_rocm_C PRIVATE _rocm_C_skinny)
   else()
     target_compile_definitions(_rocm_C PRIVATE VLLM_SKIP_SKINNY_GEMMS)
+  endif()
+
+  if(TARGET _rocm_C_rdna4_fp8)
+    target_link_libraries(_rocm_C PRIVATE _rocm_C_rdna4_fp8)
+    target_compile_definitions(_rocm_C PRIVATE VLLM_ROCM_RDNA4_FP8)
   endif()
 
   if(VLLM_ROCM_HAS_GFX1100)

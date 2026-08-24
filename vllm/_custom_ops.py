@@ -2241,6 +2241,17 @@ def wvSplitKQ(
     return out
 
 
+def rdna4_fp8_block_scaled_mm_decode(
+    a: torch.Tensor,
+    weight: torch.Tensor,
+    a_scale: torch.Tensor,
+    weight_scale: torch.Tensor,
+) -> torch.Tensor:
+    return torch.ops._rocm_C.rdna4_fp8_block_scaled_mm_decode(
+        a, weight, a_scale, weight_scale
+    )
+
+
 # moe
 def moe_sum(
     input: torch.Tensor,
