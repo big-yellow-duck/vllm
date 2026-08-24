@@ -29,9 +29,11 @@ __global__ __launch_bounds__(128) void decode_splitk_wmma(
   const int half_id = wave & 1;
   const int n0 = blockIdx.x * 128 + pair * 64;
   const int scale_blocks = k >> 7;
-  const int half_blocks = scale_blocks >> 1;
+  const int half_blocks = (scale_blocks + 1) >> 1;
   const int kb_begin = half_id * half_blocks;
-  const int kb_end = kb_begin + half_blocks;
+  const int kb_end =
+      kb_begin + half_blocks < scale_blocks ? kb_begin + half_blocks
+                                            : scale_blocks;
 
   __shared__ float partial[4][4][256];
 
@@ -107,9 +109,11 @@ __global__ __launch_bounds__(64) void decode_splitk_wmma_m2(
   const int lane = tid & 31;
   const int n0 = blockIdx.x * 64;
   const int scale_blocks = k >> 7;
-  const int half_blocks = scale_blocks >> 1;
+  const int half_blocks = (scale_blocks + 1) >> 1;
   const int kb_begin = wave * half_blocks;
-  const int kb_end = kb_begin + half_blocks;
+  const int kb_end =
+      kb_begin + half_blocks < scale_blocks ? kb_begin + half_blocks
+                                            : scale_blocks;
 
   __shared__ float partial[2][4][32];
 
@@ -278,7 +282,7 @@ torch::Tensor rdna4_fp8_block_scaled_mm_decode(
   TORCH_CHECK(m == 1 || m == 2, "RDNA4 decode supports only M=1 or M=2");
   TORCH_CHECK(weight.size(1) == k, "RDNA4 block-FP8 K dimensions must match");
   TORCH_CHECK(n % 128 == 0, "RDNA4 decode requires N divisible by 128");
-  TORCH_CHECK(k % 256 == 0, "RDNA4 decode requires K divisible by 256");
+  TORCH_CHECK(k % 128 == 0, "RDNA4 decode requires K divisible by 128");
   TORCH_CHECK(a.is_contiguous() && a_scale.is_contiguous() &&
                   weight_scale.is_contiguous() && weight.stride(1) == 1,
               "RDNA4 decode received an unsupported layout");
