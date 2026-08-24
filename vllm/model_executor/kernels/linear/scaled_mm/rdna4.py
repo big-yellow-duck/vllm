@@ -156,7 +156,7 @@ def _rdna4_fp8_block_scaled_mm_impl(
     m, k = a.shape
     n = weight.shape[0]
     specialized_layout = _supports_specialized_layout(a, weight, a_scale, weight_scale)
-    if specialized_layout and m in (1, 2) and k % 256 == 0:
+    if specialized_layout and m in (1, 2) and k % 128 == 0:
         return ops.rdna4_fp8_block_scaled_mm_decode(a, weight, a_scale, weight_scale)
     if specialized_layout and should_use_rdna4_bm32(m, n, k):
         return _run_rdna4_bm32(a, weight, a_scale, weight_scale)

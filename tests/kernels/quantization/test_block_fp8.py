@@ -435,15 +435,32 @@ def test_rdna4_bm32_route(m, n, k, expected):
     assert should_use_rdna4_bm32(m, n, k) is expected
 
 
-@pytest.mark.parametrize("m", [1, 2, 72, 129, 249])
+@pytest.mark.parametrize(
+    "m,k",
+    [
+        (1, 128),
+        (2, 128),
+        (1, 256),
+        (2, 256),
+        (1, 384),
+        (2, 384),
+        (1, 640),
+        (2, 640),
+        (1, 2176),
+        (2, 2176),
+        (72, 256),
+        (129, 256),
+        (249, 256),
+    ],
+)
 @torch.inference_mode()
-def test_rdna4_block_fp8_hybrid_matches_triton(m):
+def test_rdna4_block_fp8_hybrid_matches_triton(m, k):
     supported, reason = RDNA4Fp8BlockScaledMMKernel.is_supported()
     if not supported:
         pytest.skip(reason)
 
-    n, k = 128, 256
-    generator = torch.Generator(device="cuda").manual_seed(m)
+    n = 128
+    generator = torch.Generator(device="cuda").manual_seed(m + k)
     a = (torch.randn((m, k), device="cuda", generator=generator) * 0.25).to(
         torch.float8_e4m3fn
     )
