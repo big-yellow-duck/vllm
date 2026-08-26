@@ -22,6 +22,7 @@ from vllm.model_executor.kernels.linear.scaled_mm.cutlass import cutlass_scaled_
 from vllm.model_executor.kernels.linear.scaled_mm.rdna4 import (
     RDNA4Fp8BlockScaledMMKernel,
     should_use_rdna4_bm32,
+    should_use_rdna4_hip,
 )
 from vllm.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
@@ -436,30 +437,47 @@ def test_rdna4_bm32_route(m, n, k, expected):
 
 
 @pytest.mark.parametrize(
-    "m,k",
+    "m,expected",
     [
-        (1, 128),
-        (2, 128),
-        (1, 256),
-        (2, 256),
-        (1, 384),
-        (2, 384),
-        (1, 640),
-        (2, 640),
-        (1, 2176),
-        (2, 2176),
-        (72, 256),
-        (129, 256),
-        (249, 256),
+        (0, False),
+        (1, True),
+        (2, True),
+        (4, True),
+        (16, True),
+        (17, True),
+        (32, True),
+        (64, True),
+        (65, False),
+    ],
+)
+def test_rdna4_hip_route(m, expected):
+    assert should_use_rdna4_hip(m) is expected
+
+
+@pytest.mark.parametrize(
+    "m,n,k",
+    [
+        (1, 128, 128),
+        (2, 128, 128),
+        (4, 128, 256),
+        (16, 128, 384),
+        (17, 5120, 3072),
+        (33, 17408, 5120),
+        (39, 16384, 8192),
+        (48, 17408, 5120),
+        (64, 5120, 3072),
+        (65, 128, 256),
+        (72, 128, 256),
+        (129, 128, 256),
+        (249, 128, 256),
     ],
 )
 @torch.inference_mode()
-def test_rdna4_block_fp8_hybrid_matches_triton(m, k):
+def test_rdna4_block_fp8_hybrid_matches_triton(m, n, k):
     supported, reason = RDNA4Fp8BlockScaledMMKernel.is_supported()
     if not supported:
         pytest.skip(reason)
 
-    n = 128
     generator = torch.Generator(device="cuda").manual_seed(m + k)
     a = (torch.randn((m, k), device="cuda", generator=generator) * 0.25).to(
         torch.float8_e4m3fn
