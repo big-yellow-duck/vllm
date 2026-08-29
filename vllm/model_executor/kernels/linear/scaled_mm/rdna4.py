@@ -4,8 +4,6 @@
 from __future__ import annotations
 
 import torch
-import triton
-import triton.language as tl
 
 from vllm import _custom_ops as ops
 from vllm.model_executor.layers.quantization.utils.fp8_utils import (
@@ -20,112 +18,10 @@ from .BlockScaledMMLinearKernel import (
     FP8ScaledMMLinearLayerConfig,
 )
 
-_VALIDATED_BM32_SHAPES = {
-    (523, 5120, 3072),
-    (523, 5120, 8704),
-    (523, 7168, 5120),
-    (523, 8192, 5120),
-    (784, 5120, 3072),
-    (784, 5120, 8704),
-    (784, 8192, 5120),
-}
-
 
 def should_use_rdna4_hip(m: int) -> bool:
     """Select the native HIP kernel for its validated M range."""
-    return 1 <= m <= 64
-
-
-def should_use_rdna4_bm32(m: int, n: int, k: int) -> bool:
-    """Select BM32 only in measured tile bands and workload shapes."""
-    return 64 <= m <= 128 or 225 <= m <= 256 or (m, n, k) in _VALIDATED_BM32_SHAPES
-
-
-@triton.jit
-def _rdna4_fp8_block_scaled_mm_bm32(
-    A,
-    B,
-    C,
-    As,
-    Bs,
-    M: tl.constexpr,
-    N: tl.constexpr,
-    K,
-    stride_am,
-    stride_bm,
-    stride_asm,
-    stride_ask,
-    stride_bsm,
-    stride_bsk,
-    GROUP_M: tl.constexpr,
-):
-    pid = tl.program_id(0)
-    num_pid_m = tl.cdiv(M, 32)
-    num_pid_n = tl.cdiv(N, 128)
-    num_pid_in_group = GROUP_M * num_pid_n
-    group_id = pid // num_pid_in_group
-    first_pid_m = group_id * GROUP_M
-    group_size_m = tl.minimum(num_pid_m - first_pid_m, GROUP_M)
-    pid_m = first_pid_m + (pid % group_size_m)
-    pid_n = (pid % num_pid_in_group) // group_size_m
-
-    offs_m = (pid_m * 32 + tl.arange(0, 32)) % M
-    offs_n = pid_n * 128 + tl.arange(0, 128)
-    offs_k = tl.arange(0, 128)
-    a_ptrs = A + offs_m[:, None] * stride_am + offs_k[None, :]
-    b_ptrs = B + offs_n[None, :] * stride_bm + offs_k[:, None]
-    as_ptrs = As + offs_m * stride_asm
-    bs_ptrs = Bs + pid_n * stride_bsm
-
-    accumulator = tl.zeros((32, 128), dtype=tl.float32)
-    for k_block in range(0, tl.cdiv(K, 128)):
-        a = tl.load(a_ptrs)
-        b = tl.load(b_ptrs)
-        a_s = tl.load(as_ptrs + k_block * stride_ask)
-        b_s = tl.load(bs_ptrs + k_block * stride_bsk)
-        accumulator += tl.dot(a, b) * a_s[:, None] * b_s[None, :]
-        a_ptrs += 128
-        b_ptrs += 128
-
-    out_m = pid_m * 32 + tl.arange(0, 32)
-    out_n = pid_n * 128 + tl.arange(0, 128)
-    tl.store(
-        C + out_m[:, None] * N + out_n[None, :],
-        accumulator.to(tl.bfloat16),
-        mask=out_m[:, None] < M,
-    )
-
-
-def _run_rdna4_bm32(
-    a: torch.Tensor,
-    weight: torch.Tensor,
-    a_scale: torch.Tensor,
-    weight_scale: torch.Tensor,
-) -> torch.Tensor:
-    m, k = a.shape
-    n = weight.shape[0]
-    out = torch.empty((m, n), device=a.device, dtype=torch.bfloat16)
-    grid = (triton.cdiv(m, 32) * triton.cdiv(n, 128),)
-    _rdna4_fp8_block_scaled_mm_bm32[grid](
-        a,
-        weight,
-        out,
-        a_scale,
-        weight_scale,
-        m,
-        n,
-        k,
-        a.stride(0),
-        weight.stride(0),
-        a_scale.stride(0),
-        a_scale.stride(1),
-        weight_scale.stride(0),
-        weight_scale.stride(1),
-        GROUP_M=32,
-        num_warps=4,
-        num_stages=2,
-    )
-    return out
+    return m >= 1
 
 
 def _supports_specialized_layout(
@@ -158,13 +54,14 @@ def _rdna4_fp8_block_scaled_mm_impl(
     a_scale: torch.Tensor,
     weight_scale: torch.Tensor,
 ) -> torch.Tensor:
-    m, k = a.shape
-    n = weight.shape[0]
+    m = a.shape[0]
     specialized_layout = _supports_specialized_layout(a, weight, a_scale, weight_scale)
     if specialized_layout and should_use_rdna4_hip(m):
-        return ops.rdna4_fp8_block_scaled_mm_decode(a, weight, a_scale, weight_scale)
-    if specialized_layout and should_use_rdna4_bm32(m, n, k):
-        return _run_rdna4_bm32(a, weight, a_scale, weight_scale)
+        if m <= 64:
+            return ops.rdna4_fp8_block_scaled_mm_decode(
+                a, weight, a_scale, weight_scale
+            )
+        return ops.rdna4_fp8_block_scaled_mm_prefill(a, weight, a_scale, weight_scale)
     return w8a8_triton_block_scaled_mm(
         a, weight, a_scale, weight_scale, [128, 128], torch.bfloat16
     )
@@ -204,7 +101,9 @@ class RDNA4Fp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
 
         if not on_rdna4():
             return False, "RDNA4 block-FP8 kernels require gfx1200 or gfx1201"
-        if not hasattr(torch.ops._rocm_C, "rdna4_fp8_block_scaled_mm_decode"):
+        if not hasattr(
+            torch.ops._rocm_C, "rdna4_fp8_block_scaled_mm_prefill"
+        ) or not hasattr(torch.ops._rocm_C, "rdna4_fp8_block_scaled_mm_decode"):
             return False, "vLLM was built without the RDNA4 block-FP8 extension"
         return True, None
 

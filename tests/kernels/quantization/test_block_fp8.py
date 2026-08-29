@@ -21,7 +21,6 @@ from vllm.model_executor.kernels.linear.scaled_mm.b12x import (
 from vllm.model_executor.kernels.linear.scaled_mm.cutlass import cutlass_scaled_mm
 from vllm.model_executor.kernels.linear.scaled_mm.rdna4 import (
     RDNA4Fp8BlockScaledMMKernel,
-    should_use_rdna4_bm32,
     should_use_rdna4_hip,
 )
 from vllm.model_executor.layers.quantization.utils.fp8_utils import (
@@ -416,27 +415,6 @@ def test_w8a8_block_fp8_b12x_matmul(M, N, K):
 
 
 @pytest.mark.parametrize(
-    "m,n,k,expected",
-    [
-        (63, 5120, 3072, False),
-        (64, 5120, 3072, True),
-        (128, 17408, 5120, True),
-        (129, 5120, 8704, False),
-        (224, 8192, 5120, False),
-        (225, 8192, 5120, True),
-        (256, 17408, 5120, True),
-        (257, 8192, 5120, False),
-        (523, 5120, 8704, True),
-        (523, 17408, 5120, False),
-        (784, 7168, 5120, False),
-        (784, 8192, 5120, True),
-    ],
-)
-def test_rdna4_bm32_route(m, n, k, expected):
-    assert should_use_rdna4_bm32(m, n, k) is expected
-
-
-@pytest.mark.parametrize(
     "m,expected",
     [
         (0, False),
@@ -447,7 +425,8 @@ def test_rdna4_bm32_route(m, n, k, expected):
         (17, True),
         (32, True),
         (64, True),
-        (65, False),
+        (65, True),
+        (16384, True),
     ],
 )
 def test_rdna4_hip_route(m, expected):
@@ -470,6 +449,10 @@ def test_rdna4_hip_route(m, expected):
         (72, 128, 256),
         (129, 128, 256),
         (249, 128, 256),
+        (256, 8192, 5120),
+        (523, 5120, 8704),
+        (784, 7168, 5120),
+        (1024, 8192, 5120),
     ],
 )
 @torch.inference_mode()
