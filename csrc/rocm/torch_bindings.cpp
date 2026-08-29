@@ -58,6 +58,11 @@ TORCH_LIBRARY_EXPAND(TORCH_EXTENSION_NAME, rocm_ops) {
       "Tensor a_scale, Tensor weight_scale) -> Tensor");
   rocm_ops.impl("rdna4_fp8_block_scaled_mm_decode", torch::kCUDA,
                 &rdna4_fp8_block_scaled_mm_decode);
+  rocm_ops.def(
+      "rdna4_fp8_block_scaled_mm_prefill(Tensor a, Tensor weight, "
+      "Tensor a_scale, Tensor weight_scale) -> Tensor");
+  rocm_ops.impl("rdna4_fp8_block_scaled_mm_prefill", torch::kCUDA,
+                &rdna4_fp8_block_scaled_mm_prefill);
 #endif
 
 #ifdef VLLM_ROCM_GFX1100

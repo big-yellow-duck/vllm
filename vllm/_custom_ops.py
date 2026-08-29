@@ -2284,6 +2284,17 @@ def rdna4_fp8_block_scaled_mm_decode(
     )
 
 
+def rdna4_fp8_block_scaled_mm_prefill(
+    a: torch.Tensor,
+    weight: torch.Tensor,
+    a_scale: torch.Tensor,
+    weight_scale: torch.Tensor,
+) -> torch.Tensor:
+    return torch.ops._rocm_C.rdna4_fp8_block_scaled_mm_prefill(
+        a, weight, a_scale, weight_scale
+    )
+
+
 # moe
 def moe_sum(
     input: torch.Tensor,
