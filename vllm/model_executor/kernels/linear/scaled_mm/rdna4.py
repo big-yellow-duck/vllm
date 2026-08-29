@@ -3,9 +3,10 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 import torch
 
-from vllm import _custom_ops as ops
 from vllm.model_executor.layers.quantization.utils.fp8_utils import (
     w8a8_triton_block_scaled_mm,
 )
@@ -19,9 +20,17 @@ from .BlockScaledMMLinearKernel import (
 )
 
 
-def should_use_rdna4_hip(m: int) -> bool:
-    """Select the native HIP kernel for its validated M range."""
+def should_use_rdna4_flydsl(m: int) -> bool:
+    """Select the FlyDSL stack for its validated positive-M range."""
     return m >= 1
+
+
+@lru_cache(maxsize=1)
+def _load_rdna4_flydsl_mm():
+    """Load the patched FlyDSL kernel lazily after vLLM initializes PyTorch."""
+    from kernels.gemm.rdna4_fp8_blockscale import rdna4_fp8_block_scaled_mm
+
+    return rdna4_fp8_block_scaled_mm
 
 
 def _supports_specialized_layout(
@@ -56,12 +65,8 @@ def _rdna4_fp8_block_scaled_mm_impl(
 ) -> torch.Tensor:
     m = a.shape[0]
     specialized_layout = _supports_specialized_layout(a, weight, a_scale, weight_scale)
-    if specialized_layout and should_use_rdna4_hip(m):
-        if m <= 64:
-            return ops.rdna4_fp8_block_scaled_mm_decode(
-                a, weight, a_scale, weight_scale
-            )
-        return ops.rdna4_fp8_block_scaled_mm_prefill(a, weight, a_scale, weight_scale)
+    if specialized_layout and should_use_rdna4_flydsl(m):
+        return _load_rdna4_flydsl_mm()(a, weight, a_scale, weight_scale)
     return w8a8_triton_block_scaled_mm(
         a, weight, a_scale, weight_scale, [128, 128], torch.bfloat16
     )
@@ -101,10 +106,10 @@ class RDNA4Fp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
 
         if not on_rdna4():
             return False, "RDNA4 block-FP8 kernels require gfx1200 or gfx1201"
-        if not hasattr(
-            torch.ops._rocm_C, "rdna4_fp8_block_scaled_mm_prefill"
-        ) or not hasattr(torch.ops._rocm_C, "rdna4_fp8_block_scaled_mm_decode"):
-            return False, "vLLM was built without the RDNA4 block-FP8 extension"
+        try:
+            _load_rdna4_flydsl_mm()
+        except (ImportError, OSError) as exc:
+            return False, f"patched RDNA4 FlyDSL stack is unavailable: {exc}"
         return True, None
 
     @classmethod
