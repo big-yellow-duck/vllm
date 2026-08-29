@@ -21,7 +21,7 @@ from vllm.model_executor.kernels.linear.scaled_mm.b12x import (
 from vllm.model_executor.kernels.linear.scaled_mm.cutlass import cutlass_scaled_mm
 from vllm.model_executor.kernels.linear.scaled_mm.rdna4 import (
     RDNA4Fp8BlockScaledMMKernel,
-    should_use_rdna4_hip,
+    should_use_rdna4_flydsl,
 )
 from vllm.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
@@ -429,8 +429,8 @@ def test_w8a8_block_fp8_b12x_matmul(M, N, K):
         (16384, True),
     ],
 )
-def test_rdna4_hip_route(m, expected):
-    assert should_use_rdna4_hip(m) is expected
+def test_rdna4_flydsl_route(m, expected):
+    assert should_use_rdna4_flydsl(m) is expected
 
 
 @pytest.mark.parametrize(
@@ -456,7 +456,7 @@ def test_rdna4_hip_route(m, expected):
     ],
 )
 @torch.inference_mode()
-def test_rdna4_block_fp8_hybrid_matches_triton(m, n, k):
+def test_rdna4_block_fp8_flydsl_matches_triton(m, n, k):
     supported, reason = RDNA4Fp8BlockScaledMMKernel.is_supported()
     if not supported:
         pytest.skip(reason)
