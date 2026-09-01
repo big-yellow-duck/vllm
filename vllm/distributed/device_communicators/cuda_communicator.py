@@ -106,12 +106,12 @@ class CudaCommunicator(DeviceCommunicatorBase):
             "tp" in unique_name
             and self.world_size == 2
             and current_platform.is_rocm()
-            and envs.VLLM_ROCM_USE_RDNA4_TP2_AR
+            and envs.VLLM_ROCM_USE_RDNA4_TP2_FLYDSL_AR
         ):
             try:
-                from rdna4_tp2 import RDNA4TP2AllReduce
+                from rdna4_tp2 import RDNA4TP2FlyDSLAllReduce
 
-                self.rdna4_tp2_ar_comm = RDNA4TP2AllReduce(
+                self.rdna4_tp2_ar_comm = RDNA4TP2FlyDSLAllReduce(
                     group=self.cpu_group,
                     device=self.device,
                 )
@@ -122,7 +122,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
                 # startup safe and preserve PyNCCL when its package, transport,
                 # or runtime validation is unavailable.
                 logger.exception(
-                    "RDNA4 TP2 all-reduce initialization failed; using fallback"
+                    "RDNA4 TP2 FlyDSL all-reduce initialization failed; using fallback"
                 )
                 self.rdna4_tp2_ar_comm = None
 
@@ -263,7 +263,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
             "AITER_CUSTOM",
             "CUSTOM",
             "SYMM_MEM",
-            "RDNA4_TP2",
+            "RDNA4_TP2_FLYDSL",
             "PYNCCL",
         ]
         enabled_ar_backends: list[str] = []
@@ -302,7 +302,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
         if self.symm_mem_comm is not None and not self.symm_mem_comm.disabled:
             enabled_ar_backends.append("SYMM_MEM")
         if self.rdna4_tp2_ar_comm is not None:
-            enabled_ar_backends.append("RDNA4_TP2")
+            enabled_ar_backends.append("RDNA4_TP2_FLYDSL")
         if self.pynccl_comm is not None and not self.pynccl_comm.disabled:
             enabled_ar_backends.append("PYNCCL")
 
