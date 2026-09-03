@@ -2,6 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 
+from typing import Any
+
 import torch
 from torch.distributed import ProcessGroup
 
@@ -98,6 +100,31 @@ class CudaCommunicator(DeviceCommunicatorBase):
         self.symm_mem_comm: SymmMemCommunicator | None = None
         self.fi_ar_comm: FlashInferAllReduce | None = None
         self.aiter_ar_comm: AiterCustomAllreduce | None = None
+        self.rdna4_tp2_ar_comm: Any | None = None
+
+        if (
+            "tp" in unique_name
+            and self.world_size == 2
+            and current_platform.is_rocm()
+            and envs.VLLM_ROCM_USE_RDNA4_TP2_FLYDSL_AR
+        ):
+            try:
+                from rdna4_tp2 import RDNA4TP2FlyDSLAllReduce
+
+                self.rdna4_tp2_ar_comm = RDNA4TP2FlyDSLAllReduce(
+                    group=self.cpu_group,
+                    device=self.device,
+                )
+                if self.rdna4_tp2_ar_comm.disabled:
+                    self.rdna4_tp2_ar_comm = None
+            except Exception:
+                # The standalone backend is an optional optimization. Keep
+                # startup safe and preserve PyNCCL when its package, transport,
+                # or runtime validation is unavailable.
+                logger.exception(
+                    "RDNA4 TP2 FlyDSL all-reduce initialization failed; using fallback"
+                )
+                self.rdna4_tp2_ar_comm = None
 
         if use_torch_symm_mem and current_platform.is_cuda():
             self.symm_mem_comm = SymmMemCommunicator(
@@ -117,7 +144,12 @@ class CudaCommunicator(DeviceCommunicatorBase):
                 device=self.device,
             )
 
-        if use_custom_allreduce and self.aiter_ar_comm is None and self.world_size > 1:
+        if (
+            use_custom_allreduce
+            and self.aiter_ar_comm is None
+            and self.rdna4_tp2_ar_comm is None
+            and self.world_size > 1
+        ):
             # Initialize a custom fast all-reduce implementation.
             self.ca_comm = CustomAllreduce(
                 group=self.cpu_group,
@@ -127,7 +159,12 @@ class CudaCommunicator(DeviceCommunicatorBase):
                 ),
             )
 
-        if use_custom_allreduce and self.world_size > 1 and current_platform.is_rocm():
+        if (
+            use_custom_allreduce
+            and self.rdna4_tp2_ar_comm is None
+            and self.world_size > 1
+            and current_platform.is_rocm()
+        ):
             # Initialize a custom quick all-reduce implementation for AMD.
             # Quick reduce is designed as a complement to custom allreduce
             # (vLLM's or AITER's), so it is initialized for either backend.
@@ -226,6 +263,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
             "AITER_CUSTOM",
             "CUSTOM",
             "SYMM_MEM",
+            "RDNA4_TP2_FLYDSL",
             "PYNCCL",
         ]
         enabled_ar_backends: list[str] = []
@@ -263,6 +301,8 @@ class CudaCommunicator(DeviceCommunicatorBase):
             enabled_ar_backends.append("CUSTOM")
         if self.symm_mem_comm is not None and not self.symm_mem_comm.disabled:
             enabled_ar_backends.append("SYMM_MEM")
+        if self.rdna4_tp2_ar_comm is not None:
+            enabled_ar_backends.append("RDNA4_TP2_FLYDSL")
         if self.pynccl_comm is not None and not self.pynccl_comm.disabled:
             enabled_ar_backends.append("PYNCCL")
 
@@ -325,6 +365,11 @@ class CudaCommunicator(DeviceCommunicatorBase):
         symm_mem_comm = self.symm_mem_comm
         if symm_mem_comm is not None and symm_mem_comm.should_use_symm_mem(input_):
             out = symm_mem_comm.all_reduce(input_)
+            assert out is not None
+            return out
+        rdna4_tp2_ar_comm = self.rdna4_tp2_ar_comm
+        if rdna4_tp2_ar_comm is not None and rdna4_tp2_ar_comm.should_use(input_):
+            out = rdna4_tp2_ar_comm.all_reduce(input_)
             assert out is not None
             return out
         pynccl_comm = self.pynccl_comm
