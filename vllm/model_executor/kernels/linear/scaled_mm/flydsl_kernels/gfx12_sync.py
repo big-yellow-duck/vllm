@@ -22,6 +22,3 @@ def lds_fence_signal(outstanding=0):
 def lds_fence_wait():
     """Wait until every wave has signaled the matching LDS fence."""
     rocdl.s_barrier_wait(WORKGROUP_BARRIER_ID)
-
-
-__all__ = ["lds_wait", "lds_fence_signal", "lds_fence_wait"]

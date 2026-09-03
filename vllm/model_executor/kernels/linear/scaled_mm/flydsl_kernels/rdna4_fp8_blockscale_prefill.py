@@ -13,7 +13,6 @@ independent activation and weight scales are applied.
 """
 
 from dataclasses import dataclass
-from enum import Enum
 from functools import lru_cache
 
 import flydsl.compiler as flyc
@@ -22,12 +21,13 @@ from flydsl.expr import gpu, range_constexpr
 from flydsl.expr.typing import Vector as Vec
 
 from .gfx12_sync import lds_fence_signal, lds_fence_wait
-from .rdna4_fp8_blockscale import (
+from .rdna4_fp8_blockscale_common import (
     SCALE_K,
     WAVE_SIZE,
     WMMA_K,
     WMMA_M,
     WMMA_N,
+    _f32_to_bf16_rne,
     _load_f32,
     _load_fp8_fragment_ptr,
     _make_buffer,
@@ -38,24 +38,14 @@ LDA = SCALE_K + 8
 LDB = SCALE_K
 
 
-class PrefillRoute(str, Enum):
-    """The broad-M geometry families retained from the HIP implementation."""
-
-    NARROW_N128 = "narrow_n128"
-    FIXED_M256_N8192 = "fixed_m256_n8192"
-    BALANCED_REUSE = "balanced_reuse"
-    QWEN_N8192 = "qwen_n8192"
-    DEFAULT_M64_N256 = "default_m64_n256"
-
-
 @dataclass(frozen=True)
 class PrefillConfig:
-    route: PrefillRoute
     tile_m: int
     tile_n: int
     group_m: int
     a_prefetch: int
     b_prefetch: int
+    static_m: int = 0
 
     @property
     def threads(self) -> int:
@@ -94,55 +84,33 @@ def select_prefill_config(m: int, n: int, k: int, stride_b: int) -> PrefillConfi
         or (192 <= m <= 384 and 4096 <= n <= 7168 and k >= 6144)
     ):
         return PrefillConfig(
-            PrefillRoute.NARROW_N128,
-            tile_m=64,
+            tile_m=32 if n == 128 else 64,
             tile_n=128,
-            group_m=32,
+            group_m=1 if n == 128 else 32,
             a_prefetch=2,
             b_prefetch=5,
         )
     if (m, n, k, stride_b) == (256, 8192, 5120, 5376):
         return PrefillConfig(
-            PrefillRoute.FIXED_M256_N8192,
             tile_m=64,
             tile_n=256,
-            group_m=1,
+            group_m=2,
             a_prefetch=2,
             b_prefetch=2,
+            static_m=256,
         )
-    if balanced_reuse:
+    if balanced_reuse and n >= 16384:
         # The native HIP compiler favors its 128x128/256-thread geometry here,
         # but current FlyDSL gfx120x lowering pays a large occupancy cost for
-        # that shape. Preserve the reuse route while selecting the measured
-        # FlyDSL geometry: narrow tiles for very wide N, 64x256 otherwise.
-        if n >= 16384:
-            return PrefillConfig(
-                PrefillRoute.BALANCED_REUSE,
-                tile_m=128,
-                tile_n=128,
-                group_m=8,
-                a_prefetch=4,
-                b_prefetch=4,
-            )
+        # that shape. Use the measured narrow tile for very wide N.
         return PrefillConfig(
-            PrefillRoute.BALANCED_REUSE,
-            tile_m=64,
-            tile_n=256,
+            tile_m=128,
+            tile_n=128,
             group_m=8,
-            a_prefetch=2,
-            b_prefetch=2,
-        )
-    if (n, k) == (8192, 5120):
-        return PrefillConfig(
-            PrefillRoute.QWEN_N8192,
-            tile_m=64,
-            tile_n=256,
-            group_m=8,
-            a_prefetch=2,
-            b_prefetch=2,
+            a_prefetch=4,
+            b_prefetch=4,
         )
     return PrefillConfig(
-        PrefillRoute.DEFAULT_M64_N256,
         tile_m=64,
         tile_n=256,
         group_m=8,
@@ -168,28 +136,16 @@ def _store_bf16x8(buffer, index, values):
     fx.copy(atom, fragment, fx.slice(buffer, (None, index)))
 
 
-def _f32_to_bf16_rne(value):
-    """Round an FP32 value to BF16 with HIP's integer RNE sequence.
-
-    FlyDSL's generic scalar ``to(BFloat16)`` currently lowers through NaN
-    classification and conditional masks on gfx120x. The native reference
-    relies on the standard add-bias-and-truncate representation transform,
-    which preserves round-to-nearest-even with three integer operations.
-    """
-    bits = fx.Float32(value).bitcast(fx.Uint32)
-    rounded = bits + fx.Uint32(0x7FFF) + ((bits >> fx.Uint32(16)) & fx.Uint32(1))
-    return fx.Uint16(rounded >> fx.Uint32(16)).bitcast(fx.BFloat16)
-
-
 def _create_prefill_module(
     n: int,
     k: int,
     stride_b: int,
     config: PrefillConfig,
 ):
-    """Create a single-stage LDS/WMMA prefill kernel with dynamic M."""
+    """Create a single-stage LDS/WMMA prefill kernel."""
     bm = config.tile_m
     bn = config.tile_n
+    static_m = config.static_m
     threads = config.threads
     a_waves = bn // 64
     a_loads = (bm * SCALE_K) // (16 * threads)
@@ -200,7 +156,7 @@ def _create_prefill_module(
     lds_b_elems = bn * LDB
     lds_elems = lds_a_elems + lds_b_elems
 
-    assert threads in (128, 256)
+    assert threads in (64, 128, 256)
     assert n % bn == 0
     assert config.a_prefetch <= a_loads
     assert config.b_prefetch <= b_loads
@@ -247,7 +203,8 @@ def _create_prefill_module(
         arg_out: fx.Tensor,
         arg_m: fx.Int32,
     ):
-        grid_m = (arg_m + fx.Int32(bm - 1)) // fx.Int32(bm)
+        m_extent = fx.Int32(static_m) if static_m else arg_m
+        grid_m = (m_extent + fx.Int32(bm - 1)) // fx.Int32(bm)
         tid = fx.thread_idx.x
         wave = tid // fx.Int32(WAVE_SIZE)
         wave_m = wave // fx.Int32(a_waves)
@@ -269,12 +226,12 @@ def _create_prefill_module(
         # Select the descriptor's RDNA OOB mode once per workgroup. Complete
         # tiles use OOB_SELECT=2; only the final partial tile uses checked mode
         # 3. The K loop itself remains branch free.
-        check_m_bounds = m0 + fx.Int32(bm) > arg_m
+        check_m_bounds = m0 + fx.Int32(bm) > m_extent
         a_buf = _make_buffer(
             arg_a,
             fp8,
             16,
-            arg_m * fx.Int32(k),
+            m_extent * fx.Int32(k),
             bounds_check=check_m_bounds,
         )
         b_buf = _make_buffer(arg_b, fp8, 16, n * stride_b)
@@ -282,11 +239,11 @@ def _create_prefill_module(
             arg_as,
             f32,
             1,
-            arg_m * fx.Int32(scale_blocks * 4),
+            m_extent * fx.Int32(scale_blocks * 4),
             bounds_check=check_m_bounds,
         )
         bs_ptr = fx.recast_iter(f32, fx.get_iter(arg_bs))
-        out_buf = _make_buffer(arg_out, bf16, 8, arg_m * fx.Int32(n * 2))
+        out_buf = _make_buffer(arg_out, bf16, 8, m_extent * fx.Int32(n * 2))
 
         shared = fx.SharedAllocator().allocate(SharedStorage).peek().data
         lds_a_ptr = shared.ptr
@@ -475,7 +432,7 @@ def _create_prefill_module(
         # the WMMA fragment layout into aligned 16-byte BF16 global stores.
         gpu.barrier()
         lds_out_ptr = fx.recast_iter(f32, lds_a_ptr)
-        output_rows = 32 if bm == 64 else 64
+        output_rows = 32 if bm <= 64 else 64
         output_wave_rows = output_rows // 32
         for group in range_constexpr(bm // output_rows):
             if wave_m // fx.Int32(output_wave_rows) == fx.Int32(group):
@@ -505,7 +462,7 @@ def _create_prefill_module(
                 local_row = v // fx.Int32(bn // 8)
                 col = (v % fx.Int32(bn // 8)) * fx.Int32(8)
                 row = m0 + fx.Int32(group * output_rows) + local_row
-                if row < arg_m:
+                if row < m_extent:
                     values = fx.ptr_load(
                         lds_out_ptr + local_row * fx.Int32(bn) + col,
                         result_type=fx.Vector.make_type(8, f32),
@@ -528,7 +485,10 @@ def _create_prefill_module(
         arg_m: fx.Int32,
         stream: fx.Stream = fx.Stream(None),
     ):
-        total_blocks = ((arg_m + fx.Int32(bm - 1)) // fx.Int32(bm)) * fx.Int32(grid_n)
+        launch_m = fx.Int32(static_m) if static_m else arg_m
+        total_blocks = ((launch_m + fx.Int32(bm - 1)) // fx.Int32(bm)) * fx.Int32(
+            grid_n
+        )
         prefill_kernel(
             arg_a,
             arg_b,
@@ -552,14 +512,15 @@ def _get_prefill_module_cached(
     group_m: int,
     a_prefetch: int,
     b_prefetch: int,
+    static_m: int,
 ):
     config = PrefillConfig(
-        PrefillRoute.DEFAULT_M64_N256,
         tile_m,
         tile_n,
         group_m,
         a_prefetch,
         b_prefetch,
+        static_m,
     )
     return _create_prefill_module(n, k, stride_b, config)
 
@@ -570,9 +531,10 @@ def _get_prefill_module(
     stride_b: int,
     config: PrefillConfig,
 ):
-    # Route names are diagnostics; only lowering-affecting geometry belongs in
-    # the compile key. This lets the M=8192 vLLM profile warmup populate the
-    # exact executable later reused by ragged agentic prefill sizes.
+    # Only lowering-affecting geometry and specialization belong in the cache
+    # key. The M=8192 startup profile can therefore populate the executable
+    # reused by ragged prompt sizes, while the static-M256 specialization stays
+    # cache-isolated.
     return _get_prefill_module_cached(
         n,
         k,
@@ -582,83 +544,13 @@ def _get_prefill_module(
         config.group_m,
         config.a_prefetch,
         config.b_prefetch,
+        config.static_m,
     )
 
 
-def _validate_prefill_tensors(a, weight, a_scale, weight_scale, out):
-    import torch
-
-    tensors = (a, weight, a_scale, weight_scale)
-    if any(t.device.type != "cuda" for t in tensors):
-        raise ValueError("RDNA4 block-FP8 inputs must be on the GPU")
-    if any(t.ndim != 2 for t in tensors):
-        raise ValueError("RDNA4 block-FP8 inputs must be rank two")
-    if a.dtype != torch.float8_e4m3fn or weight.dtype != torch.float8_e4m3fn:
-        raise TypeError("RDNA4 block-FP8 operands must use torch.float8_e4m3fn")
-    if a_scale.dtype != torch.float32 or weight_scale.dtype != torch.float32:
-        raise TypeError("RDNA4 block-FP8 scales must use torch.float32")
-    if any(t.device != a.device for t in tensors):
-        raise ValueError("RDNA4 block-FP8 inputs must share a device")
-    arch = getattr(torch.cuda.get_device_properties(a.device), "gcnArchName", "")
-    if not (arch.startswith("gfx1200") or arch.startswith("gfx1201")):
-        raise ValueError(
-            f"RDNA4 block-FP8 route requires gfx1200 or gfx1201, got {arch!r}"
-        )
-
-    m, k = a.shape
-    n, weight_k = weight.shape
-    if weight_k != k:
-        raise ValueError(f"weight K mismatch: A has K={k}, weight has K={weight_k}")
+def _run_prefill(a, weight, a_scale, weight_scale, out, stream, m, n, k):
+    """Select and launch the broad-M implementation."""
     config = select_prefill_config(m, n, k, weight.stride(0))
-    if (
-        not a.is_contiguous()
-        or not a_scale.is_contiguous()
-        or not weight_scale.is_contiguous()
-    ):
-        raise ValueError("A and both scale tensors must be contiguous")
-    if weight.stride(1) != 1:
-        raise ValueError("weight must have contiguous K rows (weight.stride(1) == 1)")
-    if tuple(a_scale.shape) != (m, k // SCALE_K):
-        raise ValueError(
-            f"activation scale shape must be {(m, k // SCALE_K)}, "
-            f"got {tuple(a_scale.shape)}"
-        )
-    if tuple(weight_scale.shape) != (n // SCALE_K, k // SCALE_K):
-        raise ValueError(
-            "weight scale shape must be "
-            f"{(n // SCALE_K, k // SCALE_K)}, got {tuple(weight_scale.shape)}"
-        )
-    if out is not None and (
-        out.device != a.device
-        or out.dtype != torch.bfloat16
-        or tuple(out.shape) != (m, n)
-        or not out.is_contiguous()
-    ):
-        raise ValueError(
-            "out must be a contiguous BF16 CUDA tensor with shape [M, N] on A's device"
-        )
-    return m, n, k, config
-
-
-def rdna4_fp8_block_scaled_mm_prefill(
-    a, weight, a_scale, weight_scale, *, out=None, stream=None
-):
-    """Run the vLLM-compatible M>64 RDNA4 block-scaled FP8 prefill GEMM."""
-    import torch
-
-    m, n, k, config = _validate_prefill_tensors(a, weight, a_scale, weight_scale, out)
-    if out is None:
-        out = torch.empty((m, n), dtype=torch.bfloat16, device=a.device)
-    if stream is None:
-        stream = torch.cuda.current_stream(a.device)
     module = _get_prefill_module(n, k, weight.stride(0), config)
     run_compiled(module, a, weight, a_scale, weight_scale, out, m, stream)
     return out
-
-
-__all__ = [
-    "PrefillConfig",
-    "PrefillRoute",
-    "rdna4_fp8_block_scaled_mm_prefill",
-    "select_prefill_config",
-]
