@@ -21,7 +21,6 @@ from vllm.model_executor.kernels.linear.scaled_mm.b12x import (
 from vllm.model_executor.kernels.linear.scaled_mm.cutlass import cutlass_scaled_mm
 from vllm.model_executor.kernels.linear.scaled_mm.rdna4 import (
     RDNA4Fp8BlockScaledMMKernel,
-    should_use_rdna4_flydsl,
 )
 from vllm.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
@@ -111,12 +110,12 @@ def test_per_token_group_quant_fp8(
         # mismatch. Observed worst case across all parameter combos: 0.049%,
         # max ULP = 1.
         ulp = fp8_ulp_distance(out, ref_out)
-        assert (ulp <= 1).all(), (
-            f"FP8 mismatch > 1 ULP: {int((ulp > 1).sum())} elements"
-        )
-        assert float((ulp > 0).float().mean()) < 5e-4, (
-            f"Too many 1-ULP mismatches: {int((ulp > 0).sum())}/{ulp.numel()}"
-        )
+        assert (
+            ulp <= 1
+        ).all(), f"FP8 mismatch > 1 ULP: {int((ulp > 1).sum())} elements"
+        assert (
+            float((ulp > 0).float().mean()) < 5e-4
+        ), f"Too many 1-ULP mismatches: {int((ulp > 0).sum())}/{ulp.numel()}"
     else:
         assert torch.allclose(
             out.to(torch.float32), ref_out.to(torch.float32), rtol=0.15
@@ -304,9 +303,10 @@ def test_w8a8_block_fp8_deep_gemm_matmul(M, N, K, block_size, out_dtype, seed):
 
     out = torch.zeros((M, N), device="cuda", dtype=out_dtype)
 
-    assert As_fp8.shape == (M, (K + 127) // 128), (
-        f"{As_fp8.shape} != {(M, (K + 127) // 128)}"
-    )
+    assert As_fp8.shape == (
+        M,
+        (K + 127) // 128,
+    ), f"{As_fp8.shape} != {(M, (K + 127) // 128)}"
 
     fp8_gemm_nt((A_fp8, As_fp8), (B_fp8, Bs_fp8), out)
 
@@ -412,25 +412,6 @@ def test_w8a8_block_fp8_b12x_matmul(M, N, K):
     )
     assert rel_diff < 0.002
     assert cosine >= 0.9999
-
-
-@pytest.mark.parametrize(
-    "m,expected",
-    [
-        (0, False),
-        (1, True),
-        (2, True),
-        (4, True),
-        (16, True),
-        (17, True),
-        (32, True),
-        (64, True),
-        (65, True),
-        (16384, True),
-    ],
-)
-def test_rdna4_flydsl_route(m, expected):
-    assert should_use_rdna4_flydsl(m) is expected
 
 
 @pytest.mark.parametrize(

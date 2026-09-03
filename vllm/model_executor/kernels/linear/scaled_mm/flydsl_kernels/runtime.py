@@ -22,6 +22,3 @@ def run_compiled(executable, *args):
         except Exception:
             pass
         raise
-
-
-__all__ = ["run_compiled"]

@@ -7,9 +7,6 @@ from functools import lru_cache
 
 import torch
 
-from vllm.model_executor.layers.quantization.utils.fp8_utils import (
-    w8a8_triton_block_scaled_mm,
-)
 from vllm.model_executor.layers.quantization.utils.quant_utils import GroupShape
 from vllm.platforms import current_platform
 from vllm.utils.torch_utils import direct_register_custom_op
@@ -18,11 +15,6 @@ from .BlockScaledMMLinearKernel import (
     Fp8BlockScaledMMLinearKernel,
     FP8ScaledMMLinearLayerConfig,
 )
-
-
-def should_use_rdna4_flydsl(m: int) -> bool:
-    """Select the FlyDSL stack for its validated positive-M range."""
-    return m >= 1
 
 
 @lru_cache(maxsize=1)
@@ -44,43 +36,13 @@ def _load_rdna4_flydsl_mm():
     return rdna4_fp8_block_scaled_mm
 
 
-def _supports_specialized_layout(
-    a: torch.Tensor,
-    weight: torch.Tensor,
-    a_scale: torch.Tensor,
-    weight_scale: torch.Tensor,
-) -> bool:
-    m, k = a.shape
-    n = weight.shape[0]
-    return (
-        a.dtype == torch.float8_e4m3fn
-        and weight.dtype == torch.float8_e4m3fn
-        and a_scale.dtype == torch.float32
-        and weight_scale.dtype == torch.float32
-        and a.is_contiguous()
-        and weight.stride(1) == 1
-        and a_scale.is_contiguous()
-        and weight_scale.is_contiguous()
-        and n % 128 == 0
-        and k % 128 == 0
-        and a_scale.shape == (m, k // 128)
-        and weight_scale.shape == (n // 128, k // 128)
-    )
-
-
 def _rdna4_fp8_block_scaled_mm_impl(
     a: torch.Tensor,
     weight: torch.Tensor,
     a_scale: torch.Tensor,
     weight_scale: torch.Tensor,
 ) -> torch.Tensor:
-    m = a.shape[0]
-    specialized_layout = _supports_specialized_layout(a, weight, a_scale, weight_scale)
-    if specialized_layout and should_use_rdna4_flydsl(m):
-        return _load_rdna4_flydsl_mm()(a, weight, a_scale, weight_scale)
-    return w8a8_triton_block_scaled_mm(
-        a, weight, a_scale, weight_scale, [128, 128], torch.bfloat16
-    )
+    return _load_rdna4_flydsl_mm()(a, weight, a_scale, weight_scale)
 
 
 def _rdna4_fp8_block_scaled_mm_fake(
@@ -104,7 +66,7 @@ direct_register_custom_op(
 
 
 class RDNA4Fp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
-    """Hybrid block-FP8 kernel for RDNA4."""
+    """FlyDSL block-FP8 kernel family for RDNA4."""
 
     @classmethod
     def is_supported(
