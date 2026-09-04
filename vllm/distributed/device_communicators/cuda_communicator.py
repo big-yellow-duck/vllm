@@ -52,6 +52,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
             use_custom_allreduce = False
             use_torch_symm_mem = False
             use_flashinfer_allreduce = False
+            use_flashinfer_pcie_ipc_allreduce = False
             use_aiter_allreduce = False
         else:
             from vllm.distributed.parallel_state import _ENABLE_CUSTOM_ALL_REDUCE
@@ -62,6 +63,10 @@ class CudaCommunicator(DeviceCommunicatorBase):
             use_flashinfer_allreduce = (
                 envs.VLLM_ALLREDUCE_USE_FLASHINFER and not envs.VLLM_BATCH_INVARIANT
             )
+            use_flashinfer_pcie_ipc_allreduce = (
+                envs.VLLM_ALLREDUCE_USE_FLASHINFER_PCIE_IPC
+                and not envs.VLLM_BATCH_INVARIANT
+            )
             use_aiter_allreduce = use_custom_allreduce and bool(
                 rocm_aiter_ops.is_custom_all_reduce_enabled()
             )
@@ -69,6 +74,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
         self.use_custom_allreduce = use_custom_allreduce
         self.use_torch_symm_mem = use_torch_symm_mem
         self.use_flashinfer_allreduce = use_flashinfer_allreduce
+        self.use_flashinfer_pcie_ipc_allreduce = use_flashinfer_pcie_ipc_allreduce
         self.use_aiter_allreduce = use_aiter_allreduce
 
         # lazy import to avoid documentation build error
@@ -77,6 +83,9 @@ class CudaCommunicator(DeviceCommunicatorBase):
         )
         from vllm.distributed.device_communicators.flashinfer_all_reduce import (
             FlashInferAllReduce,
+        )
+        from vllm.distributed.device_communicators.flashinfer_pcie_ipc_all_reduce import (  # noqa: E501
+            FlashInferPcieIpcAllReduce,
         )
         from vllm.distributed.device_communicators.pynccl import PyNcclCommunicator
         from vllm.distributed.device_communicators.quick_all_reduce import (
@@ -100,6 +109,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
         self.qr_comm: QuickAllReduce | None = None
         self.symm_mem_comm: SymmMemCommunicator | None = None
         self.fi_ar_comm: FlashInferAllReduce | None = None
+        self.fi_pcie_ipc_ar_comm: FlashInferPcieIpcAllReduce | None = None
         self.aiter_ar_comm: AiterCustomAllreduce | None = None
         self.rdna4_ar_comm: RDNA4AllReduce | None = None
 
@@ -131,6 +141,17 @@ class CudaCommunicator(DeviceCommunicatorBase):
         if self.use_flashinfer_allreduce and self.world_size > 1:
             self.fi_ar_comm = FlashInferAllReduce(
                 group=self.cpu_group,
+                device=self.device,
+            )
+
+        if (
+            self.use_flashinfer_pcie_ipc_allreduce
+            and self.world_size > 1
+            and self.device_group is not None
+        ):
+            self.fi_pcie_ipc_ar_comm = FlashInferPcieIpcAllReduce(
+                group=self.device_group,
+                tune_group=self.cpu_group,
                 device=self.device,
             )
 
@@ -258,15 +279,25 @@ class CudaCommunicator(DeviceCommunicatorBase):
         """
         all_potential_ar_backends = [
             "RDNA4",
+            "FLASHINFER_PCIE_IPC",
+            "FLASHINFER",
             "NCCL_SYMM_MEM",
             "QUICK_REDUCE",
-            "FLASHINFER",
             "AITER_CUSTOM",
             "CUSTOM",
             "SYMM_MEM",
             "PYNCCL",
         ]
         enabled_ar_backends: list[str] = []
+        if self.rdna4_ar_comm is not None:
+            enabled_ar_backends.append("RDNA4")
+        if (
+            self.fi_pcie_ipc_ar_comm is not None
+            and not self.fi_pcie_ipc_ar_comm.disabled
+        ):
+            enabled_ar_backends.append("FLASHINFER_PCIE_IPC")
+        if self.fi_ar_comm is not None and not self.fi_ar_comm.disabled:
+            enabled_ar_backends.append("FLASHINFER")
         # Mirror the static preconditions of `should_nccl_symm_mem_allreduce`:
         # VLLM_BATCH_INVARIANT off, NCCL symm mem enabled, world_size meets
         # min_world_size, and world_size either has a tuned entry in
@@ -283,8 +314,6 @@ class CudaCommunicator(DeviceCommunicatorBase):
             or self.world_size
             > NCCL_SYMM_MEM_ALL_REDUCE_CONFIG["always_use_above_world_size"]
         )
-        if self.rdna4_ar_comm is not None:
-            enabled_ar_backends.append("RDNA4")
         if (
             self.pynccl_comm is not None
             and not self.pynccl_comm.disabled
@@ -295,8 +324,6 @@ class CudaCommunicator(DeviceCommunicatorBase):
             enabled_ar_backends.append("NCCL_SYMM_MEM")
         if self.qr_comm is not None and not self.qr_comm.disabled:
             enabled_ar_backends.append("QUICK_REDUCE")
-        if self.fi_ar_comm is not None and not self.fi_ar_comm.disabled:
-            enabled_ar_backends.append("FLASHINFER")
         if self.aiter_ar_comm is not None and not self.aiter_ar_comm.disabled:
             enabled_ar_backends.append("AITER_CUSTOM")
         if self.ca_comm is not None and not self.ca_comm.disabled:
@@ -322,16 +349,23 @@ class CudaCommunicator(DeviceCommunicatorBase):
             assert out is not None
             return out
 
+        fi_ar_comm = self.fi_ar_comm
+        use_fi_ar = (
+            fi_ar_comm is not None
+            and not fi_ar_comm.disabled
+            and fi_ar_comm.should_use_fi_ar(input_)
+        )
+
         # since currently we perform copy input -> symm_input -> out-of-place AR
         # return symm_output, we don't need to check if input is symmetric
-        if self.pynccl_comm is not None and should_nccl_symm_mem_allreduce(
-            self.pynccl_comm.world_size, input_
+        if (
+            self.pynccl_comm is not None
+            and not use_fi_ar
+            and should_nccl_symm_mem_allreduce(self.pynccl_comm.world_size, input_)
         ):
             out = torch.ops.vllm.all_reduce_symmetric_with_copy(input_)
             if out is not None:
                 return out
-        # always try quick reduce first, then flashinfer, then the AITER or vLLM
-        # custom allreduce, and then pynccl. (quick reduce just for ROCM MI3*)
         qr_comm = self.qr_comm
         if (
             qr_comm is not None
@@ -341,12 +375,11 @@ class CudaCommunicator(DeviceCommunicatorBase):
             out = qr_comm.quick_all_reduce(input_)
             assert out is not None
             return out
-        fi_ar_comm = self.fi_ar_comm
-        if (
-            fi_ar_comm is not None
-            and not fi_ar_comm.disabled
-            and fi_ar_comm.should_use_fi_ar(input_)
-        ):
+        fi_pcie_ipc_ar_comm = self.fi_pcie_ipc_ar_comm
+        if fi_pcie_ipc_ar_comm is not None and fi_pcie_ipc_ar_comm.should_use(input_):
+            return fi_pcie_ipc_ar_comm.all_reduce(input_)
+        if use_fi_ar:
+            assert fi_ar_comm is not None
             out = fi_ar_comm.all_reduce(input_)
             assert out is not None
             return out
@@ -640,9 +673,20 @@ class CudaCommunicator(DeviceCommunicatorBase):
         if self.fi_ar_comm is not None:
             self.fi_ar_comm.destroy()
             self.fi_ar_comm = None
+        if self.fi_pcie_ipc_ar_comm is not None:
+            self.fi_pcie_ipc_ar_comm.destroy()
+            self.fi_pcie_ipc_ar_comm = None
         if self.all2all_manager is not None:
             self.all2all_manager.destroy()
             self.all2all_manager = None  # type: ignore[assignment]
+
+    def suspend(self) -> None:
+        if self.pynccl_comm is not None:
+            self.pynccl_comm.suspend()
+
+    def resume(self) -> None:
+        if self.pynccl_comm is not None:
+            self.pynccl_comm.resume()
 
     def checkpoint_prepare(self) -> None:
         # Only FlashInfer all-reduce and FlashInfer all2all are supported for now.
@@ -689,9 +733,9 @@ class CudaCommunicator(DeviceCommunicatorBase):
             input_size = input_.size()
             if sizes is not None:
                 assert len(sizes) == world_size
-                assert input_.shape[dim] == sizes[self.rank_in_group], (
-                    f"{input_.shape[dim]} != {sizes[self.rank_in_group]}"
-                )
+                assert (
+                    input_.shape[dim] == sizes[self.rank_in_group]
+                ), f"{input_.shape[dim]} != {sizes[self.rank_in_group]}"
                 output_size = (sum(sizes),) + input_size[1:]
             else:
                 output_size = (input_size[0] * world_size,) + input_size[1:]
