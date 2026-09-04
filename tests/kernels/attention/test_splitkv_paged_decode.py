@@ -630,6 +630,69 @@ def test_chunked_decode_routes_padded_fp8_cache_and_forwards_scales(
     torch.testing.assert_close(output, expected, atol=0.01, rtol=0.01)
 
 
+@pytest.mark.skipif(not on_gfx12x(), reason="FP8 SplitKV decode requires gfx12x")
+@torch.inference_mode()
+def test_chunked_decode_tp8_gqa3_one_split() -> None:
+    """Cover Qwen3.5's TP8 fallback specialization on RDNA4."""
+    set_random_seed(0)
+    case = SplitKVCase(
+        torch.bfloat16,
+        torch.float8_e4m3fn,
+        3,
+        1,
+        256,
+        784,
+        (1, 1, 1),
+        1,
+        0.73,
+        1.27,
+        padded_stride=True,
+    )
+    (
+        query,
+        dense_key,
+        dense_value,
+        key_cache,
+        value_cache,
+        block_tables,
+        seq_lens,
+        k_scale,
+        v_scale,
+    ) = _make_inputs(case)
+    query_start_loc = torch.arange(4, dtype=torch.int32, device=DEVICE)
+    output = torch.empty_like(query)
+    scale = 256**-0.5
+
+    paged_decode_ops.chunked_prefill_paged_decode(
+        query=query,
+        key=None,
+        value=None,
+        output=output,
+        kv_cache_dtype="fp8",
+        key_cache=key_cache.view(torch.uint8),
+        value_cache=value_cache.view(torch.uint8),
+        block_table=block_tables,
+        query_start_loc=query_start_loc,
+        seq_lens=seq_lens,
+        max_seq_len=1,
+        max_query_len=1,
+        k_scale=k_scale,
+        v_scale=v_scale,
+    )
+    reference = _torch_reference(
+        query,
+        dense_key,
+        dense_value,
+        block_tables,
+        seq_lens,
+        scale,
+        case.k_scale,
+        case.v_scale,
+    )
+
+    torch.testing.assert_close(output, reference, atol=0.03, rtol=0.03)
+
+
 @pytest.mark.skipif(not on_gfx1x(), reason="BF16 SplitKV decode requires gfx1x")
 @torch.inference_mode()
 def test_chunked_decode_routes_padded_bf16_cache(monkeypatch) -> None:

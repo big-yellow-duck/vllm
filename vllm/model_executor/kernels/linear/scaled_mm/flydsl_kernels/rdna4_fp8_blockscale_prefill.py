@@ -223,16 +223,11 @@ def _create_prefill_module(
         m0 = pid_m * fx.Int32(bm)
         n0 = pid_n * fx.Int32(bn)
 
-        # Select the descriptor's RDNA OOB mode once per workgroup. Complete
-        # tiles use OOB_SELECT=2; only the final partial tile uses checked mode
-        # 3. The K loop itself remains branch free.
-        check_m_bounds = m0 + fx.Int32(bm) > m_extent
         a_buf = _make_buffer(
             arg_a,
             fp8,
             16,
             m_extent * fx.Int32(k),
-            bounds_check=check_m_bounds,
         )
         b_buf = _make_buffer(arg_b, fp8, 16, n * stride_b)
         as_buf = _make_buffer(
@@ -240,7 +235,6 @@ def _create_prefill_module(
             f32,
             1,
             m_extent * fx.Int32(scale_blocks * 4),
-            bounds_check=check_m_bounds,
         )
         bs_ptr = fx.recast_iter(f32, fx.get_iter(arg_bs))
         out_buf = _make_buffer(arg_out, bf16, 8, m_extent * fx.Int32(n * 2))

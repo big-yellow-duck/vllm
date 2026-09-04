@@ -13,7 +13,7 @@ SCALE_K = 128
 WAVE_SIZE = 32
 
 
-def _make_buffer(tensor, elem_ty, width: int, num_records_bytes, *, bounds_check=False):
+def _make_buffer(tensor, elem_ty, width: int, num_records_bytes):
     """Build a flat raw-buffer view addressable by an element offset."""
     alignment = max(1, elem_ty.width * width // 8)
     ptr_ty = fx.PointerType.get(elem_ty.ir_type, fx.AddressSpace.Global, alignment)
@@ -23,7 +23,6 @@ def _make_buffer(tensor, elem_ty, width: int, num_records_bytes, *, bounds_check
         view,
         max_size=False,
         num_records_bytes=num_records_bytes,
-        bounds_check=bounds_check,
     )
 
 
