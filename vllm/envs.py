@@ -133,7 +133,7 @@ if TYPE_CHECKING:
     VLLM_USE_OINK_OPS: bool = False
     VLLM_MXFP8_EMULATION_DEQUANT_AT_LOAD: bool = True
     VLLM_ROCM_USE_AITER: bool = False
-    VLLM_ROCM_USE_RDNA4_TP2_FLYDSL_AR: bool = False
+    VLLM_ROCM_USE_RDNA4_ALL_REDUCE: bool = False
     VLLM_ROCM_USE_AITER_CUSTOM_AR: bool = True
     VLLM_ROCM_USE_AITER_LINEAR: bool = True
     VLLM_ROCM_USE_AITER_LINEAR_HIPBMM: bool = False
@@ -1246,9 +1246,9 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "VLLM_ROCM_USE_AITER": lambda: (
         os.getenv("VLLM_ROCM_USE_AITER", "False").lower() in ("true", "1")
     ),
-    # Enable the optional standalone FlyDSL gfx1201 TP2 BF16 all-reduce backend.
-    "VLLM_ROCM_USE_RDNA4_TP2_FLYDSL_AR": lambda: (
-        os.getenv("VLLM_ROCM_USE_RDNA4_TP2_FLYDSL_AR", "False").lower() in ("true", "1")
+    # Enable vLLM's FlyDSL-based RDNA4 all-reduce for TP2, TP4, and TP8.
+    "VLLM_ROCM_USE_RDNA4_ALL_REDUCE": lambda: (
+        os.getenv("VLLM_ROCM_USE_RDNA4_ALL_REDUCE", "False").lower() in ("true", "1")
     ),
     # Use AITER's CustomAllreduce as the custom-allreduce backend inside vLLM's
     # CudaCommunicator on ROCm.
