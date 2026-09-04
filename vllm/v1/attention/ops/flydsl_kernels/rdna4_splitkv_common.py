@@ -5,7 +5,6 @@
 """Shared constants and helpers for RDNA4 SplitKV kernels."""
 
 import flydsl.expr as fx
-from flydsl._mlir.dialects import rocdl
 from flydsl.expr import const_expr, range_constexpr
 
 HEAD_DIM = 256
@@ -26,12 +25,11 @@ def _dequant_fp8x8(raw, scale, output_type, *, is_fp8fnuz: bool):
     values = []
     for word_index in range_constexpr(2):
         for byte_index in range_constexpr(4):
-            value = rocdl.cvt_f32_fp8(
-                res=fx.Float32.ir_type,
-                src_a=words[word_index].ir_value(),
+            value = fx.rocdl.cvt_f32_fp8(
+                words[word_index],
                 byte_sel=byte_index,
             )
-            values.append(fx.Float32(value) * scale)
+            values.append(value * scale)
     return fx.Vector.from_elements(values, dtype=fx.Float32).to(output_type)
 
 
