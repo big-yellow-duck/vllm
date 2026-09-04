@@ -864,6 +864,9 @@ def _paged_attention_2d_splitkv_decode(
             query_start_len_ptr=query_start_loc,
             USE_SINKS=False,
             USE_FP8=False,
+            num_warps=8 if is_fp8_kv and head_size == 256 else 4,
+            num_stages=1,
+            waves_per_eu=1,
         )
         return output
 
@@ -1240,4 +1243,12 @@ def chunked_prefill_paged_decode(
             query_start_len_ptr=query_start_loc,
             USE_SINKS=sinks is not None,
             USE_FP8=output_scale is not None,
+            num_warps=(
+                8
+                if key_cache.dtype in (torch.float8_e4m3fn, torch.float8_e4m3fnuz)
+                and head_size == 256
+                else 4
+            ),
+            num_stages=1,
+            waves_per_eu=1,
         )

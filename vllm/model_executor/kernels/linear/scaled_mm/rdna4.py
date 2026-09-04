@@ -20,15 +20,6 @@ from .BlockScaledMMLinearKernel import (
 @lru_cache(maxsize=1)
 def _load_rdna4_flydsl_mm():
     """Load the vLLM-owned FlyDSL kernel lazily."""
-    from inspect import signature
-
-    from flydsl.expr import rocdl
-
-    if "bounds_check" not in signature(rocdl.make_buffer_tensor).parameters:
-        raise ImportError(
-            "RDNA4 block-FP8 requires FlyDSL descriptor bounds checking "
-            "from ROCm/FlyDSL#1089"
-        )
     from .flydsl_kernels.rdna4_fp8_blockscale import (
         rdna4_fp8_block_scaled_mm,
     )
