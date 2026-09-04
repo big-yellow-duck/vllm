@@ -1534,7 +1534,8 @@ if(VLLM_GPU_LANG STREQUAL "HIP")
   if(VLLM_RDNA4_ARCHES)
     set(VLLM_RDNA4_FP8_SRC
       "csrc/rocm/rdna4_fp8_block_scaled_mm.cu"
-      "csrc/rocm/rdna4_fp8_block_scaled_mm_prefill.cu")
+      "csrc/rocm/rdna4_fp8_block_scaled_mm_prefill.cu"
+      "csrc/rocm/rdna4_splitkv_paged_attention.cu")
     hipify_sources_target(
       VLLM_RDNA4_FP8_HIP_SRC _rocm_C_rdna4_fp8 "${VLLM_RDNA4_FP8_SRC}")
     unset(_VLLM_LAST_HIPIFY_TARGET)

@@ -163,6 +163,38 @@ def paged_attention_rocm(
     )
 
 
+def rdna4_splitkv_paged_attention(
+    query: torch.Tensor,
+    key_cache: torch.Tensor,
+    value_cache: torch.Tensor,
+    block_tables: torch.Tensor,
+    seq_lens: torch.Tensor,
+    query_start_loc: torch.Tensor,
+    k_scale: torch.Tensor,
+    v_scale: torch.Tensor,
+    output: torch.Tensor,
+    mid_out: torch.Tensor,
+    mid_lse: torch.Tensor,
+    splits: int,
+    token_halves: bool = False,
+) -> None:
+    torch.ops._rocm_C.rdna4_splitkv_paged_attention(
+        query,
+        key_cache,
+        value_cache,
+        block_tables,
+        seq_lens,
+        query_start_loc,
+        k_scale,
+        v_scale,
+        output,
+        mid_out,
+        mid_lse,
+        splits,
+        token_halves,
+    )
+
+
 def mla_decode_kvcache_cpu(
     out: torch.Tensor,
     query: torch.Tensor,

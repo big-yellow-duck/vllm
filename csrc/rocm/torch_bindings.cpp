@@ -63,6 +63,13 @@ TORCH_LIBRARY_EXPAND(TORCH_EXTENSION_NAME, rocm_ops) {
       "Tensor a_scale, Tensor weight_scale) -> Tensor");
   rocm_ops.impl("rdna4_fp8_block_scaled_mm_prefill", torch::kCUDA,
                 &rdna4_fp8_block_scaled_mm_prefill);
+  rocm_ops.def(
+      "rdna4_splitkv_paged_attention(Tensor query, Tensor key_cache, "
+      "Tensor value_cache, Tensor block_tables, Tensor seq_lens, "
+      "Tensor query_start_loc, Tensor k_scale, Tensor v_scale, Tensor! output, "
+      "Tensor! mid_out, Tensor! mid_lse, int splits, bool token_halves) -> ()");
+  rocm_ops.impl("rdna4_splitkv_paged_attention", torch::kCUDA,
+                &rdna4_splitkv_paged_attention);
 #endif
 
 #ifdef VLLM_ROCM_GFX1100
