@@ -18,6 +18,10 @@ from vllm.v1.attention.ops.chunked_prefill_paged_decode import (
     kernel_paged_attention_2d,
     reserve_splitkv_workspace,
 )
+from vllm.v1.attention.ops.rdna4_splitkv import (
+    can_use_rdna4_flydsl_splitkv_paged_attention,
+    can_use_rdna4_hip_splitkv_paged_attention,
+)
 from vllm.v1.worker.workspace import (
     init_workspace_manager,
     lock_workspace,
@@ -389,6 +393,145 @@ def _torch_reference(
     return torch.stack(outputs).to(query.dtype)
 
 
+@pytest.mark.skipif(not on_gfx12x(), reason="FlyDSL SplitKV requires gfx12x")
+@torch.inference_mode()
+def test_rdna4_flydsl_gate_covers_generalized_batch_one() -> None:
+    """The FlyDSL gate covers fallback shapes without widening the HIP gate."""
+    case = SplitKVCase(
+        torch.bfloat16,
+        torch.float8_e4m3fn,
+        7,
+        1,
+        256,
+        1056,
+        (1057,),
+        4,
+        0.73,
+        1.27,
+    )
+    (
+        query,
+        _,
+        _,
+        key_cache,
+        value_cache,
+        block_tables,
+        seq_lens,
+        k_scale,
+        v_scale,
+    ) = _make_inputs(case)
+    query_start_loc = torch.tensor([0, 1], dtype=torch.int32, device=DEVICE)
+    output = torch.empty_like(query)
+    gate_args = dict(
+        query=query,
+        key_cache=key_cache,
+        value_cache=value_cache,
+        output=output,
+        block_tables=block_tables,
+        seq_lens=seq_lens,
+        query_start_loc=query_start_loc,
+        k_scale=k_scale,
+        v_scale=v_scale,
+        scale=0.071,
+        actual_max_splits=4,
+        max_seq_len=1057,
+        filter_by_query_len=True,
+    )
+
+    assert can_use_rdna4_flydsl_splitkv_paged_attention(**gate_args)
+    assert not can_use_rdna4_hip_splitkv_paged_attention(
+        **{key: value for key, value in gate_args.items() if key != "max_seq_len"}
+    )
+    assert not can_use_rdna4_flydsl_splitkv_paged_attention(
+        **(gate_args | {"seq_lens": seq_lens.repeat(2)})
+    )
+    assert not can_use_rdna4_flydsl_splitkv_paged_attention(
+        **(gate_args | {"query": query[:, :5], "output": output[:, :5]})
+    )
+
+
+@pytest.mark.skipif(not on_gfx12x(), reason="FlyDSL SplitKV requires gfx12x")
+@torch.inference_mode()
+def test_rdna4_flydsl_qwen38_tp2_grouped_matches_triton(monkeypatch) -> None:
+    """Exercise the vendored D256/GQA6 path used by Qwen3.8 TP2."""
+    from vllm.v1.attention.ops import rdna4_splitkv as rdna4_ops
+    from vllm.v1.attention.ops.flydsl_kernels.rdna4_splitkv import (
+        SplitKVRoute,
+        select_kernel_config,
+    )
+
+    set_random_seed(0)
+    case = SplitKVCase(
+        torch.bfloat16,
+        torch.float8_e4m3fn,
+        12,
+        2,
+        256,
+        1568,
+        (4014,),
+        4,
+        0.73,
+        1.27,
+        padded_stride=True,
+    )
+    (
+        query,
+        _,
+        _,
+        key_cache,
+        value_cache,
+        block_tables,
+        seq_lens,
+        k_scale,
+        v_scale,
+    ) = _make_inputs(case)
+    query_start_loc = torch.tensor([0, 1], dtype=torch.int32, device=DEVICE)
+    output = torch.empty_like(query)
+    mid_out = torch.empty((1, 12, case.splits, 256), dtype=torch.float32, device=DEVICE)
+    mid_lse = torch.empty((1, 12, case.splits), dtype=torch.float32, device=DEVICE)
+    scale = case.head_size**-0.5
+
+    config = select_kernel_config(query, key_cache, seq_lens, 4014)
+    assert config is not None
+    assert config.route == SplitKVRoute.FP8_D256_GQA6_7_GROUPED
+    monkeypatch.setattr(rdna4_ops.envs, "VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL", True)
+    monkeypatch.setattr(
+        rdna4_ops.ops,
+        "rdna4_splitkv_paged_attention",
+        lambda *args, **kwargs: pytest.fail("FlyDSL opt-in selected the HIP route"),
+    )
+    _paged_attention_2d_splitkv_decode(
+        query,
+        key_cache,
+        value_cache,
+        block_tables,
+        seq_lens,
+        scale,
+        k_scale,
+        v_scale,
+        output=output,
+        actual_max_splits=case.splits,
+        mid_out=mid_out,
+        mid_lse=mid_lse,
+        query_start_loc=query_start_loc,
+        filter_by_query_len=True,
+    )
+    reference = _run_non_split(
+        query,
+        key_cache,
+        value_cache,
+        block_tables,
+        seq_lens,
+        scale,
+        k_scale,
+        v_scale,
+        query_start_loc=query_start_loc,
+        filter_by_query_len=True,
+    )
+
+    torch.testing.assert_close(output, reference, atol=0.01, rtol=0.01)
+
+
 @pytest.mark.skipif(not on_gfx1x(), reason="SplitKV decode requires gfx1x")
 @pytest.mark.skipif(
     not torch.accelerator.is_available(), reason="SplitKV decode requires a GPU"
@@ -479,7 +622,7 @@ def test_fp8_splitkv_preserves_non_decode_rows(
         256,
         1568,
         seq_lens,
-        14,
+        16,
         0.73,
         1.27,
     )
@@ -514,7 +657,7 @@ def test_fp8_splitkv_preserves_non_decode_rows(
         k_scale,
         v_scale,
         output=output,
-        actual_max_splits=14,
+        actual_max_splits=16,
         max_seq_len=max(seq_lens),
         query_start_loc=query_start_loc,
         filter_by_query_len=True,
@@ -554,6 +697,8 @@ def test_fp8_splitkv_preserves_non_decode_rows(
 def test_chunked_decode_routes_padded_fp8_cache_and_forwards_scales(
     monkeypatch,
 ) -> None:
+    from vllm.v1.attention.ops import rdna4_splitkv as rdna4_ops
+
     set_random_seed(0)
     case = SplitKVCase(
         torch.bfloat16,
@@ -595,6 +740,7 @@ def test_chunked_decode_routes_padded_fp8_cache_and_forwards_scales(
     value_storage = value_cache.view(torch.uint8)
     original = paged_decode_ops._paged_attention_2d_splitkv_decode
     forwarded = {}
+    flydsl_routed = []
 
     def route_spy(*args, **kwargs):
         forwarded["k_scale"] = kwargs["k_scale"]
@@ -602,8 +748,19 @@ def test_chunked_decode_routes_padded_fp8_cache_and_forwards_scales(
         forwarded["cache_dtype"] = kwargs["key_cache"].dtype
         return original(*args, **kwargs)
 
+    def flydsl_spy(*args, **kwargs):
+        flydsl_routed.append(True)
+        args[8].copy_(expected)
+
     monkeypatch.setattr(
         paged_decode_ops, "_paged_attention_2d_splitkv_decode", route_spy
+    )
+    monkeypatch.setattr(rdna4_ops.envs, "VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL", True)
+    select_kernel_config, _ = rdna4_ops._load_flydsl_splitkv()
+    monkeypatch.setattr(
+        rdna4_ops,
+        "_load_flydsl_splitkv",
+        lambda: (select_kernel_config, flydsl_spy),
     )
     paged_decode_ops.chunked_prefill_paged_decode(
         query=query,
@@ -627,6 +784,7 @@ def test_chunked_decode_routes_padded_fp8_cache_and_forwards_scales(
         "v_scale": v_scale,
         "cache_dtype": current_platform.fp8_dtype(),
     }
+    assert flydsl_routed == [True]
     torch.testing.assert_close(output, expected, atol=0.01, rtol=0.01)
 
 
@@ -696,6 +854,8 @@ def test_chunked_decode_tp8_gqa3_one_split() -> None:
 @pytest.mark.skipif(not on_gfx1x(), reason="BF16 SplitKV decode requires gfx1x")
 @torch.inference_mode()
 def test_chunked_decode_routes_padded_bf16_cache(monkeypatch) -> None:
+    from vllm.v1.attention.ops import rdna4_splitkv as rdna4_ops
+
     set_random_seed(0)
     case = SplitKVCase(
         torch.bfloat16,
@@ -733,6 +893,7 @@ def test_chunked_decode_routes_padded_bf16_cache(monkeypatch) -> None:
     )
     original = paged_decode_ops._paged_attention_2d_splitkv_decode
     routed = []
+    flydsl_routed = []
 
     def route_spy(*args, **kwargs):
         routed.append(True)
@@ -740,6 +901,16 @@ def test_chunked_decode_routes_padded_bf16_cache(monkeypatch) -> None:
 
     monkeypatch.setattr(
         paged_decode_ops, "_paged_attention_2d_splitkv_decode", route_spy
+    )
+    monkeypatch.setattr(rdna4_ops.envs, "VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL", True)
+    select_kernel_config, _ = rdna4_ops._load_flydsl_splitkv()
+    monkeypatch.setattr(
+        rdna4_ops,
+        "_load_flydsl_splitkv",
+        lambda: (
+            select_kernel_config,
+            lambda *args, **kwargs: flydsl_routed.append(True),
+        ),
     )
     paged_decode_ops.chunked_prefill_paged_decode(
         query=query,
@@ -759,6 +930,7 @@ def test_chunked_decode_routes_padded_bf16_cache(monkeypatch) -> None:
     )
 
     assert routed == [True]
+    assert flydsl_routed == []
     torch.testing.assert_close(output, expected, atol=0.01, rtol=0.01)
 
 
@@ -858,6 +1030,7 @@ def test_fp8_splitkv_locked_workspace_cudagraph_replays_dynamic_sequence() -> No
         v_scale,
     ) = _make_inputs(case)
     output = torch.empty_like(query)
+    query_start_loc = torch.tensor([0, 1], dtype=torch.int32, device=DEVICE)
 
     reset_workspace_manager()
     init_workspace_manager(query.device)
@@ -886,6 +1059,8 @@ def test_fp8_splitkv_locked_workspace_cudagraph_replays_dynamic_sequence() -> No
             output=output,
             actual_max_splits=16,
             max_seq_len=8192,
+            query_start_loc=query_start_loc,
+            filter_by_query_len=True,
         )
 
     graph = None

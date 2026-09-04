@@ -32,6 +32,14 @@ torch::Tensor rdna4_fp8_block_scaled_mm_prefill(
     const torch::Tensor& a, const torch::Tensor& weight,
     const torch::Tensor& a_scale, const torch::Tensor& weight_scale);
 
+void rdna4_splitkv_paged_attention(
+    const torch::Tensor& query, const torch::Tensor& key_cache,
+    const torch::Tensor& value_cache, const torch::Tensor& block_tables,
+    const torch::Tensor& seq_lens, const torch::Tensor& query_start_loc,
+    const torch::Tensor& k_scale, const torch::Tensor& v_scale,
+    torch::Tensor& output, torch::Tensor& mid_out, torch::Tensor& mid_lse,
+    int64_t splits, bool token_halves);
+
 torch::Tensor gptq_gemm_rdna3(torch::Tensor a, torch::Tensor b_q_weight,
                               torch::Tensor b_qzeros, torch::Tensor b_scales,
                               torch::Tensor b_g_idx, bool use_v2_format);

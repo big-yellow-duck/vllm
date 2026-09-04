@@ -893,6 +893,27 @@ def _paged_attention_2d_splitkv_decode(
     if mid_out.shape[2] < actual_max_splits or mid_lse.shape[2] < actual_max_splits:
         raise ValueError("SplitKV scratch capacity is smaller than the split count.")
 
+    from .rdna4_splitkv import try_rdna4_splitkv_paged_attention
+
+    if try_rdna4_splitkv_paged_attention(
+        query=query,
+        key_cache=key_cache,
+        value_cache=value_cache,
+        output=output,
+        block_tables=block_tables,
+        seq_lens=seq_lens,
+        query_start_loc=query_start_loc,
+        k_scale=k_scale,
+        v_scale=v_scale,
+        scale=scale,
+        actual_max_splits=actual_max_splits,
+        max_seq_len=max_seq_len,
+        mid_out=mid_out,
+        mid_lse=mid_lse,
+        filter_by_query_len=filter_by_query_len,
+    ):
+        return output
+
     kernel_paged_attention_2d_splitkv[
         (
             batch_size,
