@@ -2,8 +2,6 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 
-from typing import Any
-
 import torch
 from torch.distributed import ProcessGroup
 
@@ -93,6 +91,9 @@ class CudaCommunicator(DeviceCommunicatorBase):
         from vllm.distributed.device_communicators.quick_all_reduce import (
             QuickAllReduce,
         )
+        from vllm.distributed.device_communicators.rdna4_all_reduce import (
+            RDNA4AllReduce,
+        )
         from vllm.distributed.device_communicators.symm_mem import SymmMemCommunicator
 
         self.pynccl_comm: PyNcclCommunicator | None = None
@@ -110,31 +111,26 @@ class CudaCommunicator(DeviceCommunicatorBase):
         self.fi_ar_comm: FlashInferAllReduce | None = None
         self.fi_pcie_ipc_ar_comm: FlashInferPcieIpcAllReduce | None = None
         self.aiter_ar_comm: AiterCustomAllreduce | None = None
-        self.rdna4_tp2_ar_comm: Any | None = None
+        self.rdna4_ar_comm: RDNA4AllReduce | None = None
 
         if (
             "tp" in unique_name
-            and self.world_size == 2
+            and self.world_size in (2, 4, 8)
             and current_platform.is_rocm()
-            and envs.VLLM_ROCM_USE_RDNA4_TP2_FLYDSL_AR
+            and envs.VLLM_ROCM_USE_RDNA4_ALL_REDUCE
         ):
             try:
-                from rdna4_tp2 import RDNA4TP2FlyDSLAllReduce
-
-                self.rdna4_tp2_ar_comm = RDNA4TP2FlyDSLAllReduce(
+                self.rdna4_ar_comm = RDNA4AllReduce(
                     group=self.cpu_group,
                     device=self.device,
                 )
-                if self.rdna4_tp2_ar_comm.disabled:
-                    self.rdna4_tp2_ar_comm = None
+                if self.rdna4_ar_comm.disabled:
+                    self.rdna4_ar_comm = None
             except Exception:
-                # The standalone backend is an optional optimization. Keep
-                # startup safe and preserve PyNCCL when its package, transport,
-                # or runtime validation is unavailable.
                 logger.exception(
-                    "RDNA4 TP2 FlyDSL all-reduce initialization failed; using fallback"
+                    "RDNA4 all-reduce initialization failed; using fallback"
                 )
-                self.rdna4_tp2_ar_comm = None
+                self.rdna4_ar_comm = None
 
         if use_torch_symm_mem and current_platform.is_cuda():
             self.symm_mem_comm = SymmMemCommunicator(
@@ -159,7 +155,11 @@ class CudaCommunicator(DeviceCommunicatorBase):
                 device=self.device,
             )
 
-        if self.use_aiter_allreduce and self.world_size > 1:
+        if (
+            self.use_aiter_allreduce
+            and self.world_size > 1
+            and self.rdna4_ar_comm is None
+        ):
             self.aiter_ar_comm = AiterCustomAllreduce(
                 group=self.cpu_group,
                 device=self.device,
@@ -168,7 +168,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
         if (
             use_custom_allreduce
             and self.aiter_ar_comm is None
-            and self.rdna4_tp2_ar_comm is None
+            and self.rdna4_ar_comm is None
             and self.world_size > 1
         ):
             # Initialize a custom fast all-reduce implementation.
@@ -182,7 +182,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
 
         if (
             use_custom_allreduce
-            and self.rdna4_tp2_ar_comm is None
+            and self.rdna4_ar_comm is None
             and self.world_size > 1
             and current_platform.is_rocm()
         ):
@@ -278,6 +278,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
         depends on the input tensor.
         """
         all_potential_ar_backends = [
+            "RDNA4",
             "FLASHINFER_PCIE_IPC",
             "FLASHINFER",
             "NCCL_SYMM_MEM",
@@ -285,10 +286,11 @@ class CudaCommunicator(DeviceCommunicatorBase):
             "AITER_CUSTOM",
             "CUSTOM",
             "SYMM_MEM",
-            "RDNA4_TP2_FLYDSL",
             "PYNCCL",
         ]
         enabled_ar_backends: list[str] = []
+        if self.rdna4_ar_comm is not None:
+            enabled_ar_backends.append("RDNA4")
         if (
             self.fi_pcie_ipc_ar_comm is not None
             and not self.fi_pcie_ipc_ar_comm.disabled
@@ -328,8 +330,6 @@ class CudaCommunicator(DeviceCommunicatorBase):
             enabled_ar_backends.append("CUSTOM")
         if self.symm_mem_comm is not None and not self.symm_mem_comm.disabled:
             enabled_ar_backends.append("SYMM_MEM")
-        if self.rdna4_tp2_ar_comm is not None:
-            enabled_ar_backends.append("RDNA4_TP2_FLYDSL")
         if self.pynccl_comm is not None and not self.pynccl_comm.disabled:
             enabled_ar_backends.append("PYNCCL")
 
@@ -343,6 +343,12 @@ class CudaCommunicator(DeviceCommunicatorBase):
         )
 
     def all_reduce(self, input_):
+        rdna4_ar_comm = self.rdna4_ar_comm
+        if rdna4_ar_comm is not None and rdna4_ar_comm.should_use(input_):
+            out = rdna4_ar_comm.all_reduce(input_)
+            assert out is not None
+            return out
+
         fi_ar_comm = self.fi_ar_comm
         use_fi_ar = (
             fi_ar_comm is not None
@@ -398,11 +404,6 @@ class CudaCommunicator(DeviceCommunicatorBase):
         symm_mem_comm = self.symm_mem_comm
         if symm_mem_comm is not None and symm_mem_comm.should_use_symm_mem(input_):
             out = symm_mem_comm.all_reduce(input_)
-            assert out is not None
-            return out
-        rdna4_tp2_ar_comm = self.rdna4_tp2_ar_comm
-        if rdna4_tp2_ar_comm is not None and rdna4_tp2_ar_comm.should_use(input_):
-            out = rdna4_tp2_ar_comm.all_reduce(input_)
             assert out is not None
             return out
         pynccl_comm = self.pynccl_comm
@@ -666,6 +667,9 @@ class CudaCommunicator(DeviceCommunicatorBase):
         if self.aiter_ar_comm is not None:
             self.aiter_ar_comm.close()
             self.aiter_ar_comm = None
+        if self.rdna4_ar_comm is not None:
+            self.rdna4_ar_comm.close()
+            self.rdna4_ar_comm = None
         if self.fi_ar_comm is not None:
             self.fi_ar_comm.destroy()
             self.fi_ar_comm = None
