@@ -890,8 +890,25 @@ def _paged_attention_2d_splitkv_decode(
                 scratch_shapes[1], device=query.device, dtype=torch.float32
             )
     assert mid_out is not None and mid_lse is not None
-    if mid_out.shape[2] < actual_max_splits or mid_lse.shape[2] < actual_max_splits:
-        raise ValueError("SplitKV scratch capacity is smaller than the split count.")
+    if (
+        mid_out.ndim != 4
+        or mid_lse.ndim != 3
+        or mid_out.dtype != torch.float32
+        or mid_lse.dtype != torch.float32
+        or mid_out.device != query.device
+        or mid_lse.device != query.device
+        or mid_out.shape[0] < batch_size
+        or mid_lse.shape[0] < batch_size
+        or mid_out.shape[1] < num_query_heads
+        or mid_lse.shape[1] < num_query_heads
+        or mid_out.shape[2] < actual_max_splits
+        or mid_lse.shape[2] < actual_max_splits
+        or mid_out.shape[3] < head_size
+        or mid_out.stride(3) != 1
+    ):
+        raise ValueError(
+            "SplitKV scratch tensors have incompatible shape, dtype, device, or layout."
+        )
 
     from .rdna4_splitkv import try_rdna4_splitkv_paged_attention
 

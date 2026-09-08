@@ -14,7 +14,6 @@ import torch
 from flydsl.expr import gpu, range_constexpr
 from flydsl.expr import math as fmath
 
-from .rdna4_splitkv_grouped import compile_grouped_stage
 from .runtime import run_compiled as _run_compiled
 
 WAVE_SIZE = 32
@@ -71,10 +70,10 @@ def compile_local_reduce(
         ml_stride1: fx.Int32,
         ml_stride2: fx.Int32,
     ):
-        tid = fx.Int32(gpu.thread_id("x"))
+        tid = fx.Int32(gpu.thread_idx.x)
         wave = tid // WAVE_SIZE
         lane = tid % WAVE_SIZE
-        logical_row = fx.Int32(gpu.block_id("x")) * waves_per_block + wave
+        logical_row = fx.Int32(gpu.block_idx.x) * waves_per_block + wave
         total_rows = batch * num_query_heads
         row_valid = logical_row < total_rows
         safe_row = row_valid.select(logical_row, fx.Int32(0))
@@ -94,6 +93,7 @@ def compile_local_reduce(
             * split_block_size
         )
         query_row = fx.Int32(query_start_loc[seq])
+        is_decode = fx.Int32(query_start_loc[seq + 1]) - query_row == 1
 
         neg_inf = fx.Float32(float("-inf"))
         zero = fx.Float32(0.0)
@@ -108,7 +108,7 @@ def compile_local_reduce(
         # away without reading their uninitialized scratch rows. A runtime
         # loop reuses the small live accumulator set; the fixed upper bound
         # remains baked into each split-count specialization.
-        for split, state in range(
+        for split, state in range(  # type: ignore[call-overload]
             fx.Int32(0), fx.Int32(splits), fx.Int32(1), init=init_state
         ):
             running_max = fx.Float32(state[0])
@@ -149,7 +149,7 @@ def compile_local_reduce(
         inv_sum = one / (running_sum + 1.0e-10)
         for element in range_constexpr(values_per_lane):
             d = lane + element * WAVE_SIZE
-            if row_valid:
+            if row_valid & is_decode:
                 output[out_base + d] = (accum[element] * inv_sum).to(out_type)
 
     @flyc.jit
@@ -238,77 +238,3 @@ def _launch_reduce(
         *map(int, mid_lse.stride()),
         stream,
     )
-
-
-def run_grouped_stage_local_reduce(
-    query: torch.Tensor,
-    key_cache: torch.Tensor,
-    value_cache: torch.Tensor,
-    block_tables: torch.Tensor,
-    seq_lens: torch.Tensor,
-    query_start_loc: torch.Tensor,
-    k_scale: torch.Tensor,
-    v_scale: torch.Tensor,
-    output: torch.Tensor,
-    mid_out: torch.Tensor,
-    mid_lse: torch.Tensor,
-    splits: int,
-    scale: float,
-) -> torch.Tensor:
-    """Launch the unchanged upstream grouped WMMA stage and local reducer."""
-
-    if k_scale.ndim == 0:
-        k_scale = k_scale.reshape(1)
-    if v_scale.ndim == 0:
-        v_scale = v_scale.reshape(1)
-    batch = int(seq_lens.numel())
-    num_query_heads = int(query.shape[1])
-    num_kv_heads = int(key_cache.shape[1])
-    gqa = num_query_heads // num_kv_heads
-    page_size = int(key_cache.shape[3])
-    grouped_stage = compile_grouped_stage(
-        kv_dtype="fp8" if key_cache.dtype == torch.float8_e4m3fn else "bf16",
-        splits=int(splits),
-        num_kv_heads=num_kv_heads,
-        query_group_size=gqa,
-        page_size=page_size,
-        softmax_scale=float(scale),
-    )
-    stream = torch.cuda.current_stream(query.device)
-    _run_compiled(
-        grouped_stage,
-        query,
-        key_cache,
-        value_cache,
-        block_tables,
-        seq_lens,
-        query_start_loc,
-        k_scale,
-        v_scale,
-        mid_out,
-        mid_lse,
-        batch,
-        int(block_tables.stride(0)),
-        int(query.stride(0)),
-        int(query.stride(1)),
-        *map(int, key_cache.stride()),
-        *map(int, value_cache.stride()),
-        *map(int, mid_out.stride()[:3]),
-        *map(int, mid_lse.stride()),
-        stream,
-    )
-    _launch_reduce(
-        query,
-        seq_lens,
-        query_start_loc,
-        output,
-        mid_out,
-        mid_lse,
-        splits,
-        64,
-        stream,
-    )
-    return output
-
-
-__all__ = ["run_grouped_stage_local_reduce"]

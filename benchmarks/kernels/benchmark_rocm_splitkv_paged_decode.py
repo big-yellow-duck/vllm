@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Benchmark the ROCm Triton SplitKV decode fallback.
+"""Benchmark ROCm paged-decode backends, including opt-in FlyDSL SplitKV.
 
 The standard page-16/page-32 rows are direct Triton diagnostics. Production
 dispatch still gives the native ROCm paged-attention kernel first refusal.
@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 import torch
 
+from vllm import envs
 from vllm.platforms import current_platform
 from vllm.triton_utils import triton
 from vllm.v1.attention.ops.chunked_prefill_paged_decode import (
@@ -22,6 +23,7 @@ from vllm.v1.attention.ops.chunked_prefill_paged_decode import (
     _paged_attention_2d_splitkv_decode,
     kernel_paged_attention_2d,
 )
+from vllm.v1.attention.ops.rdna4_splitkv import get_rdna4_flydsl_splitkv_config
 
 
 @dataclass(frozen=True)
@@ -95,6 +97,16 @@ def _cases() -> tuple[list[Case], list[Case]]:
             528,
             (8192, 4097, 2049, 513),
             True,
+        ),
+        Case(
+            "fp8-gqa1-d128-direct",
+            torch.bfloat16,
+            fp8,
+            2,
+            2,
+            128,
+            544,
+            (1024,),
         ),
         Case(
             "fp8-gqa6-d256-padded",
@@ -344,6 +356,27 @@ def benchmark_case(case: Case, warmup: int, rep: int, graph: bool) -> None:
         dtype=torch.float32,
         device=query.device,
     )
+    query_start_loc = torch.arange(
+        len(case.seq_lens) + 1, dtype=torch.int32, device=query.device
+    )
+    flydsl_config = None
+    if envs.VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL:
+        flydsl_config = get_rdna4_flydsl_splitkv_config(
+            query=query,
+            key_cache=key,
+            value_cache=value,
+            output=split_output,
+            block_tables=tables,
+            seq_lens=lens,
+            query_start_loc=query_start_loc,
+            k_scale=k_scale,
+            v_scale=v_scale,
+            scale=case.head_size**-0.5,
+            actual_max_splits=splits,
+            max_seq_len=max_seq_len,
+            filter_by_query_len=True,
+        )
+    backend = flydsl_config.route.value if flydsl_config is not None else "fallback"
 
     def baseline() -> None:
         _run_non_split(
@@ -372,6 +405,8 @@ def benchmark_case(case: Case, warmup: int, rep: int, graph: bool) -> None:
             max_seq_len=max_seq_len,
             mid_out=mid_out,
             mid_lse=mid_lse,
+            query_start_loc=query_start_loc,
+            filter_by_query_len=True,
         )
 
     baseline()
@@ -388,7 +423,7 @@ def benchmark_case(case: Case, warmup: int, rep: int, graph: bool) -> None:
     )
     scratch_bytes = mid_out.nbytes + mid_lse.nbytes
     print(
-        f"| {case.name} | {splits} | {scratch_bytes / 2**20:.2f} | "
+        f"| {case.name} | {backend} | {splits} | {scratch_bytes / 2**20:.2f} | "
         f"{baseline_ms * 1000:.2f} | {splitkv_ms * 1000:.2f} | "
         f"{baseline_ms / splitkv_ms:.2f}x |"
     )
@@ -400,17 +435,28 @@ def main() -> None:
     parser.add_argument("--warmup", type=int, default=25, help="Warmup time in ms")
     parser.add_argument("--rep", type=int, default=100, help="Measurement time in ms")
     parser.add_argument("--graph", action="store_true")
+    parser.add_argument("--flydsl", action="store_true", help="Enable FlyDSL routing")
+    parser.add_argument("--case", help="Run one exact case name")
     args = parser.parse_args()
     if not current_platform.is_rocm():
         raise RuntimeError("This benchmark requires ROCm.")
+    if args.flydsl:
+        envs.VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL = True
 
     general, qwen = _cases()
     cases = general if args.suite == "general" else qwen
     if args.suite == "all":
         cases = general + qwen
-    print(f"GPU: {torch.cuda.get_device_name()} | graph={args.graph}")
-    print("| case | splits | scratch MiB | 2D us | SplitKV us | speedup |")
-    print("|---|---:|---:|---:|---:|---:|")
+    if args.case:
+        cases = [case for case in cases if case.name == args.case]
+        if not cases:
+            parser.error(f"unknown case for the selected suite: {args.case}")
+    print(
+        f"GPU: {torch.cuda.get_device_name()} | graph={args.graph} | "
+        f"flydsl={args.flydsl}"
+    )
+    print("| case | backend | splits | scratch MiB | 2D us | SplitKV us | speedup |")
+    print("|---|---|---:|---:|---:|---:|---:|")
     for case in cases:
         benchmark_case(case, args.warmup, args.rep, args.graph)
 

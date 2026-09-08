@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 from functools import lru_cache
+from inspect import signature
 from typing import Any
 
 import torch
@@ -22,7 +23,11 @@ logger = init_logger(__name__)
 def _load_flydsl_splitkv() -> tuple[Any, Any]:
     """Load the in-tree kernels without making FlyDSL a vLLM dependency."""
     import flydsl.compiler  # noqa: F401
-    import flydsl.expr  # noqa: F401
+    import flydsl.expr as fx
+
+    scalar_fp8_params = tuple(signature(fx.rocdl.cvt_f32_fp8).parameters)
+    if scalar_fp8_params[:2] != ("src", "byte_sel"):
+        raise RuntimeError("FlyDSL lacks the scalar FP8 conversion API")
 
     from .flydsl_kernels.rdna4_splitkv import (
         rdna4_splitkv_paged_attention,
@@ -121,6 +126,11 @@ def get_rdna4_flydsl_splitkv_config(
         or query.ndim != 3
         or key_cache.ndim != 5
         or value_cache.ndim != 4
+        or block_tables.ndim != 2
+        or seq_lens.ndim != 1
+        or query_start_loc is None
+        or query_start_loc.ndim != 1
+        or not query.is_cuda
     ):
         return None
     num_query_heads = query.shape[1]
@@ -142,6 +152,7 @@ def get_rdna4_flydsl_splitkv_config(
         and key_cache.dtype in supported_dtypes
         and head_size in (128, 256)
         and output.shape == query.shape
+        and query.shape[0] >= seq_lens.numel()
         and num_kv_heads > 0
         and num_query_heads % num_kv_heads == 0
         and page_size >= 8
@@ -149,20 +160,37 @@ def get_rdna4_flydsl_splitkv_config(
         and key_cache.shape[2:] == (cache_groups, page_size, cache_pack)
         and value_cache.shape
         == (key_cache.shape[0], num_kv_heads, head_size, page_size)
+        and block_tables.shape[0] == seq_lens.numel()
+        and block_tables.shape[1] * page_size >= max_seq_len
+        and query_start_loc.numel() == seq_lens.numel() + 1
+        and query.stride(2) == 1
+        and output.stride(2) == 1
         and key_cache.stride(4) == 1
         and value_cache.stride(3) == 1
+        and block_tables.stride(1) == 1
+        and seq_lens.stride(0) == 1
+        and query_start_loc.stride(0) == 1
+        and query.device
+        == output.device
+        == key_cache.device
+        == value_cache.device
+        == block_tables.device
+        == seq_lens.device
+        == query_start_loc.device
         and block_tables.dtype == torch.int32
         and seq_lens.dtype == torch.int32
-        and query_start_loc is not None
         and query_start_loc.dtype == torch.int32
         and filter_by_query_len
         and isinstance(k_scale, torch.Tensor)
         and isinstance(v_scale, torch.Tensor)
         and k_scale.dtype == torch.float32
         and v_scale.dtype == torch.float32
+        and k_scale.device == query.device
+        and v_scale.device == query.device
         and k_scale.numel() == 1
         and v_scale.numel() == 1
         and math.isfinite(scale)
+        and max_seq_len > 0
         and actual_max_splits in (2, 4, 8, 16)
     )
     if not valid:
