@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-"""Mapped-host transport for low-latency RDNA4 all-reduce."""
+"""Mapped-host transport for low-latency TP4/TP8 RDNA4 all-reduce."""
 
 import ctypes
 import mmap
@@ -16,9 +16,9 @@ import torch
 import torch.distributed as dist
 from flydsl.expr.typing import Int32, Int64
 
-from .flydsl_kernels.rdna4_all_reduce_host import (
-    make_host_allreduce_launcher,
-    make_host_rsag_launcher,
+from .flydsl_kernels.rdna4_all_reduce_mapped import (
+    make_mapped_full_launcher,
+    make_mapped_rsag_launcher,
 )
 
 _CONTROL_BYTES = 4096
@@ -32,7 +32,7 @@ def _align_up(value: int, alignment: int = _ALIGNMENT) -> int:
     return (value + alignment - 1) // alignment * alignment
 
 
-class RDNA4HostAllReduce:
+class RDNA4MappedAllReduce:
     """BF16 all-reduce over a shared HIP-mapped host allocation."""
 
     def __init__(
@@ -78,7 +78,7 @@ class RDNA4HostAllReduce:
         self._slot_bytes = _align_up(max_size)
         self._mapping_bytes = _CONTROL_BYTES + self.world_size * 2 * self._slot_bytes
         self._initialize_shared_mapping()
-        self._full_launcher = make_host_allreduce_launcher(
+        self._full_launcher = make_mapped_full_launcher(
             world_size=self.world_size,
             threads=threads,
         )
@@ -90,7 +90,7 @@ class RDNA4HostAllReduce:
             shared_dir = Path("/dev/shm")
             if not shared_dir.is_dir():
                 shared_dir = Path(tempfile.gettempdir())
-            name = f"vllm_rdna4_host_ar_{uuid.uuid4().hex}.shm"
+            name = f"vllm_rdna4_mapped_ar_{uuid.uuid4().hex}.shm"
             rank_paths[0] = str(shared_dir / name)
         group_ranks = dist.get_process_group_ranks(self.group)
         dist.broadcast_object_list(rank_paths, src=group_ranks[0], group=self.group)
@@ -194,7 +194,7 @@ class RDNA4HostAllReduce:
                 (pack_count + self.pipeline_blocks - 1) // self.pipeline_blocks,
                 self.threads,
             )
-            launcher = make_host_rsag_launcher(
+            launcher = make_mapped_rsag_launcher(
                 world_size=self.world_size,
                 blocks=self.pipeline_blocks,
                 threads=self.threads,
@@ -225,4 +225,4 @@ class RDNA4HostAllReduce:
             self.close()
 
 
-__all__ = ["RDNA4HostAllReduce"]
+__all__ = ["RDNA4MappedAllReduce"]

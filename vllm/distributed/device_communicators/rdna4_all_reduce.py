@@ -1,17 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-"""RDNA4 custom all-reduce communicator implemented with FlyDSL kernels."""
+"""Public RDNA4 all-reduce communicator and measured transport router.
+
+The communicator owns HIP resource setup and selects between mapped-memory and
+direct-P2P transports. GPU implementations stay in ``flydsl_kernels``: the
+``tp2`` module owns the two-rank family, while ``mapped`` and ``p2p`` own the
+TP4/TP8 transport families.
+"""
 
 import importlib
 import os
 from contextlib import contextmanager, suppress
+from enum import Enum
 
 import torch
 import torch.distributed as dist
 from torch.distributed import ProcessGroup
 
-from vllm.distributed.device_communicators.flydsl_kernels.common import MAX_BLOCKS
 from vllm.distributed.parallel_state import in_the_same_node_as
 from vllm.distributed.utils import is_weak_contiguous
 from vllm.logger import init_logger
@@ -19,16 +25,38 @@ from vllm.platforms import current_platform
 
 logger = init_logger(__name__)
 
-DEFAULT_MAX_SIZE = 8 * 1024 * 1024
+DEFAULT_MAX_SIZE = 128 * 1024 * 1024
 HIP_IPC_MIN_ALLOC_SIZE = 64 * 1024
-TP2_BF16_MAX_SIZE = 64 * 1024
-HOST_ALL_REDUCE_MAX_SIZE = {4: 192 * 1024, 8: 384 * 1024}
-P2P_GRAPH_MIN_SIZE = {4: 1024 * 1024, 8: 384 * 1024 + 16}
-TP4_P2P_FOUR_BLOCK_MIN_SIZE = 32 * 1024 * 1024
+TP2_MAPPED_BF16_MAX_SIZE = 64 * 1024
+MAPPED_ALL_REDUCE_MAX_SIZE = {4: 192 * 1024 + 16, 8: 384 * 1024}
+P2P_GRAPH_MIN_SIZE = {
+    2: 64 * 1024 + 16,
+    4: 1024 * 1024,
+    8: 384 * 1024 + 16,
+}
+TP2_P2P_GRAPH_MAX_SIZE = 128 * 1024 * 1024
+TP2_P2P_SMALL_MAX_SIZE = 1024 * 1024
+TP2_P2P_EAGER_MIN_SIZE = 1024 * 1024
+TP4_EAGER_PYNCCL_SIZES = frozenset({32 * 1024})
+TP4_P2P_PULL_GRAPH_RANGE = (1024 * 1024, 128 * 1024 * 1024)
+TP4_P2P_TWO_SHOT_MIN_SIZE = 1024 * 1024
+TP4_P2P_TWO_SHOT_LARGE_CHUNK_SIZE = 16 * 1024 * 1024
+TP4_P2P_TWO_SHOT_SMALL_CHUNK_SIZE = 64 * 1024 * 1024
+TP4_P2P_FOUR_BLOCK_MIN_SIZE = 1024 * 1024
 TP4_P2P_TWO_BLOCK_MIN_SIZE = 48 * 1024 * 1024
+TP4_P2P_PULL_FULL_WGP_MIN_SIZE = 32 * 1024 * 1024 - 64
 TP8_P2P_REDUCED_LOCAL_COPY_THREADS_MIN_SIZE = 34 * 1024 * 1024
 TP8_PYNCCL_GRAPH_RANGE = (960 * 1024, 1408 * 1024)
 MAX_GRAPH_ALL_REDUCE_CALLS = 65536
+_MAX_P2P_BLOCKS = 80
+
+
+class _Route(Enum):
+    """Measured implementation route for one all-reduce invocation."""
+
+    TP2_MAPPED = "tp2_mapped"
+    MAPPED = "mapped"
+    P2P = "p2p"
 
 
 def _is_rdna4_flydsl_available() -> bool:
@@ -63,11 +91,11 @@ class RDNA4AllReduce:
     _hipIpcMemHandle_t = None
 
     # Signal struct layout (each field alignas(128)):
-    #   uint32_t start[_MAX_BLOCKS][8]  -> _MAX_BLOCKS * 8 * 4
-    #   uint32_t end[_MAX_BLOCKS][8]    -> _MAX_BLOCKS * 8 * 4
-    #   uint32_t _flag[_MAX_BLOCKS]     -> _MAX_BLOCKS * 4
+    #   uint32_t start[_MAX_P2P_BLOCKS][8]
+    #   uint32_t end[_MAX_P2P_BLOCKS][8]
+    #   uint32_t flag[_MAX_P2P_BLOCKS]
     # Struct size padded to 128-byte alignment.
-    _SIGNAL_SIZE = ((MAX_BLOCKS * 8 * 4) * 2 + MAX_BLOCKS * 4 + 127) & ~127
+    _SIGNAL_SIZE = ((_MAX_P2P_BLOCKS * 8 * 4) * 2 + _MAX_P2P_BLOCKS * 4 + 127) & ~127
 
     @classmethod
     def _load_hip(cls):
@@ -269,8 +297,8 @@ class RDNA4AllReduce:
         self.disabled = True
         self._meta_ptr = None
         self._meta_bases: list[int | None] = []
-        self._tp2_comm = None
-        self._host_comm = None
+        self._tp2_mapped = None
+        self._mapped = None
         self._p2p_launchers = {}
         self._p2p_blocks_override = 0
         self._p2p_copy_load_nontemporal = None
@@ -278,10 +306,17 @@ class RDNA4AllReduce:
         self._p2p_ready = False
         self._IS_CAPTURING = False
         self._captured_outputs: list[torch.Tensor] = []
+        self._captured_inputs: list[torch.Tensor] = []
         self._graph_call_cursor = 0
         self._capture_base_index = 0
         self._gpu_graph_output_ptrs_array = None
+        self._gpu_graph_input_ptrs_array = None
         self._graph_output_bases: list[int] = []
+        self._graph_input_bases: list[int] = []
+        self._eager_input_bases: list[int] = []
+        self._eager_input_ptrs: dict[int, torch.Tensor] = {}
+        self._eager_output_bases: list[int] = []
+        self._eager_output_ptrs: dict[int, torch.Tensor] = {}
         self.fully_connected = False
         self.group = group
         if isinstance(device, int):
@@ -328,40 +363,40 @@ class RDNA4AllReduce:
 
         props = torch.cuda.get_device_properties(self.device)
         if self.world_size == 2 and "gfx1201" in getattr(props, "gcnArchName", ""):
-            from .rdna4_all_reduce_tp2 import RDNA4TP2AllReduce
+            from .rdna4_all_reduce_mapped_tp2 import RDNA4TP2MappedAllReduce
 
-            self._tp2_comm = RDNA4TP2AllReduce(
+            self._tp2_mapped = RDNA4TP2MappedAllReduce(
                 group=self.group,
                 device=self.device,
                 max_numel=min(
                     self.max_size,
-                    TP2_BF16_MAX_SIZE,
+                    TP2_MAPPED_BF16_MAX_SIZE,
                 )
                 // torch.bfloat16.itemsize,
                 register_host_mapping=self._register_host_mapping,
                 unregister_host_mapping=self._unregister_host_mapping,
             )
-            if self._tp2_comm.disabled:
-                self._tp2_comm = None
+            if self._tp2_mapped.disabled:
+                self._tp2_mapped = None
         elif self.world_size in (4, 8) and "gfx1201" in getattr(
             props, "gcnArchName", ""
         ):
-            from .rdna4_all_reduce_host import RDNA4HostAllReduce
+            from .rdna4_all_reduce_mapped import RDNA4MappedAllReduce
 
-            host_max_size = min(
+            mapped_max_size = min(
                 self.max_size,
-                HOST_ALL_REDUCE_MAX_SIZE[self.world_size],
+                MAPPED_ALL_REDUCE_MAX_SIZE[self.world_size],
             )
-            self._host_comm = RDNA4HostAllReduce(
+            self._mapped = RDNA4MappedAllReduce(
                 group=self.group,
                 device=self.device,
-                max_size=host_max_size,
+                max_size=mapped_max_size,
                 register_host_mapping=self._register_host_mapping,
                 unregister_host_mapping=self._unregister_host_mapping,
                 threads=1024 if self.world_size == 4 else 512,
             )
-            if self._host_comm.disabled:
-                self._host_comm = None
+            if self._mapped.disabled:
+                self._mapped = None
 
         group_devices = [None] * self.world_size
         dist.all_gather_object(group_devices, device_index, group=group)
@@ -374,7 +409,7 @@ class RDNA4AllReduce:
         dist.all_gather_object(p2p_status, local_p2p, group=group)
         self.fully_connected = all(bool(value) for value in p2p_status)
         if not self.fully_connected:
-            if self._tp2_comm is not None or self._host_comm is not None:
+            if self._tp2_mapped is not None or self._mapped is not None:
                 self.disabled = False
                 return
             logger.warning_once("RDNA4AllReduce requires full P2P access for TP4/TP8")
@@ -444,6 +479,11 @@ class RDNA4AllReduce:
             dtype=torch.int64,
             device=self.device,
         )
+        self._gpu_graph_input_ptrs_array = torch.empty(
+            (MAX_GRAPH_ALL_REDUCE_CALLS, 8),
+            dtype=torch.int64,
+            device=self.device,
+        )
 
         self._threads = 1024 if self.world_size == 8 else 512
         self._p2p_ready = True
@@ -452,14 +492,14 @@ class RDNA4AllReduce:
 
     def close(self):
         """Release IPC memory handles for peer GPU buffers."""
-        if self._tp2_comm is not None:
+        if self._tp2_mapped is not None:
             with suppress(Exception):
-                self._tp2_comm.close()
-            self._tp2_comm = None
-        if self._host_comm is not None:
+                self._tp2_mapped.close()
+            self._tp2_mapped = None
+        if self._mapped is not None:
             with suppress(Exception):
-                self._host_comm.close()
-            self._host_comm = None
+                self._mapped.close()
+            self._mapped = None
         for b in getattr(self, "_meta_bases", []):
             if b is not None:
                 with suppress(Exception):
@@ -469,6 +509,20 @@ class RDNA4AllReduce:
             with suppress(Exception):
                 self._close_mem_handle(int(b))
         self._graph_output_bases = []
+        for b in getattr(self, "_graph_input_bases", []):
+            with suppress(Exception):
+                self._close_mem_handle(int(b))
+        self._graph_input_bases = []
+        for b in getattr(self, "_eager_input_bases", []):
+            with suppress(Exception):
+                self._close_mem_handle(int(b))
+        self._eager_input_bases = []
+        self._eager_input_ptrs = {}
+        for b in getattr(self, "_eager_output_bases", []):
+            with suppress(Exception):
+                self._close_mem_handle(int(b))
+        self._eager_output_bases = []
+        self._eager_output_ptrs = {}
         if getattr(self, "_meta_ptr", None):
             with suppress(Exception):
                 self._free_device_mem(self._meta_ptr)
@@ -478,21 +532,25 @@ class RDNA4AllReduce:
 
     @contextmanager
     def capture(self):
-        """Record and IPC-register graph outputs after capture completes."""
+        """Record and IPC-register graph inputs and outputs after capture."""
         try:
             self._IS_CAPTURING = True
             self._captured_outputs = []
+            self._captured_inputs = []
             self._capture_base_index = self._graph_call_cursor
             yield
         finally:
             self._IS_CAPTURING = False
             if self._captured_outputs:
-                self._register_graph_outputs()
+                self._register_graph_tensors()
                 self._graph_call_cursor += len(self._captured_outputs)
 
-    def _register_graph_outputs(self) -> None:
-        """Populate direct peer-output pointers recorded during graph capture."""
+    def _register_graph_tensors(self) -> None:
+        """Populate direct peer input/output pointers recorded during capture."""
         outputs = self._captured_outputs
+        inputs = self._captured_inputs
+        if len(inputs) != len(outputs):
+            raise RuntimeError("RDNA4 graph input/output call counts differ")
         end_index = self._capture_base_index + len(outputs)
         if end_index > MAX_GRAPH_ALL_REDUCE_CALLS:
             raise RuntimeError(
@@ -509,19 +567,22 @@ class RDNA4AllReduce:
 
         handle_cache: dict[int, bytes] = {}
         local_metadata = []
-        for output in outputs:
-            pointer = int(output.data_ptr())
-            matches = [start for start, end in segments if start <= pointer < end]
-            if not matches:
-                raise RuntimeError(
-                    f"Could not locate graph output 0x{pointer:x} in ROCm allocator"
-                )
-            base = max(matches)
-            handle = handle_cache.get(base)
-            if handle is None:
-                handle = self._get_mem_handle_bytes(base)
-                handle_cache[base] = handle
-            local_metadata.append((handle, pointer - base))
+        for input_, output in zip(inputs, outputs):
+            call_metadata = []
+            for tensor in (input_, output):
+                pointer = int(tensor.data_ptr())
+                matches = [start for start, end in segments if start <= pointer < end]
+                if not matches:
+                    raise RuntimeError(
+                        f"Could not locate graph tensor 0x{pointer:x} in ROCm allocator"
+                    )
+                base = max(matches)
+                handle = handle_cache.get(base)
+                if handle is None:
+                    handle = self._get_mem_handle_bytes(base)
+                    handle_cache[base] = handle
+                call_metadata.append((handle, pointer - base))
+            local_metadata.append(call_metadata)
 
         all_metadata = self._gather_object_list_via_broadcast(
             self.group,
@@ -531,35 +592,115 @@ class RDNA4AllReduce:
             raise RuntimeError("RDNA4 graph all-reduce call counts differ across ranks")
 
         opened: dict[tuple[int, bytes], int] = {}
-        pointer_rows = []
+        input_pointer_rows = []
+        output_pointer_rows = []
         for call_index, output in enumerate(outputs):
-            row = []
-            for peer_offset in range(self.world_size):
-                peer = (self.rank + peer_offset) % self.world_size
-                handle, offset = all_metadata[peer][call_index]
-                handle = bytes(handle)
-                if peer == self.rank:
-                    pointer = int(output.data_ptr())
-                else:
-                    key = (peer, handle)
-                    base = opened.get(key)
-                    if base is None:
-                        base = self._open_mem_handle(handle)
-                        opened[key] = base
-                        self._graph_output_bases.append(base)
-                    pointer = base + int(offset)
-                row.append(pointer)
-            row.extend([row[0]] * (8 - self.world_size))
-            pointer_rows.append(row)
+            rows = ([], [])
+            local_tensors = (inputs[call_index], output)
+            for tensor_kind, row in enumerate(rows):
+                for peer_offset in range(self.world_size):
+                    peer = (self.rank + peer_offset) % self.world_size
+                    handle, offset = all_metadata[peer][call_index][tensor_kind]
+                    handle = bytes(handle)
+                    if peer == self.rank:
+                        pointer = int(local_tensors[tensor_kind].data_ptr())
+                    else:
+                        key = (peer, handle)
+                        base = opened.get(key)
+                        if base is None:
+                            base = self._open_mem_handle(handle)
+                            opened[key] = base
+                            if tensor_kind == 0:
+                                self._graph_input_bases.append(base)
+                            else:
+                                self._graph_output_bases.append(base)
+                        pointer = base + int(offset)
+                    row.append(pointer)
+                row.extend([row[0]] * (8 - self.world_size))
+            input_pointer_rows.append(rows[0])
+            output_pointer_rows.append(rows[1])
 
-        pointer_tensor = torch.tensor(
-            pointer_rows, dtype=torch.int64, device=self.device
+        input_pointer_tensor = torch.tensor(
+            input_pointer_rows, dtype=torch.int64, device=self.device
         )
+        output_pointer_tensor = torch.tensor(
+            output_pointer_rows, dtype=torch.int64, device=self.device
+        )
+        assert self._gpu_graph_input_ptrs_array is not None
         assert self._gpu_graph_output_ptrs_array is not None
+        self._gpu_graph_input_ptrs_array[self._capture_base_index : end_index].copy_(
+            input_pointer_tensor
+        )
         self._gpu_graph_output_ptrs_array[self._capture_base_index : end_index].copy_(
-            pointer_tensor
+            output_pointer_tensor
         )
         torch.cuda.synchronize(self.device)
+
+    def _get_eager_tensor_ptrs(
+        self,
+        tensor: torch.Tensor,
+        cache: dict[int, torch.Tensor],
+        bases: list[int],
+    ) -> int | None:
+        """Return a cached rotated IPC pointer row for a steady eager tensor.
+
+        Registration is deliberately bounded: serving reuses a small set of
+        activation buffers, while an unbounded data-pointer cache would pin
+        allocator segments and peer mappings.
+        """
+        pointer = int(tensor.data_ptr())
+        cached = cache.get(pointer)
+        if cached is not None:
+            return int(cached.data_ptr())
+        if len(cache) >= 32:
+            # Reclaim the bounded registration window collectively.  The GPU
+            # and CPU barriers make it safe to close mappings that a peer's
+            # previously enqueued kernel may have read.
+            torch.cuda.synchronize(self.device)
+            dist.barrier(group=self.group)
+            for peer_base in bases:
+                self._close_mem_handle(int(peer_base))
+            bases.clear()
+            cache.clear()
+
+        matches = []
+        for segment in torch.cuda.memory_snapshot():
+            address = int(segment.get("address", 0))
+            size = int(segment.get("total_size", 0))
+            if address and address <= pointer < address + size:
+                matches.append(address)
+        if not matches:
+            return None
+        base = max(matches)
+        metadata = (self._get_mem_handle_bytes(base), pointer - base)
+        all_metadata = self._gather_object_list_via_broadcast(self.group, metadata)
+
+        row = []
+        for peer_offset in range(self.world_size):
+            peer = (self.rank + peer_offset) % self.world_size
+            handle, offset = all_metadata[peer]
+            if peer == self.rank:
+                peer_pointer = pointer
+            else:
+                peer_base = self._open_mem_handle(bytes(handle))
+                bases.append(peer_base)
+                peer_pointer = peer_base + int(offset)
+            row.append(peer_pointer)
+        row.extend([row[0]] * (8 - self.world_size))
+        pointer_tensor = torch.tensor(row, dtype=torch.int64, device=self.device)
+        torch.cuda.synchronize(self.device)
+        cache[pointer] = pointer_tensor
+        return int(pointer_tensor.data_ptr())
+
+    def _get_eager_input_ptrs(self, inp: torch.Tensor) -> int | None:
+        return self._get_eager_tensor_ptrs(
+            inp, self._eager_input_ptrs, self._eager_input_bases
+        )
+
+    def _get_eager_output_ptrs(self, out: torch.Tensor) -> int | None:
+        return self._get_eager_tensor_ptrs(
+            out, self._eager_output_ptrs, self._eager_output_bases
+        )
 
     def __del__(self):
         with suppress(Exception):
@@ -567,28 +708,45 @@ class RDNA4AllReduce:
 
     _SUPPORTED_WORLD_SIZES = {2, 4, 8}
 
-    def should_use(self, inp: torch.Tensor) -> bool:
-        """Return whether this communicator can reduce ``inp``."""
+    def _select_route(self, inp: torch.Tensor, *, graph: bool) -> _Route | None:
+        """Select the measured transport for an input and execution mode."""
         if self.disabled or self.world_size not in self._SUPPORTED_WORLD_SIZES:
-            return False
-        if self._tp2_comm is not None and self._tp2_comm.should_use(inp):
-            return True
-        if self._host_comm is not None and self._host_comm.should_use(inp):
-            return True
-        return self._should_use_p2p(inp)
+            return None
+        if self._tp2_mapped is not None and self._tp2_mapped.should_use(inp):
+            # The mapped-host TP2 kernel wins under graph replay, but its
+            # launch/synchronization floor loses to PyNCCL in eager mode.
+            return _Route.TP2_MAPPED if graph else None
+        if self._mapped is not None and self._mapped.should_use(inp):
+            if (
+                not graph
+                and self.world_size == 4
+                and inp.nbytes in TP4_EAGER_PYNCCL_SIZES
+            ):
+                return None
+            return _Route.MAPPED
+        if self._p2p_route_supported(inp, graph=graph):
+            return _Route.P2P
+        return None
+
+    def should_use(self, inp: torch.Tensor) -> bool:
+        """Return whether the measured route uses an RDNA4 transport."""
+        return self._select_route(inp, graph=self._IS_CAPTURING) is not None
 
     def should_use_graph(self, inp: torch.Tensor) -> bool:
         """Return whether graph capture will use an RDNA4 kernel for ``inp``."""
-        if self.disabled or self.world_size not in self._SUPPORTED_WORLD_SIZES:
-            return False
-        if self._tp2_comm is not None and self._tp2_comm.should_use(inp):
-            return True
-        if self._host_comm is not None and self._host_comm.should_use(inp):
-            return True
-        return self._p2p_tensor_supported(inp)
+        return self._select_route(inp, graph=True) is not None
 
-    def _should_use_p2p(self, inp: torch.Tensor) -> bool:
-        return self._IS_CAPTURING and self._p2p_tensor_supported(inp)
+    def _p2p_route_supported(self, inp: torch.Tensor, *, graph: bool) -> bool:
+        if not self._p2p_tensor_supported(inp):
+            return False
+        if graph:
+            return True
+        if self.world_size == 2:
+            return (
+                inp.nbytes >= TP2_P2P_EAGER_MIN_SIZE
+                and inp.nbytes <= TP2_P2P_SMALL_MAX_SIZE
+            ) or inp.nbytes >= 2 * 1024 * 1024
+        return self.world_size == 4 and inp.nbytes >= TP4_P2P_FOUR_BLOCK_MIN_SIZE
 
     def _p2p_tensor_supported(self, inp: torch.Tensor) -> bool:
         if not self._p2p_ready:
@@ -600,12 +758,14 @@ class RDNA4AllReduce:
         inp_size = inp.nbytes
         if inp_size < P2P_GRAPH_MIN_SIZE[self.world_size]:
             return False
+        if self.world_size == 2 and inp_size > TP2_P2P_GRAPH_MAX_SIZE:
+            return False
         if (
             self.world_size == 8
             and TP8_PYNCCL_GRAPH_RANGE[0] <= inp_size <= TP8_PYNCCL_GRAPH_RANGE[1]
         ):
             return False
-        if (inp.numel() // 8) % 4:
+        if self.world_size != 2 and (inp.numel() // 8) % 4:
             return False
         if not 0 < inp_size <= self.max_size or inp_size % 16 != 0:
             return False
@@ -680,6 +840,149 @@ class RDNA4AllReduce:
                 else direct_output_ptrs_address
             ),
             Int64(int(self._gpu_tmp_ptrs_array.data_ptr())),
+            Int64(int(inp.data_ptr())),
+            Int64(int(out.data_ptr())),
+            Int32(inp.numel()),
+            stream=stream,
+        )
+        return out
+
+    def _run_p2p_tp2_one_shot(
+        self,
+        inp: torch.Tensor,
+        out: torch.Tensor,
+        *,
+        stream_ptr: int | None,
+        input_ptrs_address: int | None = None,
+    ) -> torch.Tensor | None:
+        if self.world_size != 2 or inp.dtype != torch.bfloat16:
+            return None
+        if inp.nbytes < 8 * 1024 * 1024:
+            blocks, threads = 8, 512
+        elif inp.nbytes < 16 * 1024 * 1024:
+            blocks, threads = 16, 512
+        else:
+            blocks, threads = 32, 256
+        chunk_packs = 32768 if inp.nbytes >= 64 * 1024 * 1024 else 16384
+        direct_input = input_ptrs_address is not None
+        key = ("tp2_one_shot", blocks, threads, chunk_packs, direct_input)
+        launcher = self._p2p_launchers.get(key)
+        if launcher is None:
+            from .flydsl_kernels.rdna4_all_reduce_tp2 import (
+                make_p2p_tp2_one_shot_launcher,
+            )
+
+            launcher = make_p2p_tp2_one_shot_launcher(
+                blocks=blocks,
+                threads=threads,
+                chunk_packs=chunk_packs,
+                direct_input=direct_input,
+            )
+            self._p2p_launchers[key] = launcher
+        stream = (
+            torch.cuda.current_stream(self.device)
+            if stream_ptr is None
+            else torch.cuda.ExternalStream(stream_ptr)
+        )
+        from flydsl.expr.typing import Int32, Int64
+
+        launcher(
+            Int32(self.rank),
+            Int64(self._self_sg),
+            Int64(int(self._gpu_sg_ptrs_array.data_ptr())),
+            Int64(
+                input_ptrs_address
+                if direct_input
+                else int(self._gpu_input_buffer_ptrs_array.data_ptr())
+            ),
+            Int64(
+                input_ptrs_address
+                if direct_input
+                else int(self._gpu_tmp_ptrs_array.data_ptr())
+            ),
+            Int64(int(inp.data_ptr())),
+            Int64(int(out.data_ptr())),
+            Int32(inp.numel()),
+            stream=stream,
+        )
+        return out
+
+    def _run_p2p_tp4_pull(
+        self,
+        inp: torch.Tensor,
+        out: torch.Tensor,
+        *,
+        stream_ptr: int | None,
+        output_ptrs_address: int,
+        input_ptrs_address: int,
+    ) -> torch.Tensor | None:
+        if self.world_size != 4 or inp.dtype != torch.bfloat16:
+            return None
+        pack_count = inp.numel() // 8
+        if pack_count % self.world_size:
+            return None
+        threads = self._threads
+        blocks = self._p2p_blocks_override
+        if not blocks:
+            if inp.nbytes >= TP4_P2P_PULL_FULL_WGP_MIN_SIZE:
+                blocks = 32
+                threads = 256
+            else:
+                blocks = 8
+        copy_load_nontemporal = bool(self._p2p_copy_load_nontemporal)
+        two_shot = inp.nbytes >= TP4_P2P_TWO_SHOT_MIN_SIZE
+        direct_input = two_shot
+        chunk_bytes = 32 * 1024 * 1024
+        if two_shot:
+            chunk_bytes = (
+                TP4_P2P_TWO_SHOT_SMALL_CHUNK_SIZE
+                if inp.nbytes <= TP4_P2P_TWO_SHOT_SMALL_CHUNK_SIZE
+                else TP4_P2P_TWO_SHOT_LARGE_CHUNK_SIZE
+            )
+        tail_safe = two_shot and inp.nbytes % (4 * 512) != 0
+        key = (
+            "tp4_pull",
+            blocks,
+            threads,
+            copy_load_nontemporal,
+            two_shot,
+            chunk_bytes,
+            tail_safe,
+            direct_input,
+        )
+        launcher = self._p2p_launchers.get(key)
+        if launcher is None:
+            from .flydsl_kernels.rdna4_all_reduce_p2p import (
+                make_p2p_tp4_pull_launcher,
+            )
+
+            launcher = make_p2p_tp4_pull_launcher(
+                blocks=blocks,
+                threads=threads,
+                copy_load_nontemporal=copy_load_nontemporal,
+                two_shot=two_shot,
+                chunk_bytes=chunk_bytes,
+                tail_safe=tail_safe,
+                direct_input=direct_input,
+            )
+            self._p2p_launchers[key] = launcher
+        stream = (
+            torch.cuda.current_stream(self.device)
+            if stream_ptr is None
+            else torch.cuda.ExternalStream(stream_ptr)
+        )
+        from flydsl.expr.typing import Int32, Int64
+
+        launcher(
+            Int32(self.rank),
+            Int64(self._self_sg),
+            Int64(int(self._gpu_sg_ptrs_array.data_ptr())),
+            Int64(output_ptrs_address),
+            Int64(
+                input_ptrs_address
+                if direct_input
+                else int(self._gpu_tmp_ptrs_array.data_ptr())
+            ),
             Int64(int(inp.data_ptr())),
             Int64(int(out.data_ptr())),
             Int32(inp.numel()),
@@ -767,19 +1070,22 @@ class RDNA4AllReduce:
         Returns None when the input is not supported by the custom kernel
         (caller should fall back to NCCL).
         """
-        if self._tp2_comm is not None and self._tp2_comm.should_use(inp):
-            return self._tp2_comm.all_reduce(
+        route = self._select_route(inp, graph=self._IS_CAPTURING)
+        if route is _Route.TP2_MAPPED:
+            assert self._tp2_mapped is not None
+            return self._tp2_mapped.all_reduce(
                 inp,
                 out=out,
                 stream_ptr=stream_ptr,
             )
-        if self._host_comm is not None and self._host_comm.should_use(inp):
-            return self._host_comm.all_reduce(
+        if route is _Route.MAPPED:
+            assert self._mapped is not None
+            return self._mapped.all_reduce(
                 inp,
                 out=out,
                 stream_ptr=stream_ptr,
             )
-        if not self._should_use_p2p(inp):
+        if route is not _Route.P2P:
             return None
 
         graph_capturing = (
@@ -812,12 +1118,25 @@ class RDNA4AllReduce:
                     f"{MAX_GRAPH_ALL_REDUCE_CALLS} all-reduces"
                 )
             self._captured_outputs.append(out)
+            self._captured_inputs.append(inp)
+            assert self._gpu_graph_input_ptrs_array is not None
             assert self._gpu_graph_output_ptrs_array is not None
             output_ptrs_address = (
                 int(self._gpu_graph_output_ptrs_array.data_ptr())
                 + capture_index * 8 * torch.int64.itemsize
             )
-            if self.world_size == 8:
+            input_ptrs_address = (
+                int(self._gpu_graph_input_ptrs_array.data_ptr())
+                + capture_index * 8 * torch.int64.itemsize
+            )
+            if self.world_size == 2:
+                result = self._run_p2p_tp2_one_shot(
+                    inp,
+                    out,
+                    stream_ptr=stream_ptr,
+                    input_ptrs_address=input_ptrs_address,
+                )
+            elif self.world_size == 8:
                 result = self._run_p2p_hierarchical_tp8(
                     inp,
                     out,
@@ -825,17 +1144,58 @@ class RDNA4AllReduce:
                     direct_output_ptrs_address=output_ptrs_address,
                 )
             else:
-                result = self._run_p2p_tp4_push_rsag(
-                    inp,
-                    out,
-                    stream_ptr=stream_ptr,
-                    direct_output_ptrs_address=output_ptrs_address,
-                )
+                if (
+                    TP4_P2P_PULL_GRAPH_RANGE[0]
+                    <= inp.nbytes
+                    <= (TP4_P2P_PULL_GRAPH_RANGE[1])
+                ):
+                    result = self._run_p2p_tp4_pull(
+                        inp,
+                        out,
+                        stream_ptr=stream_ptr,
+                        output_ptrs_address=output_ptrs_address,
+                        input_ptrs_address=input_ptrs_address,
+                    )
+                else:
+                    result = self._run_p2p_tp4_push_rsag(
+                        inp,
+                        out,
+                        stream_ptr=stream_ptr,
+                        direct_output_ptrs_address=output_ptrs_address,
+                    )
             if result is not None:
                 return result
             raise RuntimeError("RDNA4 graph P2P dispatch has no matching kernel")
+        if self.world_size == 2:
+            eager_input_ptrs = self._get_eager_input_ptrs(inp)
+            if eager_input_ptrs is None:
+                return None
+            result = self._run_p2p_tp2_one_shot(
+                inp,
+                out,
+                stream_ptr=stream_ptr,
+                input_ptrs_address=eager_input_ptrs,
+            )
+            if result is not None:
+                return result
+        elif self.world_size == 4:
+            eager_input_ptrs = self._get_eager_input_ptrs(inp)
+            eager_output_ptrs = self._get_eager_output_ptrs(out)
+            if eager_input_ptrs is not None and eager_output_ptrs is not None:
+                result = self._run_p2p_tp4_pull(
+                    inp,
+                    out,
+                    stream_ptr=stream_ptr,
+                    output_ptrs_address=eager_output_ptrs,
+                    input_ptrs_address=eager_input_ptrs,
+                )
+                if result is not None:
+                    return result
         return None
 
     def all_reduce(self, inp: torch.Tensor) -> torch.Tensor | None:
         """Perform an out-of-place all-reduce or return ``None``."""
         return self.custom_all_reduce(inp)
+
+
+__all__ = ["RDNA4AllReduce"]

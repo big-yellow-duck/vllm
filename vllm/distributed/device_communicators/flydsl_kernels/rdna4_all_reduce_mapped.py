@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-"""Low-latency mapped-host BF16 all-reduce kernels for RDNA4."""
+"""FlyDSL kernels for TP4/TP8 HIP-mapped host-memory all-reduce."""
 
 from functools import cache
 
@@ -43,7 +43,7 @@ def _bf16_pack_to_f32(raw):
 
 
 @cache
-def make_host_allreduce_launcher(*, world_size: int, threads: int = 1024):
+def make_mapped_full_launcher(*, world_size: int, threads: int = 1024):
     if world_size not in (4, 8):
         raise ValueError(f"mapped-host all-reduce requires TP4/TP8, got TP{world_size}")
     if threads not in (256, 512, 1024):
@@ -58,7 +58,7 @@ def make_host_allreduce_launcher(*, world_size: int, threads: int = 1024):
     )
 
     @flyc.kernel(known_block_size=[threads, 1, 1])
-    def host_allreduce_bf16(
+    def mapped_allreduce_bf16(
         input_addr: Int64,
         output_addr: Int64,
         shared_addr: Int64,
@@ -125,7 +125,7 @@ def make_host_allreduce_launcher(*, world_size: int, threads: int = 1024):
     flat_wg_size_attr = f"{threads},{threads}"
 
     @flyc.jit
-    def launch_host_allreduce(
+    def launch_mapped_allreduce(
         input_addr: Int64,
         output_addr: Int64,
         shared_addr: Int64,
@@ -135,7 +135,7 @@ def make_host_allreduce_launcher(*, world_size: int, threads: int = 1024):
         numel: Int32,
         stream: Stream = Stream(None),  # noqa: B008
     ):
-        host_allreduce_bf16(
+        mapped_allreduce_bf16(
             input_addr,
             output_addr,
             shared_addr,
@@ -150,14 +150,14 @@ def make_host_allreduce_launcher(*, world_size: int, threads: int = 1024):
             stream=stream,
         )
 
-    launch_host_allreduce.func.__name__ = (
-        f"launch_host_allreduce_bf16_ws{world_size}_t{threads}"
+    launch_mapped_allreduce.func.__name__ = (
+        f"launch_mapped_allreduce_bf16_ws{world_size}_t{threads}"
     )
-    return launch_host_allreduce
+    return launch_mapped_allreduce
 
 
 @cache
-def make_host_rsag_launcher(
+def make_mapped_rsag_launcher(
     *,
     world_size: int,
     blocks: int,
@@ -182,7 +182,7 @@ def make_host_rsag_launcher(
     )
 
     @flyc.kernel(known_block_size=[threads, 1, 1])
-    def host_allreduce_bf16_rsag(
+    def mapped_allreduce_bf16_rsag(
         input_addr: Int64,
         output_addr: Int64,
         shared_addr: Int64,
@@ -319,7 +319,7 @@ def make_host_rsag_launcher(
     flat_wg_size_attr = f"{threads},{threads}"
 
     @flyc.jit
-    def launch_host_rsag(
+    def launch_mapped_rsag(
         input_addr: Int64,
         output_addr: Int64,
         shared_addr: Int64,
@@ -331,7 +331,7 @@ def make_host_rsag_launcher(
         numel: Int32,
         stream: Stream = Stream(None),  # noqa: B008
     ):
-        host_allreduce_bf16_rsag(
+        mapped_allreduce_bf16_rsag(
             input_addr,
             output_addr,
             shared_addr,
@@ -348,14 +348,14 @@ def make_host_rsag_launcher(
             stream=stream,
         )
 
-    launch_host_rsag.func.__name__ = (
-        "launch_host_allreduce_bf16_rsag_"
+    launch_mapped_rsag.func.__name__ = (
+        "launch_mapped_allreduce_bf16_rsag_"
         f"ws{world_size}_b{blocks}_t{threads}_p{chunk_packs}"
     )
-    return launch_host_rsag
+    return launch_mapped_rsag
 
 
 __all__ = [
-    "make_host_allreduce_launcher",
-    "make_host_rsag_launcher",
+    "make_mapped_full_launcher",
+    "make_mapped_rsag_launcher",
 ]

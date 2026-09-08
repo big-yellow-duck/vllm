@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+"""TP2 runtime for RDNA4 all-reduce over mapped shared host memory."""
+
 from __future__ import annotations
 
 import ctypes
@@ -17,8 +19,8 @@ import torch.distributed as dist
 from flydsl.expr.typing import Int32, Int64
 
 from .flydsl_kernels.rdna4_all_reduce_tp2 import (
-    make_full_launcher,
-    make_pipeline_launcher,
+    make_mapped_tp2_full_launcher,
+    make_mapped_tp2_pipeline_launcher,
 )
 
 _CONTROL_BYTES = 4096
@@ -43,8 +45,8 @@ def _align_up(value: int, alignment: int = _ALIGNMENT) -> int:
     return (value + alignment - 1) // alignment * alignment
 
 
-class RDNA4TP2AllReduce:
-    """Graph-safe mapped-host BF16 TP2 all-reduce implemented in FlyDSL."""
+class RDNA4TP2MappedAllReduce:
+    """Graph-safe TP2 all-reduce over HIP-mapped shared host memory."""
 
     def __init__(
         self,
@@ -291,7 +293,9 @@ class RDNA4TP2AllReduce:
             local_launch = self._control_addr(
                 _LAUNCH_OFFSET + (mode * 2 + self.rank) * 8
             )
-            launcher = make_full_launcher(blocks=blocks, threads=self.threads)
+            launcher = make_mapped_tp2_full_launcher(
+                blocks=blocks, threads=self.threads
+            )
             launcher(
                 Int64(int(tensor.data_ptr())),
                 Int64(int(output.data_ptr())),
@@ -315,7 +319,7 @@ class RDNA4TP2AllReduce:
             local_launch = self._control_addr(
                 _PIPELINE_LAUNCH_OFFSET + (mode * 2 + self.rank) * 8
             )
-            launcher = make_pipeline_launcher(
+            launcher = make_mapped_tp2_pipeline_launcher(
                 blocks=blocks,
                 threads=self.threads,
                 chunk_packs=chunk_packs,
@@ -351,4 +355,4 @@ class RDNA4TP2AllReduce:
             self.close()
 
 
-__all__ = ["RDNA4TP2AllReduce"]
+__all__ = ["RDNA4TP2MappedAllReduce"]
