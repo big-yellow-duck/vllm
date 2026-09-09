@@ -12,11 +12,52 @@ from typing import Any
 
 import torch
 
-from vllm import _custom_ops as ops
 from vllm import envs
 from vllm.logger import init_logger
+from vllm.v1.kv_cache_interface import KVQuantMode
 
 logger = init_logger(__name__)
+
+
+def _can_use_splitkv_decode(
+    *,
+    query_dtype: torch.dtype,
+    key_cache_dtype: torch.dtype,
+    value_cache_dtype: torch.dtype,
+    kv_quant_mode: KVQuantMode,
+    is_e4m3_kv_cache: bool,
+    head_size: int,
+    num_query_heads: int,
+    num_kv_heads: int,
+    use_alibi_slopes: bool,
+    sliding_window: int,
+    has_sinks: bool,
+    has_output_scale: bool,
+    is_gfx1x: bool,
+    is_gfx12x: bool,
+) -> bool:
+    """Return whether the validated SplitKV decode route can be used."""
+    if (
+        query_dtype not in (torch.float16, torch.bfloat16)
+        or key_cache_dtype != value_cache_dtype
+        or head_size not in (128, 256)
+        or num_kv_heads <= 0
+        or num_query_heads % num_kv_heads != 0
+        or not 1 <= num_query_heads // num_kv_heads <= 16
+        or use_alibi_slopes
+        or sliding_window != 0
+        or has_sinks
+        or has_output_scale
+    ):
+        return False
+
+    if kv_quant_mode == KVQuantMode.FP8_PER_TENSOR:
+        e4m3_dtypes = (torch.float8_e4m3fn, torch.float8_e4m3fnuz)
+        return is_gfx12x and is_e4m3_kv_cache and key_cache_dtype in e4m3_dtypes
+    if kv_quant_mode != KVQuantMode.NONE:
+        return False
+
+    return is_gfx1x and key_cache_dtype == query_dtype
 
 
 @lru_cache(maxsize=1)
@@ -49,56 +90,6 @@ def is_rdna4_flydsl_splitkv_available() -> bool:
         )
         return False
     return True
-
-
-def can_use_rdna4_hip_splitkv_paged_attention(
-    *,
-    query: torch.Tensor,
-    key_cache: torch.Tensor,
-    value_cache: torch.Tensor,
-    output: torch.Tensor,
-    block_tables: torch.Tensor,
-    seq_lens: torch.Tensor,
-    query_start_loc: torch.Tensor | None,
-    k_scale: torch.Tensor | float,
-    v_scale: torch.Tensor | float,
-    scale: float,
-    actual_max_splits: int,
-    filter_by_query_len: bool,
-) -> bool:
-    """Return whether the tuned native HIP specialization applies."""
-    from vllm.platforms.rocm import on_rdna4
-
-    fp8_kv = key_cache.dtype == torch.float8_e4m3fn
-    cache_groups = 16 if fp8_kv else 32
-    cache_pack = 16 if fp8_kv else 8
-    return (
-        on_rdna4()
-        and query.dtype == torch.bfloat16
-        and output.dtype == torch.bfloat16
-        and key_cache.dtype == value_cache.dtype
-        and key_cache.dtype in (torch.bfloat16, torch.float8_e4m3fn)
-        and query.ndim == 3
-        and query.shape[1:] == (12, 256)
-        and output.shape == query.shape
-        and key_cache.ndim == 5
-        and key_cache.shape[1:] == (2, cache_groups, 1568, cache_pack)
-        and value_cache.ndim == 4
-        and value_cache.shape == (key_cache.shape[0], 2, 256, 1568)
-        and block_tables.dtype == torch.int32
-        and seq_lens.dtype == torch.int32
-        and query_start_loc is not None
-        and query_start_loc.dtype == torch.int32
-        and filter_by_query_len
-        and isinstance(k_scale, torch.Tensor)
-        and isinstance(v_scale, torch.Tensor)
-        and k_scale.dtype == torch.float32
-        and v_scale.dtype == torch.float32
-        and k_scale.numel() == 1
-        and v_scale.numel() == 1
-        and math.isclose(scale, 0.0625, rel_tol=0.0, abs_tol=1.0e-8)
-        and actual_max_splits in (1, 2, 4, 8, 16)
-    )
 
 
 def get_rdna4_flydsl_splitkv_config(
@@ -222,8 +213,11 @@ def try_rdna4_splitkv_paged_attention(
     mid_lse: torch.Tensor,
     filter_by_query_len: bool,
 ) -> bool:
-    """Run the selected RDNA4 backend and report whether one was used."""
-    common_args = dict(
+    """Run the selected RDNA4 FlyDSL route and report whether one was used."""
+    if not envs.VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL:
+        return False
+
+    flydsl_config = get_rdna4_flydsl_splitkv_config(
         query=query,
         key_cache=key_cache,
         value_cache=value_cache,
@@ -235,53 +229,17 @@ def try_rdna4_splitkv_paged_attention(
         v_scale=v_scale,
         scale=scale,
         actual_max_splits=actual_max_splits,
+        max_seq_len=max_seq_len,
         filter_by_query_len=filter_by_query_len,
     )
-    flydsl_config = None
-    if envs.VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL:
-        flydsl_config = get_rdna4_flydsl_splitkv_config(
-            **common_args, max_seq_len=max_seq_len
-        )
-    use_hip = flydsl_config is None and can_use_rdna4_hip_splitkv_paged_attention(
-        **common_args
-    )
-    if flydsl_config is None and not use_hip:
+    if flydsl_config is None:
         return False
 
     assert query_start_loc is not None
     assert isinstance(k_scale, torch.Tensor)
     assert isinstance(v_scale, torch.Tensor)
-    if flydsl_config is not None:
-        _, launch = _load_flydsl_splitkv()
-        launch(
-            query,
-            key_cache,
-            value_cache,
-            block_tables,
-            seq_lens,
-            query_start_loc,
-            k_scale,
-            v_scale,
-            output,
-            mid_out,
-            mid_lse,
-            actual_max_splits,
-            scale,
-            max_seq_len,
-            config=flydsl_config,
-        )
-        logger.info_once(
-            "Using RDNA4 FlyDSL SplitKV route: %s", flydsl_config.route.value
-        )
-        return True
-
-    token_halves = (
-        seq_lens.numel() == 1
-        and key_cache.dtype == torch.float8_e4m3fn
-        and block_tables.shape[1] >= 6
-        and actual_max_splits == 16
-    )
-    ops.rdna4_splitkv_paged_attention(
+    _, launch = _load_flydsl_splitkv()
+    launch(
         query,
         key_cache,
         value_cache,
@@ -294,14 +252,16 @@ def try_rdna4_splitkv_paged_attention(
         mid_out,
         mid_lse,
         actual_max_splits,
-        token_halves,
+        scale,
+        max_seq_len,
+        config=flydsl_config,
     )
+    logger.info_once("Using RDNA4 FlyDSL SplitKV route: %s", flydsl_config.route.value)
     return True
 
 
 __all__ = [
     "can_use_rdna4_flydsl_splitkv_paged_attention",
-    "can_use_rdna4_hip_splitkv_paged_attention",
     "get_rdna4_flydsl_splitkv_config",
     "is_rdna4_flydsl_splitkv_available",
     "try_rdna4_splitkv_paged_attention",

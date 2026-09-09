@@ -7,13 +7,13 @@ import torch
 from vllm.v1.attention.backends.rocm_attn import _splitkv_workspace_support
 from vllm.v1.attention.ops.chunked_prefill_paged_decode import (
     _MAX_SPLITS,
-    _can_use_splitkv_decode,
     _choose_compute_block_size,
     _choose_fallback_block_size,
     _get_num_splits,
     _paged_attention_2d_splitkv_decode,
     _splitkv_workspace_shapes,
 )
+from vllm.v1.attention.ops.rdna4_splitkv import _can_use_splitkv_decode
 from vllm.v1.kv_cache_interface import AttentionSpec, KVQuantMode
 
 GFX1201_WGPS = 32

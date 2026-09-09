@@ -20,7 +20,6 @@ from vllm.v1.attention.ops.chunked_prefill_paged_decode import (
 )
 from vllm.v1.attention.ops.rdna4_splitkv import (
     can_use_rdna4_flydsl_splitkv_paged_attention,
-    can_use_rdna4_hip_splitkv_paged_attention,
 )
 from vllm.v1.worker.workspace import (
     init_workspace_manager,
@@ -439,9 +438,6 @@ def test_rdna4_flydsl_gate_covers_generalized_batch_one() -> None:
     )
 
     assert can_use_rdna4_flydsl_splitkv_paged_attention(**gate_args)
-    assert not can_use_rdna4_hip_splitkv_paged_attention(
-        **{key: value for key, value in gate_args.items() if key != "max_seq_len"}
-    )
     assert not can_use_rdna4_flydsl_splitkv_paged_attention(
         **(gate_args | {"seq_lens": seq_lens.repeat(2)})
     )
@@ -609,11 +605,6 @@ def test_rdna4_flydsl_native_d128_gqa16_matches_triton(
     assert config is not None
     assert config.route == SplitKVRoute.NATIVE_D128_GQA16_DIRECT
     monkeypatch.setattr(rdna4_ops.envs, "VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL", True)
-    monkeypatch.setattr(
-        rdna4_ops.ops,
-        "rdna4_splitkv_paged_attention",
-        lambda *args, **kwargs: pytest.fail("FlyDSL opt-in selected the HIP route"),
-    )
     _paged_attention_2d_splitkv_decode(
         query,
         key_cache,
@@ -707,11 +698,6 @@ def test_rdna4_flydsl_native_d128_gqa16_lds_matches_torch(
     assert config is not None
     assert config.route == SplitKVRoute.NATIVE_D128_GQA16_LDS
     monkeypatch.setattr(rdna4_ops.envs, "VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL", True)
-    monkeypatch.setattr(
-        rdna4_ops.ops,
-        "rdna4_splitkv_paged_attention",
-        lambda *args, **kwargs: pytest.fail("FlyDSL opt-in selected the HIP route"),
-    )
     _paged_attention_2d_splitkv_decode(
         query,
         key_cache,
@@ -798,11 +784,6 @@ def test_rdna4_flydsl_d128_gqa16_tile32_matches_torch(
     assert config is not None
     assert config.route == SplitKVRoute.D128_GQA16_TILE32
     monkeypatch.setattr(rdna4_ops.envs, "VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL", True)
-    monkeypatch.setattr(
-        rdna4_ops.ops,
-        "rdna4_splitkv_paged_attention",
-        lambda *args, **kwargs: pytest.fail("FlyDSL opt-in selected the HIP route"),
-    )
     _paged_attention_2d_splitkv_decode(
         query,
         key_cache,
@@ -913,11 +894,6 @@ def test_rdna4_flydsl_d256_gqa4_8_matches_torch(monkeypatch, case: SplitKVCase) 
     assert config is not None
     assert config.route == SplitKVRoute.D256_GQA4_8_TILE32
     monkeypatch.setattr(rdna4_ops.envs, "VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL", True)
-    monkeypatch.setattr(
-        rdna4_ops.ops,
-        "rdna4_splitkv_paged_attention",
-        lambda *args, **kwargs: pytest.fail("FlyDSL opt-in selected the HIP route"),
-    )
     _paged_attention_2d_splitkv_decode(
         query,
         key_cache,
@@ -1004,11 +980,6 @@ def test_rdna4_flydsl_d256_gqa16_matches_torch(
     assert config is not None
     assert config.route == SplitKVRoute.D256_GQA16_TILE32
     monkeypatch.setattr(rdna4_ops.envs, "VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL", True)
-    monkeypatch.setattr(
-        rdna4_ops.ops,
-        "rdna4_splitkv_paged_attention",
-        lambda *args, **kwargs: pytest.fail("FlyDSL opt-in selected the HIP route"),
-    )
     _paged_attention_2d_splitkv_decode(
         query,
         key_cache,
@@ -1093,11 +1064,6 @@ def test_rdna4_flydsl_d128_gqa8_matches_torch(
     assert config is not None
     assert config.route == SplitKVRoute.D128_GQA8_TILE32
     monkeypatch.setattr(rdna4_ops.envs, "VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL", True)
-    monkeypatch.setattr(
-        rdna4_ops.ops,
-        "rdna4_splitkv_paged_attention",
-        lambda *args, **kwargs: pytest.fail("FlyDSL opt-in selected the HIP route"),
-    )
     _paged_attention_2d_splitkv_decode(
         query,
         key_cache,
@@ -1223,11 +1189,6 @@ def test_rdna4_flydsl_generic_tile32_matches_torch(
     assert config is not None
     assert config.route == SplitKVRoute.GENERIC_TILE32
     monkeypatch.setattr(rdna4_ops.envs, "VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL", True)
-    monkeypatch.setattr(
-        rdna4_ops.ops,
-        "rdna4_splitkv_paged_attention",
-        lambda *args, **kwargs: pytest.fail("FlyDSL opt-in selected the HIP route"),
-    )
     _paged_attention_2d_splitkv_decode(
         query,
         key_cache,
@@ -1351,11 +1312,6 @@ def test_rdna4_flydsl_wave8_matches_torch(monkeypatch, case: SplitKVCase) -> Non
     assert config is not None
     assert config.route == SplitKVRoute.WAVE8
     monkeypatch.setattr(rdna4_ops.envs, "VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL", True)
-    monkeypatch.setattr(
-        rdna4_ops.ops,
-        "rdna4_splitkv_paged_attention",
-        lambda *args, **kwargs: pytest.fail("FlyDSL opt-in selected the HIP route"),
-    )
     _paged_attention_2d_splitkv_decode(
         query,
         key_cache,
@@ -1432,11 +1388,6 @@ def test_rdna4_flydsl_qwen38_tp2_generic_matches_triton(monkeypatch) -> None:
     assert config is not None
     assert config.route == SplitKVRoute.GENERIC_TILE32
     monkeypatch.setattr(rdna4_ops.envs, "VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL", True)
-    monkeypatch.setattr(
-        rdna4_ops.ops,
-        "rdna4_splitkv_paged_attention",
-        lambda *args, **kwargs: pytest.fail("FlyDSL opt-in selected the HIP route"),
-    )
     _paged_attention_2d_splitkv_decode(
         query,
         key_cache,

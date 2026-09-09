@@ -16,13 +16,14 @@ from vllm import _custom_ops as ops
 from vllm.logger import init_logger
 from vllm.platforms import current_platform
 from vllm.triton_utils import tl, triton
-from vllm.v1.kv_cache_interface import KVQuantMode, get_kv_quant_mode
+from vllm.v1.kv_cache_interface import get_kv_quant_mode
 from vllm.v1.worker.workspace import (
     current_workspace_manager,
     is_workspace_manager_initialized,
 )
 
 from .prefix_prefill import context_attention_fwd
+from .rdna4_splitkv import _can_use_splitkv_decode, try_rdna4_splitkv_paged_attention
 
 logger = init_logger(__name__)
 
@@ -65,47 +66,6 @@ def has_native_kv_cache_layout(
         key_cache.stride(0) == key_cache.shape[1:].numel()
         and value_cache.stride(0) == value_cache.shape[1:].numel()
     )
-
-
-def _can_use_splitkv_decode(
-    *,
-    query_dtype: torch.dtype,
-    key_cache_dtype: torch.dtype,
-    value_cache_dtype: torch.dtype,
-    kv_quant_mode: KVQuantMode,
-    is_e4m3_kv_cache: bool,
-    head_size: int,
-    num_query_heads: int,
-    num_kv_heads: int,
-    use_alibi_slopes: bool,
-    sliding_window: int,
-    has_sinks: bool,
-    has_output_scale: bool,
-    is_gfx1x: bool,
-    is_gfx12x: bool,
-) -> bool:
-    """Return whether the validated SplitKV decode route can be used."""
-    if (
-        query_dtype not in (torch.float16, torch.bfloat16)
-        or key_cache_dtype != value_cache_dtype
-        or head_size not in (128, 256)
-        or num_kv_heads <= 0
-        or num_query_heads % num_kv_heads != 0
-        or not 1 <= num_query_heads // num_kv_heads <= 16
-        or use_alibi_slopes
-        or sliding_window != 0
-        or has_sinks
-        or has_output_scale
-    ):
-        return False
-
-    if kv_quant_mode == KVQuantMode.FP8_PER_TENSOR:
-        e4m3_dtypes = (torch.float8_e4m3fn, torch.float8_e4m3fnuz)
-        return is_gfx12x and is_e4m3_kv_cache and key_cache_dtype in e4m3_dtypes
-    if kv_quant_mode != KVQuantMode.NONE:
-        return False
-
-    return is_gfx1x and key_cache_dtype == query_dtype
 
 
 def _cdiv(x: int, y: int) -> int:
@@ -909,8 +869,6 @@ def _paged_attention_2d_splitkv_decode(
         raise ValueError(
             "SplitKV scratch tensors have incompatible shape, dtype, device, or layout."
         )
-
-    from .rdna4_splitkv import try_rdna4_splitkv_paged_attention
 
     if try_rdna4_splitkv_paged_attention(
         query=query,

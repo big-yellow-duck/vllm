@@ -1264,7 +1264,6 @@ environment_variables: dict[str, Callable[[], Any]] = {
         os.getenv("VLLM_ROCM_USE_RDNA4_ALL_REDUCE", "False").lower() in ("true", "1")
     ),
     # Enable the vLLM-owned RDNA4 FlyDSL SplitKV paged-attention backend.
-    # The native HIP path remains the default for overlapping shapes.
     "VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL": lambda: (
         os.getenv("VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL", "False").lower()
         in ("true", "1")
