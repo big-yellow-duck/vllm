@@ -19,7 +19,7 @@ from vllm.v1.kv_cache_interface import KVQuantMode
 logger = init_logger(__name__)
 
 
-def _can_use_splitkv_decode(
+def _can_use_rdna4_splitkv_decode(
     *,
     query_dtype: torch.dtype,
     key_cache_dtype: torch.dtype,

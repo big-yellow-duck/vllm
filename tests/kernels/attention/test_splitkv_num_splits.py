@@ -13,7 +13,7 @@ from vllm.v1.attention.ops.chunked_prefill_paged_decode import (
     _paged_attention_2d_splitkv_decode,
     _splitkv_workspace_shapes,
 )
-from vllm.v1.attention.ops.rdna4_splitkv import _can_use_splitkv_decode
+from vllm.v1.attention.ops.rdna4_splitkv import _can_use_rdna4_splitkv_decode
 from vllm.v1.kv_cache_interface import AttentionSpec, KVQuantMode
 
 GFX1201_WGPS = 32
@@ -37,7 +37,7 @@ def _can_route(**overrides) -> bool:
         "is_gfx12x": True,
     }
     args.update(overrides)
-    return _can_use_splitkv_decode(**args)
+    return _can_use_rdna4_splitkv_decode(**args)
 
 
 @pytest.mark.parametrize(

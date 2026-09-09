@@ -23,7 +23,10 @@ from vllm.v1.worker.workspace import (
 )
 
 from .prefix_prefill import context_attention_fwd
-from .rdna4_splitkv import _can_use_splitkv_decode, try_rdna4_splitkv_paged_attention
+from .rdna4_splitkv import (
+    _can_use_rdna4_splitkv_decode,
+    try_rdna4_splitkv_paged_attention,
+)
 
 logger = init_logger(__name__)
 
@@ -1146,7 +1149,7 @@ def chunked_prefill_paged_decode(
             processed_block_table = block_table.to(torch.int32)
 
         kv_quant_mode = get_kv_quant_mode(kv_cache_dtype)
-        use_splitkv_decode = _can_use_splitkv_decode(
+        use_splitkv_decode = _can_use_rdna4_splitkv_decode(
             query_dtype=query.dtype,
             key_cache_dtype=key_cache.dtype,
             value_cache_dtype=value_cache.dtype,
