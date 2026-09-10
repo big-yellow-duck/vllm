@@ -69,6 +69,20 @@ def _load_flydsl_splitkv() -> tuple[Any, Any]:
     scalar_fp8_params = tuple(signature(fx.rocdl.cvt_f32_fp8).parameters)
     if scalar_fp8_params[:2] != ("src", "byte_sel"):
         raise RuntimeError("FlyDSL lacks the scalar FP8 conversion API")
+    required_memory_apis = (
+        (fx.llvm, "memory_fence"),
+        (fx.llvm, "atomic_add"),
+        (fx.llvm, "generic_store"),
+        (fx, "AtomicOrdering"),
+        (fx.rocdl, "SyncScope"),
+    )
+    missing = [
+        f"{module.__name__}.{name}"
+        for module, name in required_memory_apis
+        if not hasattr(module, name)
+    ]
+    if missing:
+        raise RuntimeError(f"FlyDSL lacks required ordered memory APIs: {missing}")
 
     from .flydsl_kernels.rdna4_splitkv import (
         rdna4_splitkv_paged_attention,

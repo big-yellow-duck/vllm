@@ -130,6 +130,8 @@ def select_kernel_config(
             else None
         )
         if route is not None:
+            if max_seq_len >= 8192:
+                return SplitKVConfig(SplitKVRoute.D128_GQA16_TILE32)
             return SplitKVConfig(route)
 
     if (
@@ -199,6 +201,14 @@ def select_kernel_config(
         and (generic_d256 or generic_d128_native_gqa8)
     ):
         return SplitKVConfig(SplitKVRoute.GENERIC_TILE32)
+
+    # Per-query-head Wave8 repeats native KV reads as GQA/batch grow. The
+    # grouped Triton fallback wins these long-context shapes on gfx1201.
+    if max_seq_len >= 2048 and (
+        (key_cache.dtype == query.dtype and (gqa >= 3 or (gqa == 2 and batch_size > 1)))
+        or (head_size == 128 and gqa == 4 and batch_size > 1)
+    ):
+        return None
 
     if (
         query.dtype in (torch.bfloat16, torch.float16)

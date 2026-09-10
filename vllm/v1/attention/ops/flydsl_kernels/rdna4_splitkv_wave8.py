@@ -11,7 +11,7 @@ import flydsl.expr as fx
 from flydsl.expr import const_expr, gpu, range_constexpr
 from flydsl.expr import math as fmath
 
-from .rdna4_splitkv_common import LOG2E, WAVE_SIZE, _wave_reduce
+from .rdna4_splitkv_common import LOG2E, WAVE_SIZE, _decode_fp8, _wave_reduce
 
 NUM_WAVES = 8
 BLOCK_THREADS = NUM_WAVES * WAVE_SIZE
@@ -96,9 +96,6 @@ def compile_wave8_stage(
         if const_expr(is_fp8):
             k_scale = fx.Float32(k_scale_ptr[0])
             v_scale = fx.Float32(v_scale_ptr[0])
-            if const_expr(is_fp8fnuz):
-                k_scale = k_scale * 0.5
-                v_scale = v_scale * 0.5
 
         query_row = fx.Int32(query_start_loc_ptr[seq])
         query_end = fx.Int32(query_start_loc_ptr[seq + 1])
@@ -158,7 +155,7 @@ def compile_wave8_stage(
             for element in range_constexpr(values_per_lane):
                 if const_expr(is_fp8):
                     key_value = fx.Float32(
-                        fx.rocdl.cvt_f32_fp8(fx.Int32(loads[element]), 0)
+                        _decode_fp8(fx.Int32(loads[element]), 0, is_fp8fnuz=is_fp8fnuz)
                     )
                 else:
                     key_value = fx.Float32(loads[element])
@@ -178,8 +175,10 @@ def compile_wave8_stage(
             for element in range_constexpr(values_per_lane):
                 if const_expr(is_fp8):
                     value_element = fx.Float32(
-                        fx.rocdl.cvt_f32_fp8(
-                            fx.Int32(loads[values_per_lane + element]), 0
+                        _decode_fp8(
+                            fx.Int32(loads[values_per_lane + element]),
+                            0,
+                            is_fp8fnuz=is_fp8fnuz,
                         )
                     )
                 else:
@@ -266,18 +265,17 @@ def compile_wave8_stage(
         gpu.barrier()
         old = fx.Int32(-1)
         if tid == 0:
-            fx.rocdl.memory_fence(
-                fx.rocdl.MemoryOrder.Release,
+            fx.llvm.memory_fence(
+                ordering=fx.AtomicOrdering.Release,
                 syncscope=fx.rocdl.SyncScope.Agent,
             )
             counter_index = (seq * num_query_heads + query_head) * 16
             counter_ptr = fx.add_offset(fx.get_iter(split_counters_ptr), counter_index)
-            old = fx.rocdl.atomic_fetch_add(
-                fx.ptrtoint(counter_ptr),
+            old = fx.llvm.atomic_add(
+                counter_ptr,
                 fx.Int32(1),
-                memory_order=fx.rocdl.MemoryOrder.Monotonic,
+                ordering=fx.AtomicOrdering.Monotonic,
                 syncscope=fx.rocdl.SyncScope.Agent,
-                alignment=4,
             )
             state_weight[0] = fx.Float32(old)
         fx.rocdl.s_waitcnt(lgkmcnt=0)
@@ -286,19 +284,18 @@ def compile_wave8_stage(
 
         if old == splits - 1:
             if tid == 0:
-                fx.rocdl.memory_fence(
-                    fx.rocdl.MemoryOrder.Acquire,
+                fx.llvm.memory_fence(
+                    ordering=fx.AtomicOrdering.Acquire,
                     syncscope=fx.rocdl.SyncScope.Agent,
                 )
                 counter_index = (seq * num_query_heads + query_head) * 16
                 counter_ptr = fx.add_offset(
                     fx.get_iter(split_counters_ptr), counter_index
                 )
-                fx.rocdl.global_store(
-                    fx.ptrtoint(counter_ptr),
+                fx.llvm.generic_store(
+                    counter_ptr,
                     fx.Int32(0),
-                    alignment=4,
-                    memory_order=fx.rocdl.MemoryOrder.Monotonic,
+                    memory_order=fx.AtomicOrdering.Monotonic,
                     syncscope=fx.rocdl.SyncScope.Agent,
                 )
             gpu.barrier()

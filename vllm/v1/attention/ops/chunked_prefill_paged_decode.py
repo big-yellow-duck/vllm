@@ -256,15 +256,10 @@ def kernel_paged_attention_2d(
                 eviction_policy="evict_last",
             )
 
-        if K_load.dtype.is_fp8():
-            K = (K_load.to(tl.float32) * tl.load(k_scale)).to(Q.dtype)
-        else:
-            K = K_load
+        # Keep FP8 scales in FP32; the intermediate also preserves FNUZ decoding.
+        K = K_load.to(tl.float32).to(Q.dtype) if K_load.dtype.is_fp8() else K_load
 
-        if V_load.dtype.is_fp8():
-            V = (V_load.to(tl.float32) * tl.load(v_scale)).to(Q.dtype)
-        else:
-            V = V_load
+        V = V_load.to(tl.float32).to(Q.dtype) if V_load.dtype.is_fp8() else V_load
 
         seq_offset = j * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
         boundary = tl.full([BLOCK_SIZE], seq_len, dtype=tl.int32)
@@ -272,6 +267,8 @@ def kernel_paged_attention_2d(
 
         # First calculate the dot, then apply the mask.
         qk = scale * tl.dot(Q, K)
+        if K_load.dtype.is_fp8():
+            qk *= tl.load(k_scale)
         S = tl.where(head_mask[:, None] & seq_mask, qk, float("-inf"))
 
         context_len = seq_len - 1
@@ -309,6 +306,8 @@ def kernel_paged_attention_2d(
 
     # epilogue
     acc = acc / (L[:, None] + 1e-10)
+    if value_cache_ptr.dtype.element_ty.is_fp8():
+        acc *= tl.load(v_scale)
     if USE_FP8:
         acc = acc * tl.load(out_scale_inv)
         acc = tl.clamp(acc, FP8_MIN, FP8_MAX)
@@ -445,16 +444,13 @@ def kernel_paged_attention_2d_splitkv(
             eviction_policy="evict_last",
         )
 
-        if K_load.dtype.is_fp8():
-            K = (K_load.to(tl.float32) * tl.load(k_scale)).to(Q.dtype)
-        else:
-            K = K_load
-        if V_load.dtype.is_fp8():
-            V = (V_load.to(tl.float32) * tl.load(v_scale)).to(Q.dtype)
-        else:
-            V = V_load
+        # Keep FP8 scales in FP32; the intermediate also preserves FNUZ decoding.
+        K = K_load.to(tl.float32).to(Q.dtype) if K_load.dtype.is_fp8() else K_load
+        V = V_load.to(tl.float32).to(Q.dtype) if V_load.dtype.is_fp8() else V_load
 
         scores = scale * tl.dot(Q, K)
+        if K_load.dtype.is_fp8():
+            scores *= tl.load(k_scale)
         scores = tl.where(
             head_mask[:, None] & token_mask[None, :], scores, float("-inf")
         )
@@ -469,6 +465,9 @@ def kernel_paged_attention_2d_splitkv(
         L = L * alpha + block_sum
         M = new_max
         acc += tl.dot(probabilities.to(V.dtype), V)
+
+    if value_cache_ptr.dtype.element_ty.is_fp8():
+        acc *= tl.load(v_scale)
 
     mid_out_offset = (
         seq_idx * mid_out_stride_0
@@ -785,6 +784,8 @@ def _paged_attention_2d_splitkv_decode(
         )
 
     if actual_max_splits == 1:
+        from vllm.platforms.rocm import on_gfx12x
+
         fallback_block_size = _choose_fallback_block_size(physical_block_size)
         kernel_paged_attention_2d[(batch_size, num_kv_heads)](
             output_ptr=output,
@@ -827,9 +828,7 @@ def _paged_attention_2d_splitkv_decode(
             query_start_len_ptr=query_start_loc,
             USE_SINKS=False,
             USE_FP8=False,
-            num_warps=8 if is_fp8_kv and head_size == 256 else 4,
-            num_stages=1,
-            waves_per_eu=1,
+            num_warps=8 if is_fp8_kv and on_gfx12x() else 4,
         )
         return output
 
@@ -1242,12 +1241,5 @@ def chunked_prefill_paged_decode(
             query_start_len_ptr=query_start_loc,
             USE_SINKS=sinks is not None,
             USE_FP8=output_scale is not None,
-            num_warps=(
-                8
-                if key_cache.dtype in (torch.float8_e4m3fn, torch.float8_e4m3fnuz)
-                and head_size == 256
-                else 4
-            ),
-            num_stages=1,
-            waves_per_eu=1,
+            num_warps=(8 if key_cache.element_size() == 1 and on_gfx12x() else 4),
         )

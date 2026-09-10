@@ -14,6 +14,7 @@ from flydsl.expr import math as fmath
 from .rdna4_splitkv_common import (
     LOG2E,
     WAVE_SIZE,
+    _decode_fp8,
     _dequant_fp8x8,
     _flat_view,
     _wave_reduce,
@@ -63,6 +64,7 @@ def compile_gqa_stage(
     K_FRAGMENTS = head_dim // 16
 
     query_type = fx.BFloat16 if dtype == "bf16" else fx.Float16
+    pv_type = fx.BFloat16 if kv_dtype == "bf16" else fx.Float16
     cache_type = {
         "bf16": fx.BFloat16,
         "fp16": fx.Float16,
@@ -142,7 +144,7 @@ def compile_gqa_stage(
 
         storage = fx.SharedAllocator().allocate(SharedStorage).peek()
         value_tile = fx.make_view(
-            fx.recast_iter(fx.Float16, storage.value.ptr),
+            fx.recast_iter(pv_type, storage.value.ptr),
             fx.make_layout((HEAD_DIM, TILE_TOKENS), (TILE_TOKENS, 1)),
         )
         scores = fx.make_view(
@@ -150,7 +152,7 @@ def compile_gqa_stage(
             fx.make_layout((QUERY_ROWS, TILE_TOKENS), (TILE_TOKENS, 1)),
         )
         weights = fx.make_view(
-            fx.recast_iter(fx.Float16, storage.query_or_scores.ptr),
+            fx.recast_iter(pv_type, storage.query_or_scores.ptr),
             fx.make_layout((QUERY_ROWS, TILE_TOKENS), (TILE_TOKENS, 1)),
         )
         row_scale = fx.make_view(storage.row_scale.ptr, fx.make_layout(QUERY_ROWS, 1))
@@ -226,7 +228,7 @@ def compile_gqa_stage(
         lds_barrier()
 
         qk_mma = fx.make_mma_atom(fx.rocdl.WMMA(16, 16, 16, qk_type, fx.Float32))
-        fp16_mma = fx.make_mma_atom(fx.rocdl.WMMA(16, 16, 16, fx.Float16, fx.Float32))
+        pv_mma = fx.make_mma_atom(fx.rocdl.WMMA(16, 16, 16, pv_type, fx.Float32))
         neg_inf = fx.Float32(float("-inf"))
         zero = fx.Float32(0.0)
         init_state = [neg_inf, zero] + [zero for _ in range_constexpr(8)]
@@ -246,11 +248,11 @@ def compile_gqa_stage(
             for _ in range_constexpr(HEAD_DIM // 128)
         ]
         probability_fragments = [
-            fx.make_rmem_tensor(fx.make_layout(8, 1), fx.Float16)
+            fx.make_rmem_tensor(fx.make_layout(8, 1), pv_type)
             for _ in range_constexpr(TOKEN_FRAGMENTS)
         ]
         value_fragments = [
-            fx.make_rmem_tensor(fx.make_layout(8, 1), fx.Float16)
+            fx.make_rmem_tensor(fx.make_layout(8, 1), pv_type)
             for _ in range_constexpr(TOKEN_FRAGMENTS)
         ]
         output_fragment = fx.make_rmem_tensor(fx.make_layout(8, 1), fx.Float32)
@@ -287,7 +289,7 @@ def compile_gqa_stage(
                 if const_expr(is_fp8):
                     key_values = _dequant_fp8x8(
                         fx.Vector(key_fragments[key_dimension_block].load()),
-                        k_scale,
+                        fx.Float32(1.0),
                         query_type,
                         is_fp8fnuz=is_fp8fnuz,
                     )
@@ -315,15 +317,14 @@ def compile_gqa_stage(
                 )
                 if const_expr(is_fp8):
                     value_element = fx.Float32(
-                        fx.rocdl.cvt_f32_fp8(fx.Int32(raw_value[value_index]), 0)
+                        _decode_fp8(
+                            fx.Int32(raw_value[value_index]), 0, is_fp8fnuz=is_fp8fnuz
+                        )
                     )
-                    if const_expr(is_fp8fnuz):
-                        value_element = value_element * 0.5
-                    value_element = value_element * v_scale
                 else:
                     value_element = fx.Float32(value[value_index])
                 value_tile[d, value_token_local] = value_token_valid.select(
-                    value_element.to(fx.Float16), fx.Float16(0.0)
+                    value_element.to(pv_type), pv_type(0.0)
                 )
             lds_barrier()
 
@@ -370,7 +371,7 @@ def compile_gqa_stage(
                         )
                     ):
                         scores[score_row_base + score_row, score_column] = (
-                            score_values[score_row] * softmax_scale
+                            score_values[score_row] * softmax_scale * k_scale
                         )
             if const_expr(HEAD_DIM == 256 and query_group_size == 4):  # noqa: SIM102
                 if (wave >= QK_WAVES) & (wave < 2 * QK_WAVES):
@@ -409,7 +410,7 @@ def compile_gqa_stage(
                     )
                     if lane < 16:
                         scores[1, token_block * 16 + lane] = (
-                            repair_score[0] * softmax_scale
+                            repair_score[0] * softmax_scale * k_scale
                         )
             lds_barrier()
 
@@ -430,7 +431,9 @@ def compile_gqa_stage(
                 gpu.shuffle_idx(_wave_reduce(probability, "sum"), 0, WAVE_SIZE)
             )
             next_sum = running_sum * old_scale + tile_sum
-            weights[wave, lane] = probability.to(fx.Float16)
+            # Weights reuse the FP32 score storage across different waves.
+            lds_barrier()
+            weights[wave, lane] = probability.to(pv_type)
             row_scale[wave] = old_scale
             lds_barrier()
 
@@ -454,7 +457,7 @@ def compile_gqa_stage(
                             d, token_base + element
                         ]
                     fx.mma_atom_call(
-                        fp16_mma,
+                        pv_mma,
                         output_fragment,
                         probability_fragments[token_fragment],
                         value_fragments[token_fragment],
@@ -486,7 +489,7 @@ def compile_gqa_stage(
                         + split * mo_stride2
                         + d
                     )
-                    mid_out[out_index] = has_tokens.select(partial, zero)
+                    mid_out[out_index] = has_tokens.select(partial * v_scale, zero)
         if (lane == 0) & (wave < query_group_size):
             lse = fx.Float32(results[0]) + fmath.log2(final_sum) / LOG2E
             lse_index = (
