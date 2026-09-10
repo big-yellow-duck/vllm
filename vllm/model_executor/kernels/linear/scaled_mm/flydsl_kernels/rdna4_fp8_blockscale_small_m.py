@@ -1,10 +1,9 @@
-#!/usr/bin/env python3
-# ruff: noqa: B008 -- FlyDSL launch signatures require typed stream defaults
-
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+# ruff: noqa: B008 -- FlyDSL launch signatures require typed stream defaults
+# ruff: noqa: SIM114 -- Keep compile-time and device predicates separate
 
-"""RDNA4 block-scaled FP8 GEMM implementation for M1--M64 shapes.
+"""RDNA4 block-scaled FP8 GEMM for decode and narrow short-prefill shapes.
 
 This is a raw-weight kernel: ``weight`` is the ordinary row-major ``[N, K]``
 tensor consumed by vLLM.  No preshuffle or persistent workspace is part of the
@@ -29,7 +28,6 @@ import flydsl.expr as fx
 from flydsl.expr import const_expr, range_constexpr
 from flydsl.expr.typing import Vector as Vec
 
-from .gfx12_sync import lds_fence_signal, lds_fence_wait
 from .rdna4_fp8_blockscale_common import (
     SCALE_K,
     WAVE_SIZE,
@@ -39,7 +37,6 @@ from .rdna4_fp8_blockscale_common import (
     _f32_to_bf16_rne,
     _load_f32,
     _load_fp8_fragment_buffer,
-    _load_fp8_fragment_ptr,
     _make_buffer,
     _store_bf16,
 )
@@ -52,12 +49,28 @@ class KernelConfig:
     row_tiles: int
     threads: int
     split_k: int = 1
+    rotate_k: int = 0
+    load_batch: int = 0
+    m_fast: bool = False
+    hardware_bounds: bool = False
+    capped_split: bool = False
+
+
+def _use_tiled_decode_split(m: int, n: int, k: int) -> bool:
+    """Keep larger split grids within their measured low-K reuse regime."""
+    tiles = ((m + 15) // 16) * (n // 16)
+    return (
+        16 < m <= 256
+        and n <= 1024
+        and k >= 1024
+        and (tiles <= 256 or (m > 64 and tiles <= 512 and k <= 4096))
+    )
 
 
 def select_kernel_config(m: int, n: int, k: int) -> KernelConfig:
-    """Select the same M1--M64 micro-route as the current vLLM HIP kernel."""
-    if not 1 <= m <= 64:
-        raise ValueError(f"RDNA4 small-M route requires 1 <= M <= 64, got {m}")
+    """Select packed rows or a single-launch split for underfilled grids."""
+    if not 1 <= m <= 256:
+        raise ValueError(f"RDNA4 small-M route requires 1 <= M <= 256, got {m}")
     if n <= 0 or n % 128:
         raise ValueError(
             f"RDNA4 small-M route requires positive N divisible by 128, got {n}"
@@ -67,31 +80,29 @@ def select_kernel_config(m: int, n: int, k: int) -> KernelConfig:
             f"RDNA4 small-M route requires positive K divisible by 128, got {k}"
         )
 
-    n_groups = n // 128
-    if m == 2 and n_groups <= 64:
-        return KernelConfig(block_n=64, row_tiles=1, threads=64, split_k=2)
-    if m == 1:
-        if n >= 16384:
-            return KernelConfig(block_n=64, row_tiles=1, threads=64)
-        return KernelConfig(
-            block_n=128,
-            row_tiles=1,
-            threads=128,
-            split_k=2,
-        )
-    if m == 4 and n_groups <= 64:
-        return KernelConfig(block_n=64, row_tiles=1, threads=64)
     if m <= 16:
-        return KernelConfig(block_n=128, row_tiles=1, threads=128)
-    if (
-        n <= 4096
-        or (m <= 32 and n <= 8192)
-        or (n >= 16384 and 39 <= m <= 48 and k >= 8192)
-    ):
-        return KernelConfig(block_n=128, row_tiles=1, threads=128)
-    if n >= 16384 and 33 <= m <= 38:
-        return KernelConfig(block_n=128, row_tiles=4, threads=128)
-    return KernelConfig(block_n=128, row_tiles=2, threads=128)
+        if n <= 3072 and k >= 1024:
+            splits = 8 if n <= 1024 else 4
+            return KernelConfig(
+                16, 1, splits * WAVE_SIZE, split_k=splits, rotate_k=2, load_batch=8
+            )
+        return KernelConfig(64, 1, 64, rotate_k=2, load_batch=8)
+    if _use_tiled_decode_split(m, n, k):
+        return KernelConfig(
+            16,
+            1,
+            4 * WAVE_SIZE,
+            split_k=4,
+            rotate_k=2,
+            load_batch=8,
+            capped_split=((m + 15) // 16) * (n // 16) > 256,
+        )
+    if m > 64:
+        raise ValueError(
+            "RDNA4 M > 64 split route requires N <= 1024, K >= 1024, "
+            "and at most 256 output tiles (512 when K <= 4096)"
+        )
+    return KernelConfig(64, 2, 64, rotate_k=2, load_batch=8, m_fast=True)
 
 
 def _create_packed_module(m: int, n: int, k: int, stride_b: int, config: KernelConfig):
@@ -100,6 +111,16 @@ def _create_packed_module(m: int, n: int, k: int, stride_b: int, config: KernelC
     assert config.block_n == config.threads
     assert config.block_n in (64, 128)
     assert config.row_tiles in (1, 2, 4)
+    assert config.load_batch in (0, 1, 2, 4, 8)
+    config_signature = (
+        config.block_n,
+        config.row_tiles,
+        config.threads,
+        config.rotate_k,
+        config.load_batch,
+        config.m_fast,
+        config.hardware_bounds,
+    )
 
     fp8 = fx.Float8E4M3FN
     f32 = fx.Float32
@@ -124,8 +145,12 @@ def _create_packed_module(m: int, n: int, k: int, stride_b: int, config: KernelC
         wave = tid // fx.Int32(WAVE_SIZE)
         lane_col = lane % fx.Int32(WMMA_N)
         lane_row_base = (lane // fx.Int32(WMMA_N)) * fx.Int32(8)
-        block_row = fx.block_idx.y * fx.Int32(config.row_tiles * WMMA_M)
-        n0 = fx.block_idx.x * fx.Int32(config.block_n) + wave * fx.Int32(2 * WMMA_N)
+        pid_n, pid_m = fx.block_idx.x, fx.block_idx.y
+        if const_expr(config.m_fast):
+            pid_n = fx.block_idx.x // fx.Int32(grid_m)
+            pid_m = fx.block_idx.x % fx.Int32(grid_m)
+        block_row = pid_m * fx.Int32(config.row_tiles * WMMA_M)
+        n0 = pid_n * fx.Int32(config.block_n) + wave * fx.Int32(2 * WMMA_N)
 
         a_buf = _make_buffer(arg_a, fp8, 8, m * k)
         b_buf = _make_buffer(arg_b, fp8, 8, n * stride_b)
@@ -142,7 +167,12 @@ def _create_packed_module(m: int, n: int, k: int, stride_b: int, config: KernelC
             for j in range_constexpr(2):
                 totals[rt][j].fill(0)
 
-        for kb in range(0, scale_blocks, 1):
+        for iteration in range(0, scale_blocks, 1):
+            kb = iteration
+            if const_expr(config.rotate_k):
+                kb = (iteration + pid_n * fx.Int32(config.rotate_k)) % fx.Int32(
+                    scale_blocks
+                )
             partials = [
                 [fx.make_rmem_tensor(8, f32) for _ in range_constexpr(2)]
                 for _ in range_constexpr(config.row_tiles)
@@ -151,47 +181,108 @@ def _create_packed_module(m: int, n: int, k: int, stride_b: int, config: KernelC
                 for j in range_constexpr(2):
                     partials[rt][j].fill(0)
 
-            if const_expr(m == 1 and n >= 16384):
-                for ks_group in range_constexpr(2):
-                    a_frags = [fx.make_rmem_tensor(8, fp8) for _ in range_constexpr(4)]
+            if const_expr(config.load_batch or (m == 1 and n >= 16384)):
+                batch = const_expr(config.load_batch or 4)
+                for ks_group in range_constexpr(8 // batch):
+                    a_frags = [
+                        [fx.make_rmem_tensor(8, fp8) for _ in range_constexpr(batch)]
+                        for _ in range_constexpr(config.row_tiles)
+                    ]
                     b_frags = [
                         [fx.make_rmem_tensor(8, fp8) for _ in range_constexpr(2)]
-                        for _ in range_constexpr(4)
+                        for _ in range_constexpr(batch)
                     ]
-                    for ks_local in range_constexpr(4):
-                        ks = ks_group * 4 + ks_local
-                        k_lane = (
-                            kb * fx.Int32(SCALE_K)
-                            + fx.Int32(ks * WMMA_K)
-                            + (lane // fx.Int32(16)) * fx.Int32(8)
-                        )
-                        for j in range_constexpr(2):
-                            b_row = n0 + fx.Int32(j * WMMA_N) + lane_col
-                            _load_fp8_fragment_buffer(
-                                b_buf,
-                                b_row * fx.Int32(stride_b) + k_lane,
-                                b_frags[ks_local][j],
+                    if const_expr(config.row_tiles == 1):
+                        for ks_local in range_constexpr(batch):
+                            ks = ks_group * batch + ks_local
+                            k_lane = kb * fx.Int32(SCALE_K) + (
+                                lane // fx.Int32(16)
+                            ) * fx.Int32(8)
+                            for rt in range_constexpr(config.row_tiles):
+                                a_frags[rt][ks_local].fill(0)
+                                global_row = (
+                                    block_row
+                                    + fx.Int32(rt * WMMA_M)
+                                    + (lane % fx.Int32(WMMA_M))
+                                )
+                                if const_expr(config.hardware_bounds):
+                                    _load_fp8_fragment_buffer(
+                                        a_buf,
+                                        global_row * fx.Int32(k)
+                                        + k_lane
+                                        + fx.Int32(ks * WMMA_K),
+                                        a_frags[rt][ks_local],
+                                    )
+                                elif global_row < fx.Int32(m):
+                                    _load_fp8_fragment_buffer(
+                                        a_buf,
+                                        global_row * fx.Int32(k)
+                                        + k_lane
+                                        + fx.Int32(ks * WMMA_K),
+                                        a_frags[rt][ks_local],
+                                    )
+                        for ks_local in range_constexpr(batch):
+                            ks = ks_group * batch + ks_local
+                            k_lane = kb * fx.Int32(SCALE_K) + (
+                                lane // fx.Int32(16)
+                            ) * fx.Int32(8)
+                            for j in range_constexpr(2):
+                                b_row = n0 + fx.Int32(j * WMMA_N) + lane_col
+                                _load_fp8_fragment_buffer(
+                                    b_buf,
+                                    b_row * fx.Int32(stride_b)
+                                    + k_lane
+                                    + fx.Int32(ks * WMMA_K),
+                                    b_frags[ks_local][j],
+                                )
+                    else:
+                        for ks_local in range_constexpr(batch):
+                            ks = ks_group * batch + ks_local
+                            k_lane = (
+                                kb * fx.Int32(SCALE_K)
+                                + fx.Int32(ks * WMMA_K)
+                                + (lane // fx.Int32(16)) * fx.Int32(8)
                             )
-                        a_frags[ks_local].fill(0)
-                        global_row = block_row + (lane % fx.Int32(WMMA_M))
-                        if global_row < fx.Int32(m):
-                            _load_fp8_fragment_buffer(
-                                a_buf,
-                                global_row * fx.Int32(k) + k_lane,
-                                a_frags[ks_local],
-                            )
-                    for ks_local in range_constexpr(4):
-                        for j in range_constexpr(2):
-                            fx.gemm(
-                                mma,
-                                partials[0][j],
-                                a_frags[ks_local],
-                                b_frags[ks_local][j],
-                                partials[0][j],
-                            )
-                    fx.rocdl.sched_vmem(12)
-                    fx.rocdl.sched_mfma(8)
-                    fx.rocdl.sched_barrier(0)
+                            for j in range_constexpr(2):
+                                b_row = n0 + fx.Int32(j * WMMA_N) + lane_col
+                                _load_fp8_fragment_buffer(
+                                    b_buf,
+                                    b_row * fx.Int32(stride_b) + k_lane,
+                                    b_frags[ks_local][j],
+                                )
+                            for rt in range_constexpr(config.row_tiles):
+                                a_frags[rt][ks_local].fill(0)
+                                global_row = (
+                                    block_row
+                                    + fx.Int32(rt * WMMA_M)
+                                    + (lane % fx.Int32(WMMA_M))
+                                )
+                                if const_expr(config.hardware_bounds):
+                                    _load_fp8_fragment_buffer(
+                                        a_buf,
+                                        global_row * fx.Int32(k) + k_lane,
+                                        a_frags[rt][ks_local],
+                                    )
+                                elif global_row < fx.Int32(m):
+                                    _load_fp8_fragment_buffer(
+                                        a_buf,
+                                        global_row * fx.Int32(k) + k_lane,
+                                        a_frags[rt][ks_local],
+                                    )
+                    for ks_local in range_constexpr(batch):
+                        for rt in range_constexpr(config.row_tiles):
+                            for j in range_constexpr(2):
+                                fx.gemm(
+                                    mma,
+                                    partials[rt][j],
+                                    a_frags[rt][ks_local],
+                                    b_frags[ks_local][j],
+                                    partials[rt][j],
+                                )
+                    if const_expr(config.row_tiles > 1):
+                        fx.rocdl.sched_vmem((2 + config.row_tiles) * batch)
+                        fx.rocdl.sched_mfma(2 * config.row_tiles * batch)
+                        fx.rocdl.sched_barrier(0)
             else:
                 for ks in range_constexpr(SCALE_K // WMMA_K):
                     b_frags = [fx.make_rmem_tensor(8, fp8) for _ in range_constexpr(2)]
@@ -213,7 +304,13 @@ def _create_packed_module(m: int, n: int, k: int, stride_b: int, config: KernelC
                         a_frag.fill(0)
                         local_row = fx.Int32(rt * WMMA_M) + (lane % fx.Int32(WMMA_M))
                         global_row = block_row + local_row
-                        if global_row < fx.Int32(m):
+                        if const_expr(config.hardware_bounds):
+                            _load_fp8_fragment_buffer(
+                                a_buf,
+                                global_row * fx.Int32(k) + k_lane,
+                                a_frag,
+                            )
+                        elif global_row < fx.Int32(m):
                             _load_fp8_fragment_buffer(
                                 a_buf,
                                 global_row * fx.Int32(k) + k_lane,
@@ -250,12 +347,20 @@ def _create_packed_module(m: int, n: int, k: int, stride_b: int, config: KernelC
                             + lane_row_base
                             + fx.Int32(value_idx)
                         )
-                        valid = global_row < fx.Int32(m)
-                        safe_row = valid.select(global_row, fx.Int32(0))
-                        a_scale = _load_f32(
-                            as_buf, safe_row * fx.Int32(scale_blocks) + kb
-                        )
-                        scales.append(valid.select(a_scale * b_scale, f32(0.0)))
+                        if const_expr(value_idx >= m):
+                            scales.append(f32(0.0))
+                        elif const_expr(config.hardware_bounds):
+                            a_scale = _load_f32(
+                                as_buf, global_row * fx.Int32(scale_blocks) + kb
+                            )
+                            scales.append(a_scale * b_scale)
+                        else:
+                            valid = global_row < fx.Int32(m)
+                            safe_row = valid.select(global_row, fx.Int32(0))
+                            a_scale = _load_f32(
+                                as_buf, safe_row * fx.Int32(scale_blocks) + kb
+                            )
+                            scales.append(valid.select(a_scale * b_scale, f32(0.0)))
                 for j in range_constexpr(2):
                     total_v = Vec(totals[rt][j].load())
                     partial_v = Vec(partials[rt][j].load())
@@ -273,19 +378,19 @@ def _create_packed_module(m: int, n: int, k: int, stride_b: int, config: KernelC
                     _store_bf16(out_buf, col, value)
         else:
             for rt in range_constexpr(config.row_tiles):
-                for value_idx in range_constexpr(8):
+                for value_idx in range_constexpr(min(8, m)):
                     global_row = (
                         block_row
                         + fx.Int32(rt * WMMA_M)
                         + lane_row_base
                         + fx.Int32(value_idx)
                     )
-                    if global_row < fx.Int32(m):
-                        for j in range_constexpr(2):
-                            col = n0 + fx.Int32(j * WMMA_N) + lane_col
-                            value = _f32_to_bf16_rne(
-                                Vec(totals[rt][j].load())[value_idx]
-                            )
+                    for j in range_constexpr(2):
+                        col = n0 + fx.Int32(j * WMMA_N) + lane_col
+                        value = _f32_to_bf16_rne(Vec(totals[rt][j].load())[value_idx])
+                        if const_expr(config.hardware_bounds):
+                            _store_bf16(out_buf, global_row * fx.Int32(n) + col, value)
+                        elif global_row < fx.Int32(m):
                             _store_bf16(out_buf, global_row * fx.Int32(n) + col, value)
 
     @flyc.jit
@@ -297,391 +402,22 @@ def _create_packed_module(m: int, n: int, k: int, stride_b: int, config: KernelC
         arg_out: fx.Tensor,
         stream: fx.Stream = fx.Stream(None),
     ):
+        assert const_expr(
+            config_signature
+            == (
+                config.block_n,
+                config.row_tiles,
+                config.threads,
+                config.rotate_k,
+                config.load_batch,
+                config.m_fast,
+                config.hardware_bounds,
+            )
+        )
         packed_kernel(arg_a, arg_b, arg_as, arg_bs, arg_out).launch(
-            grid=(n // config.block_n, grid_m, 1),
-            block=(config.threads, 1, 1),
-            stream=stream,
-        )
-
-    return launch
-
-
-def _create_m4_n64_module(n: int, k: int, stride_b: int, config: KernelConfig):
-    """Create the cache-resident two-wave M4 specialization."""
-    assert (config.block_n, config.threads, config.split_k) == (64, 64, 1)
-
-    fp8 = fx.Float8E4M3FN
-    f32 = fx.Float32
-    bf16 = fx.BFloat16
-    scale_blocks = k // SCALE_K
-
-    @flyc.kernel
-    def m4_kernel(
-        arg_a: fx.Tensor,
-        arg_b: fx.Tensor,
-        arg_as: fx.Tensor,
-        arg_bs: fx.Tensor,
-        arg_out: fx.Tensor,
-    ):
-        tid = fx.thread_idx.x
-        wave = tid // fx.Int32(WAVE_SIZE)
-        lane = tid % fx.Int32(WAVE_SIZE)
-        lane_col = lane % fx.Int32(WMMA_N)
-        n0 = fx.block_idx.x * fx.Int32(64) + wave * fx.Int32(32)
-
-        a_ptr = fx.recast_iter(fx.Uint8, fx.get_iter(arg_a))
-        b_ptr = fx.recast_iter(fx.Uint8, fx.get_iter(arg_b))
-        as_ptr = fx.recast_iter(f32, fx.get_iter(arg_as))
-        bs_ptr = fx.recast_iter(f32, fx.get_iter(arg_bs))
-        out_buf = _make_buffer(arg_out, bf16, 1, 4 * n * 2)
-
-        mma = fx.make_mma_atom(fx.rocdl.WMMA(WMMA_M, WMMA_N, WMMA_K, fp8, f32))
-        totals = [fx.make_rmem_tensor(8, f32) for _ in range_constexpr(2)]
-        for j in range_constexpr(2):
-            totals[j].fill(0)
-
-        for kb in range(0, scale_blocks, 1):
-            partials = [fx.make_rmem_tensor(8, f32) for _ in range_constexpr(2)]
-            for j in range_constexpr(2):
-                partials[j].fill(0)
-
-            # Match the HIP specialization's two-slice load batch: expose all
-            # six 64-bit loads before issuing the four dependent WMMAs.
-            for ks_pair in range_constexpr(SCALE_K // (2 * WMMA_K)):
-                k_lane = (
-                    kb * fx.Int32(SCALE_K)
-                    + fx.Int32(ks_pair * 2 * WMMA_K)
-                    + (lane // fx.Int32(16)) * fx.Int32(8)
-                )
-                a_frags = [fx.make_rmem_tensor(8, fp8) for _ in range_constexpr(2)]
-                for ki in range_constexpr(2):
-                    a_frags[ki].fill(0)
-                a_row = lane % fx.Int32(WMMA_M)
-                if a_row < fx.Int32(4):
-                    for ki in range_constexpr(2):
-                        _load_fp8_fragment_ptr(
-                            a_ptr,
-                            a_row * fx.Int32(k) + k_lane + fx.Int32(ki * WMMA_K),
-                            a_frags[ki],
-                        )
-
-                b_frags = [
-                    [fx.make_rmem_tensor(8, fp8) for _ in range_constexpr(2)]
-                    for _ in range_constexpr(2)
-                ]
-                for j in range_constexpr(2):
-                    b_row = n0 + fx.Int32(j * WMMA_N) + lane_col
-                    for ki in range_constexpr(2):
-                        _load_fp8_fragment_ptr(
-                            b_ptr,
-                            b_row * fx.Int32(stride_b) + k_lane + fx.Int32(ki * WMMA_K),
-                            b_frags[ki][j],
-                        )
-                for ki in range_constexpr(2):
-                    for j in range_constexpr(2):
-                        fx.gemm(
-                            mma, partials[j], a_frags[ki], b_frags[ki][j], partials[j]
-                        )
-
-            b_group = n0 // fx.Int32(SCALE_K)
-            b_scale = f32(fx.ptr_load(bs_ptr + b_group * fx.Int32(scale_blocks) + kb))
-            scales = [
-                f32(fx.ptr_load(as_ptr + fx.Int32(row * scale_blocks) + kb)) * b_scale
-                for row in range_constexpr(4)
-            ]
-            for j in range_constexpr(2):
-                total_v = Vec(totals[j].load())
-                partial_v = Vec(partials[j].load())
-                totals[j].store(
-                    Vec.from_elements(
-                        [
-                            (
-                                total_v[x] + partial_v[x] * scales[x]
-                                if x < 4
-                                else total_v[x]
-                            )
-                            for x in range_constexpr(8)
-                        ],
-                        f32,
-                    )
-                )
-
-        if lane < fx.Int32(16):
-            for row in range_constexpr(4):
-                for j in range_constexpr(2):
-                    col = n0 + fx.Int32(j * WMMA_N) + lane_col
-                    value = _f32_to_bf16_rne(Vec(totals[j].load())[row])
-                    _store_bf16(out_buf, fx.Int32(row * n) + col, value)
-
-    @flyc.jit
-    def launch(
-        arg_a: fx.Tensor,
-        arg_b: fx.Tensor,
-        arg_as: fx.Tensor,
-        arg_bs: fx.Tensor,
-        arg_out: fx.Tensor,
-        stream: fx.Stream = fx.Stream(None),
-    ):
-        m4_kernel(arg_a, arg_b, arg_as, arg_bs, arg_out).launch(
-            grid=(n // 64, 1, 1), block=(64, 1, 1), stream=stream
-        )
-
-    return launch
-
-
-def _create_splitk_module(m: int, n: int, k: int, stride_b: int, config: KernelConfig):
-    """Create the M1/M2 two-way K-split decode kernels."""
-    assert m in (1, 2)
-    assert config.split_k == 2
-    assert (m, config.block_n, config.threads) in ((1, 128, 128), (2, 64, 64))
-
-    fp8 = fx.Float8E4M3FN
-    f32 = fx.Float32
-    bf16 = fx.BFloat16
-    scale_blocks = k // SCALE_K
-    half_blocks = (scale_blocks + 1) // 2
-    waves = config.threads // WAVE_SIZE
-    shared_elems = waves * 4 * m * WMMA_N
-
-    @fx.struct
-    class SharedStorage:
-        partial: fx.Array[f32, shared_elems, 16]
-
-    @flyc.kernel
-    def splitk_kernel(
-        arg_a: fx.Tensor,
-        arg_b: fx.Tensor,
-        arg_as: fx.Tensor,
-        arg_bs: fx.Tensor,
-        arg_out: fx.Tensor,
-    ):
-        tid = fx.thread_idx.x
-        wave = tid // fx.Int32(WAVE_SIZE)
-        lane = tid % fx.Int32(WAVE_SIZE)
-        lane_col = lane % fx.Int32(WMMA_N)
-        half_id = (wave % fx.Int32(2)) if const_expr(m == 1) else wave
-        pair = (wave // fx.Int32(2)) if const_expr(m == 1) else fx.Int32(0)
-        n0 = fx.block_idx.x * fx.Int32(config.block_n) + pair * fx.Int32(64)
-        kb_begin = half_id * fx.Int32(half_blocks)
-        kb_end_unclamped = kb_begin + fx.Int32(half_blocks)
-        kb_end = (kb_end_unclamped < fx.Int32(scale_blocks)).select(
-            kb_end_unclamped, fx.Int32(scale_blocks)
-        )
-
-        a_ptr = fx.recast_iter(fx.Uint8, fx.get_iter(arg_a))
-        b_ptr = fx.recast_iter(fx.Uint8, fx.get_iter(arg_b))
-        a_buf = _make_buffer(arg_a, fp8, 8, m * k)
-        b_buf = _make_buffer(arg_b, fp8, 8, n * stride_b)
-        as_ptr = fx.recast_iter(f32, fx.get_iter(arg_as))
-        bs_ptr = fx.recast_iter(f32, fx.get_iter(arg_bs))
-        out_ptr = fx.recast_iter(bf16, fx.get_iter(arg_out))
-        shared = (
-            fx.SharedAllocator()
-            .allocate(SharedStorage)
-            .peek()
-            .partial.view(fx.make_layout(shared_elems, 1))
-        )
-
-        mma = fx.make_mma_atom(fx.rocdl.WMMA(WMMA_M, WMMA_N, WMMA_K, fp8, f32))
-        totals = [fx.make_rmem_tensor(8, f32) for _ in range_constexpr(4)]
-        for j in range_constexpr(4):
-            totals[j].fill(0)
-
-        for kb in range(kb_begin, kb_end, 1):
-            partials = [fx.make_rmem_tensor(8, f32) for _ in range_constexpr(4)]
-            for j in range_constexpr(4):
-                partials[j].fill(0)
-
-            if const_expr(m == 1):
-                if const_expr(n >= 16384):
-                    # Streaming the very-wide projection benefits more from a
-                    # second resident wave than from exposing the full K128
-                    # load train. Keep four K16 slices live at a time here.
-                    for ks_group in range_constexpr(2):
-                        a_frags = [
-                            fx.make_rmem_tensor(8, fp8) for _ in range_constexpr(4)
-                        ]
-                        b_frags = [
-                            [fx.make_rmem_tensor(8, fp8) for _ in range_constexpr(4)]
-                            for _ in range_constexpr(4)
-                        ]
-                        for ks_local in range_constexpr(4):
-                            ks = ks_group * 4 + ks_local
-                            k_lane = (
-                                kb * fx.Int32(SCALE_K)
-                                + fx.Int32(ks * WMMA_K)
-                                + (lane // fx.Int32(16)) * fx.Int32(8)
-                            )
-                            _load_fp8_fragment_buffer(a_buf, k_lane, a_frags[ks_local])
-                            for j in range_constexpr(4):
-                                b_row = n0 + fx.Int32(j * WMMA_N) + lane_col
-                                _load_fp8_fragment_buffer(
-                                    b_buf,
-                                    b_row * fx.Int32(stride_b) + k_lane,
-                                    b_frags[ks_local][j],
-                                )
-                        for ks_local in range_constexpr(4):
-                            for j in range_constexpr(4):
-                                fx.gemm(
-                                    mma,
-                                    partials[j],
-                                    a_frags[ks_local],
-                                    b_frags[ks_local][j],
-                                    partials[j],
-                                )
-                        fx.rocdl.sched_vmem(20)
-                        fx.rocdl.sched_mfma(16)
-                        fx.rocdl.sched_barrier(0)
-                else:
-                    # Cache-resident projections benefit from exposing the
-                    # entire K=128 block's 40 loads before its 32 WMMAs.
-                    a_frags = [
-                        fx.make_rmem_tensor(8, fp8)
-                        for _ in range_constexpr(SCALE_K // WMMA_K)
-                    ]
-                    b_frags = [
-                        [fx.make_rmem_tensor(8, fp8) for _ in range_constexpr(4)]
-                        for _ in range_constexpr(SCALE_K // WMMA_K)
-                    ]
-                    for ks in range_constexpr(SCALE_K // WMMA_K):
-                        k_lane = (
-                            kb * fx.Int32(SCALE_K)
-                            + fx.Int32(ks * WMMA_K)
-                            + (lane // fx.Int32(16)) * fx.Int32(8)
-                        )
-                        _load_fp8_fragment_buffer(a_buf, k_lane, a_frags[ks])
-                        for j in range_constexpr(4):
-                            b_row = n0 + fx.Int32(j * WMMA_N) + lane_col
-                            _load_fp8_fragment_buffer(
-                                b_buf,
-                                b_row * fx.Int32(stride_b) + k_lane,
-                                b_frags[ks][j],
-                            )
-                    for ks in range_constexpr(SCALE_K // WMMA_K):
-                        for j in range_constexpr(4):
-                            fx.gemm(
-                                mma,
-                                partials[j],
-                                a_frags[ks],
-                                b_frags[ks][j],
-                                partials[j],
-                            )
-                    fx.rocdl.sched_vmem(40)
-                    fx.rocdl.sched_mfma(32)
-                    fx.rocdl.sched_barrier(0)
-            else:
-                for ks in range_constexpr(SCALE_K // WMMA_K):
-                    k_lane = (
-                        kb * fx.Int32(SCALE_K)
-                        + fx.Int32(ks * WMMA_K)
-                        + (lane // fx.Int32(16)) * fx.Int32(8)
-                    )
-                    a_frag = fx.make_rmem_tensor(8, fp8)
-                    a_frag.fill(0)
-                    a_row = lane % fx.Int32(WMMA_M)
-                    if a_row < fx.Int32(m):
-                        _load_fp8_fragment_ptr(
-                            a_ptr, a_row * fx.Int32(k) + k_lane, a_frag
-                        )
-
-                    b_step = [fx.make_rmem_tensor(8, fp8) for _ in range_constexpr(4)]
-                    for j in range_constexpr(4):
-                        b_row = n0 + fx.Int32(j * WMMA_N) + lane_col
-                        _load_fp8_fragment_ptr(
-                            b_ptr, b_row * fx.Int32(stride_b) + k_lane, b_step[j]
-                        )
-                        fx.gemm(mma, partials[j], a_frag, b_step[j], partials[j])
-
-            if const_expr(m == 1):
-                b_group = fx.block_idx.x
-            else:
-                b_group = fx.block_idx.x // fx.Int32(2)
-            b_scale = f32(fx.ptr_load(bs_ptr + b_group * fx.Int32(scale_blocks) + kb))
-            scales = [
-                f32(fx.ptr_load(as_ptr + fx.Int32(value_idx * scale_blocks) + kb))
-                * b_scale
-                for value_idx in range_constexpr(m)
-            ]
-            for j in range_constexpr(4):
-                total_v = Vec(totals[j].load())
-                partial_v = Vec(partials[j].load())
-                updated = [
-                    total_v[x] + partial_v[x] * scales[x] if x < m else total_v[x]
-                    for x in range_constexpr(8)
-                ]
-                totals[j].store(Vec.from_elements(updated, f32))
-
-        if lane < fx.Int32(16):
-            for j in range_constexpr(4):
-                total_v = Vec(totals[j].load())
-                for row in range_constexpr(m):
-                    index = (
-                        (
-                            (wave * fx.Int32(4) + fx.Int32(j)) * fx.Int32(m)
-                            + fx.Int32(row)
-                        )
-                        * fx.Int32(16)
-                    ) + lane
-                    fx.memref_store(total_v[row], shared, index)
-        # Keep the split barrier open while computing the LDS read addresses.
-        # This matches the tuned HIP path and avoids the global-memory fence
-        # carried by a generic gpu.barrier().
-        lds_fence_signal()
-
-        frag = tid // fx.Int32(16)
-        col = tid % fx.Int32(16)
-        if const_expr(m == 1):
-            out_pair = tid // fx.Int32(64)
-            local = tid % fx.Int32(64)
-            frag = local // fx.Int32(16)
-            col = local % fx.Int32(16)
-            wave0 = out_pair * fx.Int32(2)
-            index0 = (wave0 * fx.Int32(4) + frag) * fx.Int32(16) + col
-            index1 = ((wave0 + fx.Int32(1)) * fx.Int32(4) + frag) * fx.Int32(16) + col
-            lds_fence_wait()
-            value = _f32_to_bf16_rne(
-                f32(fx.memref_load(shared, index0) + fx.memref_load(shared, index1))
-            )
-            fx.ptr_store(
-                value, out_ptr + fx.block_idx.x * fx.Int32(config.block_n) + tid
-            )
-        else:
-            lds_fence_wait()
-            for row in range_constexpr(2):
-                index0 = (frag * fx.Int32(2) + fx.Int32(row)) * fx.Int32(16) + col
-                index1 = (
-                    (fx.Int32(4) + frag) * fx.Int32(2) + fx.Int32(row)
-                ) * fx.Int32(16) + col
-                value = _f32_to_bf16_rne(
-                    f32(fx.memref_load(shared, index0) + fx.memref_load(shared, index1))
-                )
-                out_index = (
-                    fx.Int32(row * n) + fx.block_idx.x * fx.Int32(config.block_n) + tid
-                )
-                fx.ptr_store(value, out_ptr + out_index)
-
-    @flyc.jit
-    def launch(
-        arg_a: fx.Tensor,
-        arg_b: fx.Tensor,
-        arg_as: fx.Tensor,
-        arg_bs: fx.Tensor,
-        arg_out: fx.Tensor,
-        stream: fx.Stream = fx.Stream(None),
-    ):
-        kernel_attrs = {
-            "rocdl.waves_per_eu": 1,
-            "rocdl.flat_work_group_size": f"{config.threads},{config.threads}",
-        }
-        splitk_kernel(
-            arg_a,
-            arg_b,
-            arg_as,
-            arg_bs,
-            arg_out,
-            value_attrs=kernel_attrs,
-        ).launch(
-            grid=(n // config.block_n, 1, 1),
+            grid=((n // config.block_n) * grid_m, 1, 1)
+            if config.m_fast
+            else (n // config.block_n, grid_m, 1),
             block=(config.threads, 1, 1),
             stream=stream,
         )
@@ -691,15 +427,25 @@ def _create_splitk_module(m: int, n: int, k: int, stride_b: int, config: KernelC
 
 @lru_cache(maxsize=128)
 def _get_module(m: int, n: int, k: int, stride_b: int, config: KernelConfig):
-    if config.split_k == 2:
-        return _create_splitk_module(m, n, k, stride_b, config)
-    if m == 4 and config.block_n == 64:
-        return _create_m4_n64_module(n, k, stride_b, config)
+    if config.split_k in (4, 8):
+        from .rdna4_fp8_blockscale_decode_split import create_decode_split
+
+        return create_decode_split(
+            m,
+            n,
+            k,
+            stride_b,
+            config.block_n,
+            config.split_k,
+            config.load_batch,
+            config.rotate_k,
+            capped=config.capped_split,
+        )
     return _create_packed_module(m, n, k, stride_b, config)
 
 
 def _run_small_m(a, weight, a_scale, weight_scale, out, stream, m, n, k):
-    """Launch an already validated M1--M64 input."""
+    """Launch an already validated packed-row or narrow split input."""
     config = select_kernel_config(m, n, k)
     module = _get_module(m, n, k, weight.stride(0), config)
     run_compiled(module, a, weight, a_scale, weight_scale, out, stream)

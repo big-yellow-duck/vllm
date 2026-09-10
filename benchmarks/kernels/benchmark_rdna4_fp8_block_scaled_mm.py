@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Isolated FlyDSL versus HIP benchmark for RDNA4 block-scaled FP8 MM."""
+"""Compare FlyDSL and Triton RDNA4 block-scaled FP8 MM."""
 
 import argparse
 import statistics
@@ -8,9 +8,11 @@ import statistics
 import flydsl  # noqa: F401 -- load compiler libraries before PyTorch
 import torch
 
-from vllm import _custom_ops as ops
 from vllm.model_executor.kernels.linear.scaled_mm.flydsl_kernels import (
     rdna4_fp8_blockscale as rdna4_flydsl,
+)
+from vllm.model_executor.layers.quantization.utils.fp8_utils import (
+    w8a8_triton_block_scaled_mm,
 )
 
 rdna4_fp8_block_scaled_mm = rdna4_flydsl.rdna4_fp8_block_scaled_mm
@@ -26,10 +28,14 @@ DEFAULT_SHAPES = [
     (48, 17408, 5120),
     (64, 5120, 3072),
     (65, 128, 256),
+    (128, 1536, 2048),
+    (128, 1536, 4096),
     (256, 8192, 5120),
+    (512, 1536, 4096),
     (523, 5120, 8704),
     (784, 7168, 5120),
     (1024, 8192, 5120),
+    (8192, 8192, 28672),
 ]
 
 
@@ -63,22 +69,24 @@ def _inputs(m: int, n: int, k: int):
     return a, weight, a_scale, weight_scale
 
 
-def _hip_mm(a, weight, a_scale, weight_scale):
-    op = (
-        ops.rdna4_fp8_block_scaled_mm_decode
-        if a.shape[0] <= 64
-        else ops.rdna4_fp8_block_scaled_mm_prefill
+def _triton_mm(a, weight, a_scale, weight_scale):
+    return w8a8_triton_block_scaled_mm(
+        a,
+        weight,
+        a_scale,
+        weight_scale,
+        block_size=[128, 128],
+        output_dtype=torch.bfloat16,
     )
-    return op(a, weight, a_scale, weight_scale)
 
 
 def _graph_kernel_ms(fn, calls: int, replays: int) -> float:
     graph = torch.cuda.CUDAGraph()
-    torch.cuda.synchronize()
+    torch.accelerator.synchronize()
     with torch.cuda.graph(graph):
         for _ in range(calls):
             fn()
-    torch.cuda.synchronize()
+    torch.accelerator.synchronize()
 
     elapsed = []
     for _ in range(replays):
@@ -87,7 +95,7 @@ def _graph_kernel_ms(fn, calls: int, replays: int) -> float:
         start.record()
         graph.replay()
         end.record()
-        torch.cuda.synchronize()
+        torch.accelerator.synchronize()
         elapsed.append(start.elapsed_time(end) / calls)
     return statistics.median(elapsed)
 
@@ -107,39 +115,32 @@ def main() -> None:
     arch = getattr(properties, "gcnArchName", "")
     if not (arch.startswith("gfx1200") or arch.startswith("gfx1201")):
         raise RuntimeError(f"benchmark requires gfx1200 or gfx1201, got {arch!r}")
-    if not hasattr(torch.ops._rocm_C, "rdna4_fp8_block_scaled_mm_decode"):
-        raise RuntimeError("vLLM was built without the RDNA4 HIP reference")
-
     print(f"device={properties.name},arch={arch}")
     print(
-        "M,N,K,max_abs,mean_abs,flydsl_ms,hip_ms,hip_over_flydsl,"
-        "flydsl_tflops,hip_tflops"
+        "M,N,K,max_abs,mean_abs,flydsl_ms,triton_ms,triton_over_flydsl,"
+        "flydsl_tflops,triton_tflops"
     )
     for m, n, k in args.shape or DEFAULT_SHAPES:
         inputs = _inputs(m, n, k)
-        fly_out_buffer = torch.empty((m, n), device="cuda", dtype=torch.bfloat16)
-        rdna4_fp8_block_scaled_mm(*inputs, out=fly_out_buffer)
         fly_out = rdna4_fp8_block_scaled_mm(*inputs)
-        hip_out = _hip_mm(*inputs)
-        torch.cuda.synchronize()
-        torch.testing.assert_close(fly_out, hip_out, atol=0.0625, rtol=0.02)
-        error = (fly_out.float() - hip_out.float()).abs()
+        triton_out = _triton_mm(*inputs)
+        torch.accelerator.synchronize()
+        torch.testing.assert_close(fly_out, triton_out, atol=0.0625, rtol=0.02)
+        error = (fly_out.float() - triton_out.float()).abs()
 
         fly_ms = _graph_kernel_ms(
-            lambda inputs=inputs, out=fly_out_buffer: rdna4_fp8_block_scaled_mm(
-                *inputs, out=out
-            ),
+            lambda inputs=inputs: rdna4_fp8_block_scaled_mm(*inputs),
             args.calls,
             args.replays,
         )
-        hip_ms = _graph_kernel_ms(
-            lambda inputs=inputs: _hip_mm(*inputs), args.calls, args.replays
+        triton_ms = _graph_kernel_ms(
+            lambda inputs=inputs: _triton_mm(*inputs), args.calls, args.replays
         )
         print(
             f"{m},{n},{k},{error.max().item():.6f},"
-            f"{error.mean().item():.6f},{fly_ms:.6f},{hip_ms:.6f},"
-            f"{hip_ms / fly_ms:.6f},{_tflops(m, n, k, fly_ms):.3f},"
-            f"{_tflops(m, n, k, hip_ms):.3f}"
+            f"{error.mean().item():.6f},{fly_ms:.6f},{triton_ms:.6f},"
+            f"{triton_ms / fly_ms:.6f},{_tflops(m, n, k, fly_ms):.3f},"
+            f"{_tflops(m, n, k, triton_ms):.3f}"
         )
 
 

@@ -1,15 +1,12 @@
-#!/usr/bin/env python3
-# ruff: noqa: B008 -- FlyDSL launch signatures require typed stream defaults
-
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+# ruff: noqa: B008 -- FlyDSL launch signatures require typed stream defaults
 
 """LDS-tiled RDNA4 block-scaled FP8 GEMM for broad prefill shapes.
 
-The launch geometries and grouped workgroup mapping mirror the validated HIP
-implementation used by vLLM.  A and raw row-major B are staged in LDS for
-cross-wave reuse.  Every K=128 partial is completed in FP32 before its
-independent activation and weight scales are applied.
+Provides wave32 tiles for wide decode and short prefill. A and raw row-major B
+are staged in LDS for cross-wave reuse. Every K=128 partial is completed in FP32
+before its independent activation and weight scales are applied.
 """
 
 from dataclasses import dataclass
@@ -17,7 +14,7 @@ from functools import lru_cache
 
 import flydsl.compiler as flyc
 import flydsl.expr as fx
-from flydsl.expr import gpu, range_constexpr
+from flydsl.expr import const_expr, gpu, range_constexpr
 from flydsl.expr.typing import Vector as Vec
 
 from .gfx12_sync import lds_fence_signal, lds_fence_wait
@@ -46,6 +43,7 @@ class PrefillConfig:
     a_prefetch: int
     b_prefetch: int
     static_m: int = 0
+    k_rotate: int = 0
 
     @property
     def threads(self) -> int:
@@ -53,7 +51,9 @@ class PrefillConfig:
 
 
 def select_prefill_config(m: int, n: int, k: int, stride_b: int) -> PrefillConfig:
-    """Select the same broad-M tile family as the validated native HIP stack."""
+    """Select broad-M tiles and measured short-prefill specializations."""
+    if (m, n, k, stride_b) == (39, 16384, 8192, 8192):
+        return PrefillConfig(64, 128, 1, 2, 2, static_m=39, k_rotate=2)
     if m <= 64:
         raise ValueError(f"RDNA4 prefill route requires M > 64, got {m}")
     if n <= 0 or n % SCALE_K:
@@ -155,6 +155,16 @@ def _create_prefill_module(
     lds_a_elems = bm * LDA
     lds_b_elems = bn * LDB
     lds_elems = lds_a_elems + lds_b_elems
+    # FlyDSL fingerprints scalar/tuple closures, but not dataclass fields.
+    cache_tag = (
+        bm,
+        bn,
+        config.group_m,
+        config.a_prefetch,
+        config.b_prefetch,
+        static_m,
+        config.k_rotate,
+    )
 
     assert threads in (64, 128, 256)
     assert n % bn == 0
@@ -222,6 +232,8 @@ def _create_prefill_module(
         pid_m, pid_n = map_pid(pid, grid_m)
         m0 = pid_m * fx.Int32(bm)
         n0 = pid_n * fx.Int32(bn)
+        # Stagger strided weight reads across N tiles; visit every K block once.
+        first_kb = (pid_n * fx.Int32(config.k_rotate)) % fx.Int32(scale_blocks)
 
         a_buf = _make_buffer(
             arg_a,
@@ -258,7 +270,11 @@ def _create_prefill_module(
             row = v // fx.Int32(8)
             ko = (v % fx.Int32(8)) * fx.Int32(16)
             global_row = m0 + row
-            _load_fp8x16(a_buf, global_row * fx.Int32(k) + ko, staged_a[q])
+            _load_fp8x16(
+                a_buf,
+                global_row * fx.Int32(k) + first_kb * fx.Int32(SCALE_K) + ko,
+                staged_a[q],
+            )
 
         staged_b = [
             fx.make_rmem_tensor(16, fp8) for _ in range_constexpr(config.b_prefetch)
@@ -267,10 +283,17 @@ def _create_prefill_module(
             v = tid + fx.Int32(q * threads)
             row = v // fx.Int32(8)
             ko = (v % fx.Int32(8)) * fx.Int32(16)
-            _load_fp8x16(b_buf, (n0 + row) * fx.Int32(stride_b) + ko, staged_b[q])
+            _load_fp8x16(
+                b_buf,
+                (n0 + row) * fx.Int32(stride_b) + first_kb * fx.Int32(SCALE_K) + ko,
+                staged_b[q],
+            )
 
-        for kb in range(0, scale_blocks, 1):
-            if kb != 0:
+        for k_iter in range(0, scale_blocks, 1):
+            kb = fx.Int32(k_iter)
+            if const_expr(config.k_rotate != 0):
+                kb = (kb + first_kb) % fx.Int32(scale_blocks)
+            if k_iter != 0:
                 gpu.barrier()
 
             for q in range_constexpr(config.a_prefetch):
@@ -320,8 +343,12 @@ def _create_prefill_module(
             # K128 block. In vLLM the graph-pool activation can end exactly at
             # a page boundary; relying on raw-buffer OOB suppression for that
             # speculative load caused a gfx1201 page fault at M1568.
-            if kb + 1 < scale_blocks:
-                next_k0 = fx.Int32((kb + 1) * SCALE_K)
+            if k_iter + 1 < scale_blocks:
+                next_k0 = (kb + fx.Int32(1)) * fx.Int32(SCALE_K)
+                if const_expr(config.k_rotate != 0):
+                    next_k0 = ((kb + fx.Int32(1)) % fx.Int32(scale_blocks)) * fx.Int32(
+                        SCALE_K
+                    )
                 for q in range_constexpr(config.a_prefetch):
                     v = tid + fx.Int32(q * threads)
                     row = v // fx.Int32(8)
@@ -479,6 +506,7 @@ def _create_prefill_module(
         arg_m: fx.Int32,
         stream: fx.Stream = fx.Stream(None),
     ):
+        _ = cache_tag
         launch_m = fx.Int32(static_m) if static_m else arg_m
         total_blocks = ((launch_m + fx.Int32(bm - 1)) // fx.Int32(bm)) * fx.Int32(
             grid_n
@@ -507,6 +535,7 @@ def _get_prefill_module_cached(
     a_prefetch: int,
     b_prefetch: int,
     static_m: int,
+    k_rotate: int = 0,
 ):
     config = PrefillConfig(
         tile_m,
@@ -515,6 +544,7 @@ def _get_prefill_module_cached(
         a_prefetch,
         b_prefetch,
         static_m,
+        k_rotate,
     )
     return _create_prefill_module(n, k, stride_b, config)
 
@@ -539,6 +569,7 @@ def _get_prefill_module(
         config.a_prefetch,
         config.b_prefetch,
         config.static_m,
+        config.k_rotate,
     )
 
 
