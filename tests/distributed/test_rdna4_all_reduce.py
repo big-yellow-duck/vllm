@@ -3,6 +3,7 @@
 
 import ast
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -15,7 +16,6 @@ from vllm.distributed.device_communicators.rdna4_all_reduce import (
     MAPPED_ALL_REDUCE_MAX_SIZE,
     P2P_GRAPH_MIN_SIZE,
     TP2_MAPPED_BF16_MAX_SIZE,
-    TP2_P2P_EAGER_MIN_SIZE,
     TP4_EAGER_PYNCCL_SIZES,
     TP8_PYNCCL_GRAPH_RANGE,
     RDNA4AllReduce,
@@ -95,7 +95,7 @@ def test_p2p_policy_boundaries(world_size, nbytes, expected):
     tensor = _bf16_tensor(nbytes)
     assert communicator._p2p_tensor_supported(tensor) is expected
     assert communicator.should_use_graph(tensor) is expected
-    assert communicator.should_use(tensor) is (world_size == 4 and expected)
+    assert not communicator.should_use(tensor)
 
 
 @pytest.mark.parametrize("world_size", [4, 8])
@@ -142,9 +142,9 @@ def test_measured_pynccl_routing_exclusions():
     graph_only_tp2 = _bf16_tensor(P2P_GRAPH_MIN_SIZE[2])
     assert not tp2.should_use(graph_only_tp2)
     assert tp2.should_use_graph(graph_only_tp2)
-    eager_tp2 = _bf16_tensor(TP2_P2P_EAGER_MIN_SIZE)
-    assert tp2.should_use(eager_tp2)
-    assert tp2.should_use_graph(eager_tp2)
+    large_tp2 = _bf16_tensor(DEFAULT_MAX_SIZE)
+    assert not tp2.should_use(large_tp2)
+    assert tp2.should_use_graph(large_tp2)
 
     tp4 = _bare_communicator(4, max_size=DEFAULT_MAX_SIZE)
     tp4._mapped = _Delegate(True, "mapped")
@@ -155,7 +155,7 @@ def test_measured_pynccl_routing_exclusions():
 
     tp4._mapped = _Delegate(False, "mapped")
     graph_boundary = _bf16_tensor(32 * 1024 * 1024 - 64)
-    assert tp4.should_use(graph_boundary)
+    assert not tp4.should_use(graph_boundary)
     assert tp4.should_use_graph(graph_boundary)
 
 
@@ -249,9 +249,27 @@ def test_flydsl_probe_fails_closed(monkeypatch, error):
     assert not rdna4_module._is_rdna4_flydsl_available()
 
 
+@pytest.mark.parametrize(
+    "missing", [None, "generic_load", "generic_store", "AtomicOrdering"]
+)
+def test_flydsl_probe_accepts_generic_memory_api(monkeypatch, missing):
+    fx = SimpleNamespace(
+        AtomicOrdering=object(),
+        PointerType=object(),
+        inttoptr=object(),
+        generic_load=object(),
+        generic_store=object(),
+        rocdl=SimpleNamespace(SyncScope=object()),
+    )
+    if missing is not None:
+        delattr(fx, missing)
+    monkeypatch.setattr(rdna4_module.importlib, "import_module", lambda _: fx)
+    assert rdna4_module._is_rdna4_flydsl_available() is (missing is None)
+
+
 def test_public_router_has_no_eager_flydsl_imports():
     tree = ast.parse(Path(rdna4_module.__file__).read_text())
-    eager_flydsl_imports = []
+    eager_flydsl_imports: list[str] = []
     for node in tree.body:
         if isinstance(node, ast.Import):
             eager_flydsl_imports.extend(
