@@ -258,3 +258,4 @@ csrc/cpu/cpu_attn_dispatch_generated.h
 # Local context attention tuning validation artifacts
 /results/context-attention/
 /results/context-attention-restart/
+/results/offline-attention/
