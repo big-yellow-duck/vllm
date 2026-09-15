@@ -566,6 +566,39 @@ forbade retuning and left cache SHA256/mtime unchanged.
 | BF16, 3D multi-query | 75 | 7 | 66 | 2 | AITER 2.016x faster |
 | FP8, actual default fallback | 211 | 0 | 211 | 0 | AITER 5.515x faster |
 
+### Launch-grid dimensions versus segmented KV
+
+`context_attention_fwd` has a three-dimensional launch grid of
+`(batch, query_head, query_tile)`. That is **not segmented KV attention**:
+each workgroup scans the relevant cached prefix and causal current-chunk KV
+itself, and produces the final output. There is no KV-segment launch dimension
+or separate partial-attention reduction in this context path.
+
+Our autotuner changes tile sizes, warp count, and loop unrolling within this
+existing algorithm. It cannot add sequence segmentation through configuration.
+SplitKV decode is a separate path for query-length-one rows; it does not give
+`context_attention_fwd` a multi-query segmented implementation.
+
+AITER can select a grid over query blocks, KV heads, and KV segments. Segment
+workgroups compute partial attention, then a reduction merges their softmax
+maxima, exponential sums, and outputs with correct global normalization.
+This creates more KV parallelism for small queries with long cached prefixes;
+it uses the same split-KV principle as our decode kernels for multi-token work.
+It still attends to all valid KV tokens with causal masking.
+
+The matched BF16 comparison therefore used our **same tuned standard context
+algorithm** against either AITER's 2D or segmented 3D implementation. Ours won
+125/136 2D shapes; AITER won 66/75 3D shapes, rather than winning every 3D
+case. A new segmented-prefill kernel and reduction consuming the ROCM_ATTN
+packed KV layout would be needed to close this capability gap. These prefill
+results do not establish a winner against our separate SplitKV decode path.
+
+`context_attention_fwd` already supports FP8 KV loads and scale-based
+dequantization to the query dtype. The current autotune gate and tuning-cache
+identity are BF16-only; FP8 used the unchanged default launch in this benchmark.
+FP8 needs independently validated tuning configurations, rather than assuming
+that the BF16 winners are optimal for its different memory/register behavior.
+
 FP8 KV **bypasses the current BF16-only autotune gate**, even when the flag is
 enabled. These measurements compare its actual default launch, not a separately
 tuned FP8 candidate. To match attention values, FP8 current-chunk dense K/V
