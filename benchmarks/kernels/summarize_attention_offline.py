@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Aggregate two offline comparison rounds without including warmup samples."""
+"""Aggregate balanced offline rounds and retain separate repeat diagnostics."""
 
 import argparse
 import csv
@@ -18,17 +18,40 @@ def geometric_mean(values):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("root", type=Path)
+    parser.add_argument(
+        "--available-rounds",
+        action="store_true",
+        help="Use only complete rounds shared by every variant for each KV dtype.",
+    )
     args = parser.parse_args()
     variants = ("vanilla", "aiter", "ours")
     datasets = {}
     artifacts = {}
+    rounds_used = {}
+    repeatability = {}
     for kv in ("bf16", "fp8"):
+        complete_rounds = []
+        for round_number in (1, 2):
+            paths = [
+                args.root / f"round{round_number}-{variant}-{kv}/result.json"
+                for variant in variants
+            ]
+            if all(
+                p.exists() and len(json.loads(p.read_text())["rows"]) == 18
+                for p in paths
+            ):
+                complete_rounds.append(round_number)
+        if not args.available_rounds:
+            assert complete_rounds == [1, 2], f"Incomplete comparison for {kv}"
+        assert complete_rounds, f"No complete shared round for {kv}"
+        rounds_used[kv] = complete_rounds
         for variant in variants:
             for round_number in (1, 2):
                 path = args.root / f"round{round_number}-{variant}-{kv}/result.json"
+                if not path.exists():
+                    continue
                 data = json.loads(path.read_text())
                 assert data["variant"] == variant and data["kv"] == kv
-                assert len(data["rows"]) == 18, f"Incomplete matrix: {path}"
                 datasets[kv, variant, round_number] = {
                     (r["input_len"], r["output_len"], r["batch"]): r
                     for r in data["rows"]
@@ -38,6 +61,8 @@ def main():
                     "source": data["source"],
                     "commit": data["commit"],
                     "startup_s": data["engine_startup_s"],
+                    "rows_completed": len(data["rows"]),
+                    "used_in_comparison": round_number in complete_rounds,
                     "cache_unchanged_on_startup": (
                         data["tuning_cache_before_startup"]
                         == data["tuning_cache_after_startup"]
@@ -45,6 +70,20 @@ def main():
                 }
                 if variant == "ours" and round_number == 2:
                     assert artifacts[str(path)]["cache_unchanged_on_startup"]
+            first = datasets.get((kv, variant, 1), {})
+            second = datasets.get((kv, variant, 2), {})
+            common = first.keys() & second.keys()
+            ratios = [
+                second[k]["median_latency_s"] / first[k]["median_latency_s"]
+                for k in common
+            ]
+            if ratios:
+                repeatability[f"{kv}_{variant}"] = {
+                    "shapes": len(ratios),
+                    "round2_vs_round1_median": statistics.median(ratios),
+                    "round2_vs_round1_min": min(ratios),
+                    "round2_vs_round1_max": max(ratios),
+                }
 
     rows = []
     for kv in ("bf16", "fp8"):
@@ -56,10 +95,10 @@ def main():
             for variant in variants:
                 samples = [
                     s
-                    for round_number in (1, 2)
+                    for round_number in rounds_used[kv]
                     for s in datasets[kv, variant, round_number][shape]["samples"]
                 ]
-                assert len(samples) == 6
+                assert len(samples) == 3 * len(rounds_used[kv])
                 for sample in samples:
                     assert len(sample["ids"]) == shape[2]
                     assert all(len(ids) == shape[1] for ids in sample["ids"])
@@ -73,9 +112,12 @@ def main():
                     s["ids"] == samples[0]["ids"] for s in samples
                 )
                 tokens[variant] = samples[0]["ids"]
+                second = datasets.get((kv, variant, 2), {}).get(shape)
                 row[f"{variant}_round2_vs_round1"] = (
-                    datasets[kv, variant, 2][shape]["median_latency_s"]
+                    second["median_latency_s"]
                     / datasets[kv, variant, 1][shape]["median_latency_s"]
+                    if second is not None
+                    else None
                 )
             row["aiter_speedup_vs_vanilla"] = (
                 row["vanilla_median_s"] / row["aiter_median_s"]
@@ -133,7 +175,19 @@ def main():
         for group, values in groups.items()
     }
     (args.root / "summary.json").write_text(
-        json.dumps({"groups": summary, "rows": rows, "artifacts": artifacts}, indent=2)
+        json.dumps(
+            {
+                "rounds_used": rounds_used,
+                "samples_per_variant_shape": {
+                    kv: 3 * len(rounds) for kv, rounds in rounds_used.items()
+                },
+                "repeatability": repeatability,
+                "groups": summary,
+                "rows": rows,
+                "artifacts": artifacts,
+            },
+            indent=2,
+        )
         + "\n"
     )
     with (args.root / "comparison.csv").open("w") as file:

@@ -1,7 +1,7 @@
 # Persistent ROCm context attention startup tuning
 
 Branch: `perf/rocm-context-attention-autotune`, based on vanilla vLLM
-`8ebc5b0a18`. Initial feature commit: `d435f5f38f`; 65,536-token expansion: `0b19ba894c`; two-token minimum: `771ae79b64`; pruned batch/prefix expansion: `656dd56cf3`. This isolates launch configuration tuning; the attention math and
+`8ebc5b0a18`. Initial feature commit: `d435f5f38f`; 65,536-token expansion: `0b19ba894c`; two-token minimum: `771ae79b64`; pruned batch/prefix expansion: `656dd56cf3`; FP8 KV tuning: `62dcbf46a1`. This isolates launch configuration tuning; the attention math and
 Triton kernel are unchanged. It does not depend on the SplitKV feature branch.
 
 Start the Qwen TP2 server in this workspace:
@@ -93,9 +93,11 @@ only an in-memory lookup. For example, a query of 5155 tokens selects the
 shape without padding. It also selects a ceiling for total sequence length.
 With the default 2048-token launcher, larger queries remain uncovered. Queries
 above 65,536 and other uncovered larger batches/shapes fall back to the
-original launch. Tuning is currently enabled for validated gfx1201 BF16 layouts
-with head dimensions 64/128/256. ALiBi, sliding windows, sinks, noncausal attention,
-FP8 caches/output, and cached-only K/V retain their existing paths. The
+original launch. Tuning is enabled for validated gfx1201 BF16 queries with
+BF16 or E4M3 FP8 KV layouts and head dimensions 64/128/256. Query and cache
+dtypes both enter the persistent identity; FP8 uses its own winners and
+16-byte packed K-cache layout. ALiBi, sliding windows, sinks, noncausal attention,
+E5M2 KV, FP8 output, and cached-only K/V retain their existing paths. The
 single-query decode path is separate and continues to use existing decode code.
 Multi-token speculative verification through `ROCM_ATTN` uses
 `context_attention_fwd` when `max_query_len > 1`, so it can use the 2/4/8/16
@@ -594,13 +596,14 @@ packed KV layout would be needed to close this capability gap. These prefill
 results do not establish a winner against our separate SplitKV decode path.
 
 `context_attention_fwd` already supports FP8 KV loads and scale-based
-dequantization to the query dtype. The current autotune gate and tuning-cache
-identity are BF16-only; FP8 used the unchanged default launch in this benchmark.
-FP8 needs independently validated tuning configurations, rather than assuming
-that the BF16 winners are optimal for its different memory/register behavior.
+dequantization to the query dtype. The autotune gate and tuning-cache
+identity were BF16-only at the time of this benchmark; FP8 used the unchanged
+default launch. Commit `62dcbf46a1` subsequently added independently validated
+FP8 configurations and separate cache identities. The historical 5.515x result
+does not measure the new FP8 tuner.
 
-FP8 KV **bypasses the current BF16-only autotune gate**, even when the flag is
-enabled. These measurements compare its actual default launch, not a separately
+FP8 KV **bypassed the then BF16-only autotune gate**, even with the flag
+enabled. These measurements compare that default launch, not a separately
 tuned FP8 candidate. To match attention values, FP8 current-chunk dense K/V
 were dequantized from the same FP8 values AITER consumes; quantization and
 layout preparation were excluded from timing.
@@ -654,3 +657,92 @@ not a failure of the prefill autotuning cache or a resolved root cause.
 Keep roadmap item 4. These are kernel comparisons, not an end-to-end backend
 verdict. See [the complete decode and cache-reuse report](../tps-rdna4-qwen38-tp2/SPLITKV_VS_AITER_UNIFIED_DECODE.md)
 for active routes, all paired results, correctness details and reproduction.
+
+## FP8 KV extension and real-engine validation (2026-09-15)
+
+Commit `62dcbf46a1` extends the isolated tuner to BF16 queries with E4M3 FP8
+KV. It leaves the attention math unchanged. Candidate inputs use FP8-specific
+packing and non-unit scales, and both persistent and in-memory keys include
+KV dtype, so a BF16 winner cannot be selected for an FP8 cache. Existing
+scheduler, sequence-length and scratch-memory pruning also applies to FP8.
+
+The focused tuner suite passed **17 tests**, including all 24 launch
+candidates at ragged query/page boundaries against FP32 attention references.
+FP8 checks use independently dequantized cached K/V, different non-unit K/V
+scales, and fresh BF16 current-chunk K/V. Persistence tests cover saved-cache
+reuse without benchmarking or file modification, dtype isolation, corrupt
+cache recovery, and ceiling lookups.
+
+A Qwen/Qwen3.8-27B-FP8 TP2 engine with an 8192-token budget, 32 sequence slots
+and a 9216-token model limit tuned **341 FP8 buckets**, pruning 24 planned
+workloads. All **8184** candidate measurements passed its launch-reference
+gate; the worst relative L2 difference was **0.101947%**. Cold context tuning
+took **588.10 seconds**. The other TP rank loaded the saved 341 records under
+the shared file lock. This measures startup tuning, not inference latency or
+an independent fresh-engine persistence check.
+
+An independent fresh FP8 engine then loaded all **341 records with zero
+retuning** on both TP ranks, taking **0.02 s / 0.07 s**. Cache SHA256 and
+nanosecond mtime snapshots were unchanged across startup. A second independent
+engine also reused the table unchanged. The first reused engine's total
+startup was **57.16 seconds**; it includes model loading, compilation and graph
+capture and is excluded from offline inference timings.
+
+The matching BF16 engine retained **315 buckets** and pruned 50 under the same
+limits. All **7560** candidate measurements passed, with worst relative L2
+**0.101947%**; cold context tuning took **258.66 seconds** and the other TP rank
+loaded all 315 records. BF16 has a separate cache file and identity from FP8.
+
+The combined attention-only branch is
+`perf/rdna4-prefill-autotune-splitkv` in
+`/app/vllm-perf-rdna4-prefill-autotune-splitkv`. It applies this tuner and our
+SplitKV decode over the same upstream pin, without our GEMM, GDN or
+all-reduce changes. Initial FP8 engine smoke checks completed four-token
+outputs at concurrency 1/2/4, with matching IDs between the combined and AITER
+paths. Untimed GPU traces confirmed the context kernel and FlyDSL
+`stage_0`/`reduce_kernel_0` decode route.
+
+The complete offline comparison protocol, native backend precision/layout
+differences and raw artifact locations are documented in
+[ATTENTION_OFFLINE_COMPARISON.md](../tps-rdna4-qwen38-tp2/ATTENTION_OFFLINE_COMPARISON.md).
+The earlier isolated 211-shape FP8 comparison above predates this extension
+and must not be used as a result for the new tuner.
+
+### Combined attention-only offline results
+
+The Qwen3.8 TP2 comparison tested input lengths 128/2048/8192, output lengths
+32/256, and concurrency 1/2/4: **18 shapes per KV dtype**. Remaining repeats
+were stopped at the user's request after stable repeated medians. The balanced
+comparison uses three samples per BF16 variant/shape and six per FP8
+variant/shape; ten partial BF16 repeat shapes are diagnostics only.
+
+| KV cache | Patched AITER speedup vs vanilla | Autotuned context + SplitKV speedup vs vanilla | Result |
+| --- | ---: | ---: | --- |
+| BF16 | 1.358x | 1.308x | AITER 3.85% faster overall |
+| E4M3 FP8 | 1.410x | 1.401x | Near tie; AITER 0.61% faster overall |
+
+These are geometric means of whole-batch median times, including prefill and
+decode, not isolated kernel gains or TTFT/TPOT. BF16 concurrency 1 is tied;
+AITER leads at higher concurrency. FP8 favors ours by 2.15% at concurrency 1,
+ties at 2, and favors AITER by 4.61% at 4. Short samples had occasional spikes;
+raw ranges and repeated medians are recorded in the comparison report.
+
+The fresh BF16 engine loaded all 315 records with **zero retuning** in
+**0.01 s / 0.07 s**. Cache SHA256 and nanosecond mtime stayed unchanged; full
+startup was **53.94 s**, versus **359.80 s** with the cold tuning pass.
+
+Untimed long-input probes found **64 tuned lookups / 128 context calls per
+rank** in both KV dtypes. Ragged mixed steps such as B=2/Qmax=8191,
+B=3/Qmax=8190 and B=4/Qmax=8188 share the 8192-token budget but lack uniform
+B/Qmax tuning buckets. They keep the original launch. This motivates a ragged
+planner that distinguishes maximum query length from total scheduled query
+tokens; it does not justify weakening memory pruning or runtime retuning.
+Launch tuning also does not add AITER's segmented-3D algorithm.
+
+The engine paths retain native layouts and precision: AITER FP8 also quantizes
+queries, while ours keeps them BF16. Greedy IDs differ between paths and even
+between some vanilla repeats; kernel correctness tests passed, but these
+measurements do not establish model-quality parity. All variants share the
+same native ROCm extensions, with upstream-pinned Python/Triton source and
+attention-only feature differences. Keep the independent AITER BF16 policy
+PR; our context and SplitKV features do not supersede it.
