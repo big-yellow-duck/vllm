@@ -11,6 +11,7 @@ import torch
 import torch.nn.functional as F
 
 from vllm.platforms import current_platform
+from vllm.triton_utils import triton
 from vllm.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE, set_random_seed
 from vllm.v1.attention.ops.chunked_prefill_paged_decode import (
     chunked_prefill_paged_decode,
@@ -1020,3 +1021,151 @@ def test_qwen3_nonstandard_block_size(
         device=device,
         op=op,
     )
+
+
+@pytest.mark.parametrize(
+    "dim,page,query_len,context_len",
+    [(64, 32, 33, 35), (128, 16, 129, 65), (256, 1568, 65, 1601)],
+)
+@torch.inference_mode()
+def test_rocm_context_tuning_candidates_match_sdpa(dim, page, query_len, context_len):
+    """Launch tuning must preserve attention at ragged tile/page boundaries."""
+    if not current_platform.is_rocm():
+        pytest.skip("ROCm context launch configurations")
+    from vllm.v1.attention.ops.prefix_prefill_tuning import _CONFIGS, _make_inputs
+
+    device = torch.device("cuda:0")
+    q, k, v, kc, vc, table, starts, lengths, one = _make_inputs(
+        device, 4, 2, dim, page, 2, query_len, query_len + context_len
+    )
+    output = torch.empty_like(q)
+    references = []
+    for b in range(2):
+        context_k = (
+            kc[table[b].long()].permute(0, 3, 1, 2, 4).reshape(-1, 2, dim)[:context_len]
+        )
+        context_v = (
+            vc[table[b].long()].permute(0, 3, 1, 2).reshape(-1, 2, dim)[:context_len]
+        )
+        full_k = torch.cat(
+            (context_k, k[b * query_len : (b + 1) * query_len])
+        ).repeat_interleave(2, dim=1)
+        full_v = torch.cat(
+            (context_v, v[b * query_len : (b + 1) * query_len])
+        ).repeat_interleave(2, dim=1)
+        mask = torch.arange(query_len + context_len, device=device)[None, :] <= (
+            torch.arange(query_len, device=device)[:, None] + context_len
+        )
+        references.append(
+            F.scaled_dot_product_attention(
+                q[b * query_len : (b + 1) * query_len].transpose(0, 1),
+                full_k.transpose(0, 1),
+                full_v.transpose(0, 1),
+                attn_mask=mask,
+            ).transpose(0, 1)
+        )
+    reference = torch.cat(references)
+    for config in _CONFIGS:
+        try:
+            context_attention_fwd(
+                q,
+                k,
+                v,
+                output,
+                "auto",
+                kc,
+                vc,
+                table,
+                starts,
+                lengths,
+                query_len + context_len,
+                query_len,
+                one,
+                one,
+                skip_decode=True,
+                _launch_config=config,
+            )
+        except triton.OutOfResources:
+            continue
+        torch.testing.assert_close(output, reference, atol=0.01, rtol=0.01)
+
+
+def test_rocm_context_tuning_persists_without_retuning(tmp_path, monkeypatch):
+    """A fresh table must reuse disk winners without invoking the benchmark."""
+    from types import SimpleNamespace
+
+    from vllm.v1.attention.ops import prefix_prefill_tuning as tuning
+
+    monkeypatch.setenv("VLLM_CACHE_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        torch.cuda,
+        "get_device_properties",
+        lambda _: SimpleNamespace(
+            name="test", gcnArchName="gfx1201", multi_processor_count=64
+        ),
+    )
+    monkeypatch.setattr(tuning, "_TABLES", {})
+
+    def tune(*args):
+        return {"workload": list(args[-1]), "best": tuning._DEFAULT, "results": []}
+
+    monkeypatch.setattr(tuning, "_tune_workload", tune)
+    args = (torch.device("cuda:0"), torch.bfloat16, 4, 2, 64, 32, 0.125, 32, 64, 1)
+    tuning.warmup_context_attention(*args)
+    cache = next(tmp_path.rglob("*.json"))
+    saved = cache.read_bytes(), cache.stat().st_mtime_ns
+    tuning._TABLES.clear()
+
+    def forbidden(*args):
+        pytest.fail("Cached engine startup attempted to tune")
+
+    monkeypatch.setattr(tuning, "_tune_workload", forbidden)
+    tuning.warmup_context_attention(*args)
+    assert (cache.read_bytes(), cache.stat().st_mtime_ns) == saved
+    assert (
+        tuning.get_context_attention_config(
+            torch.device("cuda:0"), 4, 2, 64, 32, 1, 31, 63, 0.125
+        )
+        == tuning._DEFAULT
+    )
+    assert (
+        tuning.get_context_attention_config(
+            torch.device("cuda:0"), 4, 2, 64, 32, 1, 128, 128, 0.125
+        )
+        is None
+    )
+
+
+def test_rocm_context_tuning_recovers_corrupt_cache(tmp_path, monkeypatch):
+    """A truncated cache must be replaced rather than accepted as a winner."""
+    from types import SimpleNamespace
+
+    from vllm.v1.attention.ops import prefix_prefill_tuning as tuning
+
+    monkeypatch.setenv("VLLM_CACHE_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        torch.cuda,
+        "get_device_properties",
+        lambda _: SimpleNamespace(
+            name="test", gcnArchName="gfx1201", multi_processor_count=64
+        ),
+    )
+    monkeypatch.setattr(tuning, "_TABLES", {})
+    calls = []
+
+    def tune(*args):
+        calls.append(args[-1])
+        return {"workload": list(args[-1]), "best": tuning._DEFAULT, "results": []}
+
+    monkeypatch.setattr(tuning, "_tune_workload", tune)
+    args = (torch.device("cuda:0"), torch.bfloat16, 4, 2, 64, 32, 0.125, 32, 64, 1)
+    tuning.warmup_context_attention(*args)
+    cache = next(tmp_path.rglob("*.json"))
+    cache.write_text('{"identity":')
+    tuning._TABLES.clear()
+    calls.clear()
+    tuning.warmup_context_attention(*args)
+    assert len(calls) == 2
+    import json
+
+    assert len(json.loads(cache.read_text())["records"]) == 2

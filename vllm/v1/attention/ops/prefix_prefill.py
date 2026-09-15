@@ -8,6 +8,7 @@ from typing import Any
 
 import torch
 
+import vllm.envs as envs
 from vllm.platforms import current_platform
 from vllm.triton_utils import tl, triton
 
@@ -20,21 +21,6 @@ IS_TURING = current_platform.get_device_capability() == (7, 5)
 float8_info = torch.finfo(current_platform.fp8_dtype())
 
 
-# Here's an example autotuner config for this kernel. This config does provide
-# a performance improvement, but dramatically increases first call latency in
-# triton 3.2. Because of this tradeoff, it's currently commented out.
-# @triton.autotune(
-#     configs=[
-#         triton.Config({'BLOCK_M': 128, 'BLOCK_N': 64, \
-#                         "num_unroll_cache": 4, \
-#                         "num_unroll_request": 1 } | \
-#                         ({"kpack": 2, "waves_per_eu": 2} \
-#                             if current_platform.is_rocm() else {}), \
-#                         num_warps=4, \
-#                         num_stages=1)
-#     ],
-#     key=["BLOCK_SIZE", "MAX_Q_LEN", "MAX_CTX_LEN"]
-# )
 @triton.jit
 def _paged_kv_cache_offsets(
     B_Loc,
@@ -797,6 +783,7 @@ def context_attention_fwd(
     sinks=None,
     is_block_table_ptr: bool = False,
     causal: bool = True,
+    _launch_config: dict[str, int] | None = None,
 ):
     q_dtype_is_f32 = q.dtype is torch.float32
 
@@ -953,6 +940,41 @@ def context_attention_fwd(
     BLOCK_M = 128
     BLOCK_N = 64
     TRITON_BLOCK_SIZE = 32
+    launch_config = {
+        "BLOCK_M": BLOCK_M,
+        "BLOCK_N": BLOCK_N,
+        "num_unroll_cache": 4,
+        "num_unroll_request": 1,
+        "num_warps": 4,
+        "num_stages": 1,
+    }
+    if _launch_config is not None:
+        launch_config = _launch_config
+    elif (
+        envs.VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE
+        and current_platform.is_rocm()
+        and q.dtype == k_cache.dtype == v_cache.dtype == torch.bfloat16
+        and causal
+        and not sliding_window
+        and sinks is None
+        and fp8_out_scale is None
+        and not kv_from_cache
+    ):
+        from .prefix_prefill_tuning import get_context_attention_config
+
+        tuned_config = get_context_attention_config(
+            q.device,
+            head,
+            k_cache.shape[1],
+            Lk,
+            real_block_size,
+            batch,
+            max_input_len,
+            max_seq_len,
+            sm_scale,
+        )
+        if tuned_config is not None:
+            launch_config = tuned_config
 
     grid_fn = lambda META: (batch, head, triton.cdiv(max_input_len, META["BLOCK_M"]))
     _fwd_kernel[grid_fn](
@@ -1003,15 +1025,10 @@ def context_attention_fwd(
         SLIDING_WINDOW=sliding_window,
         SKIP_DECODE=skip_decode,
         USE_FP8=fp8_out_scale is not None,
-        BLOCK_M=BLOCK_M,
-        BLOCK_N=BLOCK_N,
-        num_unroll_cache=4,
-        num_unroll_request=1,
-        num_warps=4,
-        num_stages=1,
         USE_SINKS=sinks is not None,
         CAUSAL=causal,
         KV_FROM_CACHE=kv_from_cache,
+        **launch_config,
         **extra_kargs,
     )
     return
