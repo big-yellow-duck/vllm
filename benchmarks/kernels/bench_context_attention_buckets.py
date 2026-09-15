@@ -18,13 +18,13 @@ from vllm.v1.attention.ops.prefix_prefill import context_attention_fwd
 
 
 @torch.inference_mode()
-def probe(device, heads, kv_heads, dim, page, qlen, context):
+def probe(device, heads, kv_heads, dim, page, qlen, context, batch=1):
     config = tuning.get_context_attention_config(
-        device, heads, kv_heads, dim, page, 1, qlen, qlen + context, dim**-0.5
+        device, heads, kv_heads, dim, page, batch, qlen, qlen + context, dim**-0.5
     )
     assert config is not None
     q, k, v, kc, vc, table, starts, lengths, one = tuning._make_inputs(
-        device, heads, kv_heads, dim, page, 1, qlen, qlen + context
+        device, heads, kv_heads, dim, page, batch, qlen, qlen + context
     )
     baseline, output = torch.empty_like(q), torch.empty_like(q)
 
@@ -59,7 +59,7 @@ def probe(device, heads, kv_heads, dim, page, qlen, context):
     ) as lookup:
         run(None, automatic)
         assert lookup.call_count == 1
-        assert lookup.call_args.args[5:8] == (1, qlen, qlen + context)
+        assert lookup.call_args.args[5:8] == (batch, qlen, qlen + context)
     torch.testing.assert_close(automatic, output, atol=0, rtol=0)
     torch.testing.assert_close(output, baseline, atol=0.01, rtol=0.01)
     relative_l2 = (
@@ -68,46 +68,55 @@ def probe(device, heads, kv_heads, dim, page, qlen, context):
     assert relative_l2 <= 0.005
     # Independent FP32 reference at causal/page/tile boundaries without Q^2 storage.
     rows = sorted({0, min(31, qlen - 1), min(32, qlen - 1), qlen // 2, qlen - 1})
-    context_k = (
-        kc[table[0].long()].permute(0, 3, 1, 2, 4).reshape(-1, kv_heads, dim)[:context]
-    )
-    context_v = (
-        vc[table[0].long()].permute(0, 3, 1, 2).reshape(-1, kv_heads, dim)[:context]
-    )
-    full_k = (
-        torch.cat((context_k, k)).repeat_interleave(heads // kv_heads, dim=1).float()
-    )
-    full_v = (
-        torch.cat((context_v, v)).repeat_interleave(heads // kv_heads, dim=1).float()
-    )
-    logits = (
-        torch.bmm(q[rows].transpose(0, 1).float(), full_k.permute(1, 2, 0)) * dim**-0.5
-    )
-    mask = torch.arange(qlen + context, device=device)[None, :] > (
-        torch.tensor(rows, device=device)[:, None] + context
-    )
-    logits.masked_fill_(mask[None, :, :], float("-inf"))
-    reference = torch.bmm(logits.softmax(dim=-1), full_v.transpose(0, 1)).transpose(
-        0, 1
-    )
-    errors = {}
-    for name, actual in (("baseline", baseline), ("tuned", output)):
-        per_row_l2 = (actual[rows].float() - reference).flatten(1).norm(
-            dim=1
-        ) / reference.flatten(1).norm(dim=1)
-        errors[name] = per_row_l2.max().item()
-        assert errors[name] <= 0.01, (name, errors[name])
-    cache = (
-        torch.empty(256 * 1024 * 1024, device=device, dtype=torch.int8)
-        if qlen >= 8192
-        else None
+    errors = {"baseline": 0.0, "tuned": 0.0}
+    for b in range(batch):
+        context_k = (
+            kc[table[b].long()]
+            .permute(0, 3, 1, 2, 4)
+            .reshape(-1, kv_heads, dim)[:context]
+        )
+        context_v = (
+            vc[table[b].long()].permute(0, 3, 1, 2).reshape(-1, kv_heads, dim)[:context]
+        )
+        full_k = (
+            torch.cat((context_k, k[b * qlen : (b + 1) * qlen]))
+            .repeat_interleave(heads // kv_heads, dim=1)
+            .float()
+        )
+        full_v = (
+            torch.cat((context_v, v[b * qlen : (b + 1) * qlen]))
+            .repeat_interleave(heads // kv_heads, dim=1)
+            .float()
+        )
+        indices = [b * qlen + row for row in rows]
+        logits = (
+            torch.bmm(q[indices].transpose(0, 1).float(), full_k.permute(1, 2, 0))
+            * dim**-0.5
+        )
+        mask = torch.arange(qlen + context, device=device)[None, :] > (
+            torch.tensor(rows, device=device)[:, None] + context
+        )
+        logits.masked_fill_(mask[None, :, :], float("-inf"))
+        reference = torch.bmm(logits.softmax(dim=-1), full_v.transpose(0, 1)).transpose(
+            0, 1
+        )
+        for name, actual in (("baseline", baseline), ("tuned", output)):
+            per_row_l2 = (actual[indices].float() - reference).flatten(1).norm(
+                dim=1
+            ) / reference.flatten(1).norm(dim=1)
+            errors[name] = max(errors[name], per_row_l2.max().item())
+            assert errors[name] <= 0.01, (name, errors[name])
+        del full_k, full_v, logits, reference
+    cache = torch.empty(256 * 1024 * 1024, device=device, dtype=torch.int8)
+    baseline_us = tuning._bench_long_config(
+        lambda: run(tuning._DEFAULT, baseline), device, cache
     )
     timings = {}
     for name, launch, out in (
         ("baseline", tuning._DEFAULT, baseline),
         ("tuned", config, output),
     ):
-        if cache is None:
+        if baseline_us < 1000:
             timings[name] = (
                 triton.testing.do_bench(
                     lambda launch=launch, out=out: run(launch, out),
@@ -122,6 +131,7 @@ def probe(device, heads, kv_heads, dim, page, qlen, context):
                 lambda launch=launch, out=out: run(launch, out), device, cache
             )
     return {
+        "batch": batch,
         "query": qlen,
         "context": context,
         "config": config,
@@ -139,6 +149,10 @@ def main():
     parser.add_argument("--warm-short-engine", action="store_true")
     parser.add_argument("--probes", action="store_true")
     parser.add_argument("--short-probes", action="store_true")
+    parser.add_argument("--max-tokens", type=int, default=8192)
+    parser.add_argument("--max-model-len", type=int, default=524288)
+    parser.add_argument("--max-seqs", type=int, default=32)
+    parser.add_argument("--sample-long-context", action="store_true")
     args = parser.parse_args()
     device = torch.device("cuda:0")
     if args.load_only:
@@ -147,10 +161,56 @@ def main():
             raise RuntimeError("Saved bucket attempted to retune")
 
         tuning._tune_workload = forbidden
+    sampled = [
+        (1, 2, 262144),
+        (1, 4, 262144),
+        (1, 8, 262144),
+        (1, 32, 131072),
+        (1, 256, 65536),
+        (1, 8192, 65536),
+        (2, 16, 65536),
+        (2, 4096, 32768),
+        (4, 8, 32768),
+        (4, 2048, 16384),
+        (8, 4, 16384),
+        (16, 4, 8192),
+        (32, 4, 4096),
+        (32, 32, 1024),
+        (32, 256, 8192),
+    ]
+    budget = tuning._memory_budget(device)
+    raw = list(tuning._workloads(args.max_tokens, args.max_model_len, args.max_seqs))
+    planned = list(
+        tuning._workloads(
+            args.max_tokens,
+            args.max_model_len,
+            args.max_seqs,
+            memory_budget_bytes=budget,
+        )
+    )
+    original_workloads = tuning._workloads
+    if args.sample_long_context:
+        selected = {(b, q, q + c) for b, q, c in sampled}
+        assert selected <= set(planned)
+
+        def filtered(*args, **kwargs):
+            return (w for w in original_workloads(*args, **kwargs) if w in selected)
+
+        tuning._workloads = filtered
     started = time.monotonic()
     tuning.warmup_context_attention(
-        device, torch.bfloat16, 12, 2, 256, 784, 0.0625, 65536, 65536, 1
+        device,
+        torch.bfloat16,
+        12,
+        2,
+        256,
+        784,
+        0.0625,
+        args.max_tokens,
+        args.max_model_len,
+        args.max_seqs,
     )
+    tuning._workloads = original_workloads
     if args.warm_short_engine:
         tuning.warmup_context_attention(
             device, torch.bfloat16, 12, 2, 256, 784, 0.0625, 2048, 2048, 1
@@ -167,11 +227,25 @@ def main():
     )
     result = {
         "elapsed_s": elapsed,
+        "limits": vars(args) | {"output": str(args.output)},
+        "plan": {
+            "raw": len(raw),
+            "scratch_pruned": len(raw) - len(planned),
+            "scratch_budget_bytes": budget,
+            "feasible": len(planned),
+        },
         "cache": str(path),
         "sha256": hashlib.sha256(contents).hexdigest(),
         "mtime_ns": path.stat().st_mtime_ns,
         "data": data,
     }
+    if args.sample_long_context:
+        result["sampled_probes"] = [
+            probe(device, 12, 2, 256, 784, q, c, b) for b, q, c in sampled
+        ] + [
+            probe(device, 12, 2, 256, 784, q, c, b)
+            for b, q, c in ((1, 3, 260001), (3, 5, 30001), (31, 3, 4097))
+        ]
     if args.probes:
         result["probes"] = [
             probe(device, 12, 2, 256, 784, q, c)
