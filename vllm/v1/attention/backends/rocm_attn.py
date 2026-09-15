@@ -382,6 +382,39 @@ class RocmAttentionImpl(AttentionImpl):
         )
         return output
 
+    def _warmup_context_attention(self, layer, device, dtype, **limits):
+        if (
+            envs.VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE
+            and not self._context_attention_warmed_up
+            and self.attn_type == AttentionType.DECODER
+            and self.kv_cache_dtype == "auto"
+            and self.alibi_slopes is None
+            and self.sliding_window == (-1, -1)
+            and self.sinks is None
+        ):
+            from vllm.v1.attention.ops.prefix_prefill_tuning import (
+                warmup_context_attention,
+            )
+
+            config = self._context_attention_config
+            assert config is not None
+            spec = layer.get_kv_cache_spec(config)
+            assert spec is not None
+            warmup_context_attention(
+                device,
+                dtype,
+                self.num_heads,
+                self.num_kv_heads,
+                self.head_size,
+                spec.block_size,
+                self.scale,
+                config.scheduler_config.max_num_batched_tokens,
+                config.model_config.max_model_len,
+                config.scheduler_config.max_num_seqs,
+                **limits,
+            )
+            self._context_attention_warmed_up = True
+
     def forward(
         self,
         layer: torch.nn.Module,
@@ -414,36 +447,6 @@ class RocmAttentionImpl(AttentionImpl):
 
         if attn_metadata is None:
             # Profiling run.
-            if (
-                envs.VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE
-                and not self._context_attention_warmed_up
-                and self.attn_type == AttentionType.DECODER
-                and self.kv_cache_dtype == "auto"
-                and self.alibi_slopes is None
-                and self.sliding_window == (-1, -1)
-                and self.sinks is None
-            ):
-                from vllm.v1.attention.ops.prefix_prefill_tuning import (
-                    warmup_context_attention,
-                )
-
-                config = self._context_attention_config
-                assert config is not None
-                spec = layer.get_kv_cache_spec(config)
-                assert spec is not None
-                warmup_context_attention(
-                    query.device,
-                    query.dtype,
-                    self.num_heads,
-                    self.num_kv_heads,
-                    self.head_size,
-                    spec.block_size,
-                    self.scale,
-                    config.scheduler_config.max_num_batched_tokens,
-                    config.model_config.max_model_len,
-                    config.scheduler_config.max_num_seqs,
-                )
-                self._context_attention_warmed_up = True
             return output.fill_(0)
 
         assert attn_metadata.use_cascade is False

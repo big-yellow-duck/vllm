@@ -1112,6 +1112,7 @@ def test_rocm_context_tuning_persists_without_retuning(tmp_path, monkeypatch):
         ),
     )
     monkeypatch.setattr(tuning, "_TABLES", {})
+    monkeypatch.setattr(tuning, "_memory_budget", lambda _: 2**50)
 
     def tune(*args):
         return {"workload": list(args[-1]), "best": tuning._DEFAULT, "results": []}
@@ -1158,6 +1159,7 @@ def test_rocm_context_tuning_recovers_corrupt_cache(tmp_path, monkeypatch):
         ),
     )
     monkeypatch.setattr(tuning, "_TABLES", {})
+    monkeypatch.setattr(tuning, "_memory_budget", lambda _: 2**50)
     calls = []
 
     def tune(*args):
@@ -1198,6 +1200,7 @@ def test_rocm_context_tuning_extends_buckets_and_reuses_saved_limits(
         ),
     )
     monkeypatch.setattr(tuning, "_TABLES", {})
+    monkeypatch.setattr(tuning, "_memory_budget", lambda _: 2**50)
     calls = []
 
     def tune(*args):
@@ -1222,7 +1225,7 @@ def test_rocm_context_tuning_extends_buckets_and_reuses_saved_limits(
         1,
     )
     tuning.warmup_context_attention(*args)
-    assert len(calls) == 46
+    assert len(calls) == 120
     assert {q for _, q, _ in calls} == {2**exponent for exponent in range(1, 17)}
     assert (
         tuning.get_context_attention_config(
@@ -1251,9 +1254,7 @@ def test_rocm_context_tuning_extends_buckets_and_reuses_saved_limits(
     calls.clear()
     short = (*args[:-3], 2048, 2048, 1)
     tuning.warmup_context_attention(*short)
-    assert set(calls) == {
-        (1, q, 2048) for q in (2, 4, 8, 16, 32, 64, 128, 256, 512, 1024)
-    }
+    assert set(calls) == {(1, q, 2048) for q in (2, 4, 8, 16, 32, 64, 128, 256, 512)}
     cache = next(tmp_path.rglob("*.json"))
     saved = cache.read_bytes(), cache.stat().st_mtime_ns
     tuning._TABLES.clear()
@@ -1265,3 +1266,41 @@ def test_rocm_context_tuning_extends_buckets_and_reuses_saved_limits(
     tuning.warmup_context_attention(*args)
     tuning.warmup_context_attention(*short)
     assert (cache.read_bytes(), cache.stat().st_mtime_ns) == saved
+
+
+def test_rocm_context_tuning_prunes_tokens_and_paged_kv_memory():
+    """Long-prefix coverage must not allocate impossible independent KV batches."""
+    from vllm.v1.attention.ops import prefix_prefill_tuning as tuning
+
+    limits = (8192, 524288, 64)
+    raw = set(tuning._workloads(*limits))
+    assert {b for b, _, _ in raw} == {1, 2, 4, 8, 16, 32}
+    assert (1, 2, 262146) in raw
+    assert all(b * q <= 8192 and s <= 524288 for b, q, s in raw)
+    assert all(b == 1 for b, q, _ in raw if q == 8192)
+
+    scratch = set(tuning._workloads(*limits, memory_budget_bytes=4 * 2**30))
+    assert (1, 2, 262146) in scratch
+    assert (32, 2, 262146) not in scratch
+    assert all(tuning._scratch_bytes(12, 2, 256, 784, *w) <= 4 * 2**30 for w in scratch)
+
+    layouts = ((784, 784 * 2048 * 12), (0, 8 * 2**20))
+    model = set(
+        tuning._workloads(
+            *limits,
+            memory_budget_bytes=4 * 2**30,
+            cache_layouts=layouts,
+            cache_budget_bytes=2**30,
+        )
+    )
+    assert model < scratch
+    assert (1, 2, 262146) not in model
+    assert (32, 2, 2) in model
+    assert all(
+        b
+        * sum(
+            ((s + page - 1) // page) * size if page else size for page, size in layouts
+        )
+        <= 2**30
+        for b, _, s in model
+    )

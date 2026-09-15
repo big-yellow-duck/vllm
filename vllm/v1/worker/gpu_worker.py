@@ -536,6 +536,13 @@ class Worker(WorkerBase):
         """
         maybe_apply_startup_plan(self)
 
+        if envs.VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE and current_platform.is_rocm():
+            from vllm.v1.attention.ops.prefix_prefill_tuning import (
+                warmup_rocm_context_attention,
+            )
+
+            warmup_rocm_context_attention(self.vllm_config, self.device)
+
         if kv_cache_memory_bytes := self.cache_config.kv_cache_memory_bytes:
             # still need a profile run which compiles the model for
             # max_num_batched_tokens

@@ -21,6 +21,8 @@ from vllm.triton_utils import triton
 logger = init_logger(__name__)
 _TABLES: dict[tuple, dict] = {}
 _QUERY_BUCKETS = tuple(2**exponent for exponent in range(1, 17))
+_BATCH_BUCKETS = (1, 2, 4, 8, 16, 32)
+_CONTEXT_BUCKETS = (0, *(2**exponent for exponent in range(10, 19)))
 _DEFAULT = dict(
     BLOCK_M=128,
     BLOCK_N=64,
@@ -73,13 +75,55 @@ def _identity(device, heads, kv_heads, dim, page, scale):
     }
 
 
-def _workloads(max_tokens, max_len, max_seqs):
+def _memory_budget(device):
+    free, total = torch.accelerator.get_memory_info(device)
+    available = int(min(free // 2, total // 4))
+    return 1 << (available.bit_length() - 1) if available else 0
+
+
+def _scratch_bytes(heads, kv_heads, dim, page, batch, query_len, seq_len):
+    context = max(page, triton.cdiv(seq_len - query_len, page) * page)
+    # Q/output/reference and temporary FP32 comparisons, dense K/V, paged K/V.
+    return (
+        batch * query_len * dim * (32 * heads + 4 * kv_heads)
+        + batch * context * kv_heads * dim * 4
+        + 256 * 1024 * 1024
+    )
+
+
+def _workloads(
+    max_tokens,
+    max_len,
+    max_seqs,
+    *,
+    memory_budget_bytes=None,
+    heads=12,
+    kv_heads=2,
+    dim=256,
+    page=784,
+    cache_layouts=(),
+    cache_budget_bytes=None,
+):
     limit = min(max_tokens, max_len)
     queries = sorted({min(q, limit) for q in _QUERY_BUCKETS if limit >= 2})
     for q in queries:
-        batches = sorted({1, min(4, max_seqs, max_tokens // q)})
-        contexts = sorted({0, min(4096, max_len - q), min(8192, max_len - q)})
+        batch_limit = min(32, max_seqs, max_tokens // q)
+        batches = sorted({min(b, batch_limit) for b in _BATCH_BUCKETS})
+        contexts = sorted({min(c, max_len - q) for c in _CONTEXT_BUCKETS})
         for b, c in itertools.product(batches, contexts):
+            if (
+                memory_budget_bytes is not None
+                and _scratch_bytes(heads, kv_heads, dim, page, b, q, q + c)
+                > memory_budget_bytes
+            ):
+                continue
+            if cache_budget_bytes is not None:
+                cache_bytes = b * sum(
+                    triton.cdiv(q + c, block) * size if block else size
+                    for block, size in cache_layouts
+                )
+                if cache_bytes > cache_budget_bytes:
+                    continue
             yield b, q, q + c
 
 
@@ -154,11 +198,8 @@ def _tune_workload(device, heads, kv_heads, dim, page, scale, workload):
     run(_DEFAULT, reference)
     torch.accelerator.synchronize(device)
     reference_norm = reference.float().norm()
-    cache = (
-        torch.empty(256 * 1024 * 1024, dtype=torch.int8, device=device)
-        if qlen >= 8192
-        else None
-    )
+    cache = torch.empty(256 * 1024 * 1024, dtype=torch.int8, device=device)
+    baseline_us = _bench_long_config(lambda: run(_DEFAULT, reference), device, cache)
     results = []
     for config in _CONFIGS:
         try:
@@ -170,7 +211,7 @@ def _tune_workload(device, heads, kv_heads, dim, page, scale, workload):
             ).item()
             if relative_l2 > 0.005:
                 raise AssertionError(f"Relative L2 error {relative_l2} exceeds 0.5%")
-            if cache is not None:
+            if baseline_us >= 1000:
                 microseconds = _bench_long_config(
                     lambda config=config: run(config), device, cache
                 )
@@ -221,7 +262,20 @@ def _save(path, data):
 
 @torch.inference_mode()
 def warmup_context_attention(
-    device, dtype, heads, kv_heads, dim, page, scale, max_tokens, max_len, max_seqs
+    device,
+    dtype,
+    heads,
+    kv_heads,
+    dim,
+    page,
+    scale,
+    max_tokens,
+    max_len,
+    max_seqs,
+    *,
+    memory_budget_bytes=None,
+    cache_layouts=(),
+    cache_budget_bytes=None,
 ):
     """Benchmark missing buckets before KV allocation; share results across ranks."""
     props = torch.cuda.get_device_properties(device)
@@ -232,7 +286,31 @@ def warmup_context_attention(
     ):
         return
     key = _key(device, heads, kv_heads, dim, page, scale)
-    workloads = list(_workloads(max_tokens, max_len, max_seqs))
+    if memory_budget_bytes is None:
+        memory_budget_bytes = _memory_budget(device)
+    workloads = list(
+        _workloads(
+            max_tokens,
+            max_len,
+            max_seqs,
+            memory_budget_bytes=memory_budget_bytes,
+            heads=heads,
+            kv_heads=kv_heads,
+            dim=dim,
+            page=page,
+            cache_layouts=cache_layouts,
+            cache_budget_bytes=cache_budget_bytes,
+        )
+    )
+    pruned = len(list(_workloads(max_tokens, max_len, max_seqs))) - len(workloads)
+    logger.info(
+        "ROCm context attention tuning plan: workloads=%d pruned=%d "
+        "scratch_budget=%d MiB cache_budget=%s",
+        len(workloads),
+        pruned,
+        memory_budget_bytes // 2**20,
+        cache_budget_bytes,
+    )
     warmed = {tuple(r["workload"]) for r in _TABLES.get(key, {}).get("records", [])}
     if all(workload in warmed for workload in workloads):
         return
@@ -309,3 +387,30 @@ def get_context_attention_config(
     if not eligible:
         return None
     return min(eligible, key=lambda r: r["workload"][2])["best"]
+
+
+def warmup_rocm_context_attention(config, device):
+    """Tune outside model memory profiling so temporary KV cannot inflate peaks."""
+    from vllm.v1.attention.backends.rocm_attn import RocmAttentionImpl
+    from vllm.v1.kv_cache_interface import FullAttentionSpec
+    from vllm.v1.worker.gpu.attn_utils import get_kv_cache_spec
+
+    specs = get_kv_cache_spec(config)
+    layouts = tuple(
+        (spec.block_size, spec.page_size_bytes)
+        if isinstance(spec, FullAttentionSpec)
+        else (0, spec.max_memory_usage_bytes(config))
+        for spec in specs.values()
+    )
+    budget = _memory_budget(device)
+    for layer in config.compilation_config.static_forward_context.values():
+        impl = getattr(layer, "impl", None)
+        if isinstance(impl, RocmAttentionImpl):
+            impl._warmup_context_attention(
+                layer,
+                device,
+                config.model_config.dtype,
+                memory_budget_bytes=budget,
+                cache_layouts=layouts,
+                cache_budget_bytes=budget,
+            )
