@@ -617,8 +617,8 @@ incorrectly assumed all multi-query AITER calls use 2D. Its gfx1201 selector
 chooses 3D for 75 of these shapes, and the BF16 patch changes all 75 launches.
 The 2D prefill policy is unchanged by that commit. **Keep roadmap item 4:** our
 BF16 tuning wins most 2D shapes but does not supersede patched segmented
-prefill. Matched SplitKV-versus-AITER decode and end-to-end backend selection
-remain separate work.
+prefill. The separate matched decode follow-up is now complete; end-to-end
+backend selection remains open.
 
 See [the complete paired table and methodology](../tps-rdna4-qwen38-tp2/PREFILL_AUTOTUNE_VS_AITER_UNIFIED.md),
 [`benchmark source`](benchmarks/kernels/bench_rocm_prefill_vs_aiter.py),
@@ -626,3 +626,31 @@ See [the complete paired table and methodology](../tps-rdna4-qwen38-tp2/PREFILL_
 [`full timings`](results/context-attention/aiter-prefill-full.json),
 [`CSV`](results/context-attention/aiter-prefill-full.csv), and
 [`summary`](results/context-attention/aiter-prefill-summary.json).
+
+### Separate SplitKV decode comparison
+
+The query-length-one follow-up tested our production SplitKV split heuristic
+and selected FlyDSL/Triton routes against complete TPS AITER `f07170b53a`,
+with identical logical Q/K/V, KV dtype, page geometry, and causal semantics.
+On one R9700 it produced **381 valid cold-cache pairs**: AITER was **1.424x
+faster across 180 BF16 KV cases**, while ours was **1.425x faster across 201
+FP8 KV cases**, geometrically. Actual FlyDSL activation alone was essentially
+tied for BF16 (AITER 1.007x) and favored ours by **2.055x for FP8**.
+
+Cache reuse changes the BF16 verdict materially. At TP2/batch 1/8192 tokens,
+our active FlyDSL route took **45.860 us** versus AITER's **24.800 us**;
+AITER was **1.849x faster**. FP8 favored ours: **46.240 us** versus **135.322 us**,
+or **2.926x faster**. All 16 targeted reuse cases passed full-reference checks.
+These TP labels are rank-local head shapes, not distributed TP4/TP8 runs.
+
+There is no unconditional decode lead: TP8 FP8 `wave8` loses at long contexts
+on hybrid pages but wins some equivalent 64-token-page shapes; high-batch
+fallbacks also lose. **23 standard-page non-split Triton cases failed
+correctness or faulted and were excluded from timing**, and 22 oversized
+cases were memory-pruned. A separate pinned-vanilla standard-page reproducer
+hit an LLVM compilation assertion. This is a decode/compiler follow-up,
+not a failure of the prefill autotuning cache or a resolved root cause.
+
+Keep roadmap item 4. These are kernel comparisons, not an end-to-end backend
+verdict. See [the complete decode and cache-reuse report](../tps-rdna4-qwen38-tp2/SPLITKV_VS_AITER_UNIFIED_DECODE.md)
+for active routes, all paired results, correctness details and reproduction.
