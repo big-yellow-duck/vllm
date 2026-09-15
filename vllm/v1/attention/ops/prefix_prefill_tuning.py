@@ -6,6 +6,7 @@ import hashlib
 import itertools
 import json
 import os
+import statistics
 import tempfile
 import time
 from pathlib import Path
@@ -19,6 +20,7 @@ from vllm.triton_utils import triton
 
 logger = init_logger(__name__)
 _TABLES: dict[tuple, dict] = {}
+_QUERY_BUCKETS = tuple(2**exponent for exponent in range(5, 17))
 _DEFAULT = dict(
     BLOCK_M=128,
     BLOCK_N=64,
@@ -73,7 +75,7 @@ def _identity(device, heads, kv_heads, dim, page, scale):
 
 def _workloads(max_tokens, max_len, max_seqs):
     limit = min(max_tokens, max_len)
-    queries = sorted({min(q, limit) for q in (32, 128, 512, 2048) if limit >= 2})
+    queries = sorted({min(q, limit) for q in _QUERY_BUCKETS if limit >= 2})
     for q in queries:
         batches = sorted({1, min(4, max_seqs, max_tokens // q)})
         contexts = sorted({0, min(4096, max_len - q), min(8192, max_len - q)})
@@ -102,6 +104,21 @@ def _make_inputs(device, heads, kv_heads, dim, page, batch, query_len, seq_len):
     lengths = torch.full((batch,), seq_len, device=device, dtype=torch.int32)
     scale = torch.ones((), device=device)
     return q, k, v, kc, vc, table, starts, lengths, scale
+
+
+def _bench_long_config(run, device, cache):
+    stream = torch.cuda.current_stream(device)
+    start = torch.cuda.Event(enable_timing=True)
+    end = torch.cuda.Event(enable_timing=True)
+    samples = []
+    for _ in range(3):
+        cache.zero_()
+        start.record(stream)
+        run()
+        end.record(stream)
+        end.synchronize()
+        samples.append(start.elapsed_time(end) * 1000)
+    return statistics.median(samples)
 
 
 def _tune_workload(device, heads, kv_heads, dim, page, scale, workload):
@@ -136,19 +153,40 @@ def _tune_workload(device, heads, kv_heads, dim, page, scale, workload):
 
     run(_DEFAULT, reference)
     torch.accelerator.synchronize(device)
+    reference_norm = reference.float().norm()
+    cache = (
+        torch.empty(256 * 1024 * 1024, dtype=torch.int8, device=device)
+        if qlen >= 8192
+        else None
+    )
     results = []
     for config in _CONFIGS:
         try:
             run(config)
             torch.accelerator.synchronize(device)
             torch.testing.assert_close(output, reference, atol=0.01, rtol=0.01)
-            milliseconds = triton.testing.do_bench(
-                lambda config=config: run(config),
-                warmup=5,
-                rep=20,
-                return_mode="median",
+            relative_l2 = (
+                (output.float() - reference.float()).norm() / reference_norm
+            ).item()
+            if relative_l2 > 0.005:
+                raise AssertionError(f"Relative L2 error {relative_l2} exceeds 0.5%")
+            if cache is not None:
+                microseconds = _bench_long_config(
+                    lambda config=config: run(config), device, cache
+                )
+            else:
+                microseconds = (
+                    triton.testing.do_bench(
+                        lambda config=config: run(config),
+                        warmup=5,
+                        rep=20,
+                        return_mode="median",
+                    )
+                    * 1000
+                )
+            results.append(
+                {"config": config, "us": microseconds, "relative_l2": relative_l2}
             )
-            results.append({"config": config, "us": milliseconds * 1000})
         except (triton.OutOfResources, triton.CompilationError, AssertionError) as exc:
             logger.warning("Rejected context attention config %s: %s", config, exc)
     if not results:
@@ -194,7 +232,9 @@ def warmup_context_attention(
     ):
         return
     key = _key(device, heads, kv_heads, dim, page, scale)
-    if key in _TABLES:
+    workloads = list(_workloads(max_tokens, max_len, max_seqs))
+    warmed = {tuple(r["workload"]) for r in _TABLES.get(key, {}).get("records", [])}
+    if all(workload in warmed for workload in workloads):
         return
     identity = _identity(device, heads, kv_heads, dim, page, scale)
     digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
@@ -224,7 +264,7 @@ def warmup_context_attention(
                     "Ignoring invalid context attention tuning cache %s", path
                 )
         records = {tuple(r["workload"]): r for r in data["records"]}
-        for workload in _workloads(max_tokens, max_len, max_seqs):
+        for workload in workloads:
             if workload in records:
                 loaded += 1
                 continue

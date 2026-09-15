@@ -1169,3 +1169,78 @@ def test_rocm_context_tuning_recovers_corrupt_cache(tmp_path, monkeypatch):
     import json
 
     assert len(json.loads(cache.read_text())["records"]) == 2
+
+
+def test_rocm_context_tuning_extends_buckets_and_reuses_saved_limits(
+    tmp_path, monkeypatch
+):
+    """Reuse saved ceiling buckets and tune only missing shapes after limit changes."""
+    from types import SimpleNamespace
+
+    from vllm.v1.attention.ops import prefix_prefill_tuning as tuning
+
+    monkeypatch.setenv("VLLM_CACHE_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        torch.cuda,
+        "get_device_properties",
+        lambda _: SimpleNamespace(
+            name="test", gcnArchName="gfx1201", multi_processor_count=64
+        ),
+    )
+    monkeypatch.setattr(tuning, "_TABLES", {})
+    calls = []
+
+    def tune(*args):
+        workload = args[-1]
+        calls.append(workload)
+        best = tuning._CONFIGS[0] if workload[1] == 8192 else tuning._DEFAULT
+        return {"workload": list(workload), "best": best, "results": []}
+
+    monkeypatch.setattr(tuning, "_tune_workload", tune)
+    args = (
+        torch.device("cuda:0"),
+        torch.bfloat16,
+        4,
+        2,
+        64,
+        32,
+        0.125,
+        65536,
+        65536,
+        1,
+    )
+    tuning.warmup_context_attention(*args)
+    assert len(calls) == 34
+    assert (
+        tuning.get_context_attention_config(
+            torch.device("cuda:0"), 4, 2, 64, 32, 1, 5155, 5155, 0.125
+        )
+        == tuning._CONFIGS[0]
+    )
+    assert (
+        tuning.get_context_attention_config(
+            torch.device("cuda:0"), 4, 2, 64, 32, 1, 65536, 65536, 0.125
+        )
+        is not None
+    )
+    assert (
+        tuning.get_context_attention_config(
+            torch.device("cuda:0"), 4, 2, 64, 32, 1, 65537, 65537, 0.125
+        )
+        is None
+    )
+    calls.clear()
+    short = (*args[:-3], 2048, 2048, 1)
+    tuning.warmup_context_attention(*short)
+    assert set(calls) == {(1, q, 2048) for q in (32, 64, 128, 256, 512, 1024)}
+    cache = next(tmp_path.rglob("*.json"))
+    saved = cache.read_bytes(), cache.stat().st_mtime_ns
+    tuning._TABLES.clear()
+
+    def forbidden(*args):
+        pytest.fail("Saved long/short engine startup attempted to tune")
+
+    monkeypatch.setattr(tuning, "_tune_workload", forbidden)
+    tuning.warmup_context_attention(*args)
+    tuning.warmup_context_attention(*short)
+    assert (cache.read_bytes(), cache.stat().st_mtime_ns) == saved
