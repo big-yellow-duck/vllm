@@ -82,8 +82,30 @@ def worker_inventory(worker):
 
 
 def start_probe(worker):
+    import sys
+
     import torch
 
+    worker._attention_bench_prefill_launches = []
+    tuning = sys.modules.get("vllm.v1.attention.ops.prefix_prefill_tuning")
+    if tuning is not None:
+        original = tuning.get_context_attention_config
+        worker._attention_bench_original_lookup = original
+
+        def lookup(*args, **kwargs):
+            config = original(*args, **kwargs)
+            worker._attention_bench_prefill_launches.append(
+                {
+                    "batch": args[5],
+                    "query": args[6],
+                    "seq": args[7],
+                    "kv_dtype": str(kwargs.get("kv_dtype", torch.bfloat16)),
+                    "config": config,
+                }
+            )
+            return config
+
+        tuning.get_context_attention_config = lookup
     worker._attention_bench_profiler = torch.profiler.profile(
         activities=[
             torch.profiler.ProfilerActivity.CPU,
@@ -94,6 +116,8 @@ def start_probe(worker):
 
 
 def stop_probe(worker):
+    import sys
+
     profiler = worker._attention_bench_profiler
     profiler.stop()
     kernels = {}
@@ -101,7 +125,17 @@ def stop_probe(worker):
         if str(event.device_type).endswith("CUDA"):
             kernels[event.name] = kernels.get(event.name, 0) + 1
     del worker._attention_bench_profiler
-    return {"rank": worker.rank, "gpu_kernel_counts": kernels}
+    if hasattr(worker, "_attention_bench_original_lookup"):
+        tuning = sys.modules["vllm.v1.attention.ops.prefix_prefill_tuning"]
+        tuning.get_context_attention_config = worker._attention_bench_original_lookup
+        del worker._attention_bench_original_lookup
+    launches = worker._attention_bench_prefill_launches
+    del worker._attention_bench_prefill_launches
+    return {
+        "rank": worker.rank,
+        "gpu_kernel_counts": kernels,
+        "prefill_launches": launches,
+    }
 
 
 class AttentionBenchWorkerExtension:
@@ -237,9 +271,11 @@ def main():
         )
 
     if args.probe:
-        generate(8192, 4, 1)
+        for batch in (1, 2, 4):
+            generate(8192, 4, batch)
         llm.collective_rpc("attention_bench_start_probe")
-        generate(8192, 4, 1)
+        for batch in (1, 2, 4):
+            generate(8192, 4, batch)
         result["profile"] = llm.collective_rpc("attention_bench_stop_probe")
         save(args.output_json, result)
 
