@@ -542,3 +542,54 @@ remained unchanged. The server was stopped afterwards. This validates a
 that all prompts necessarily entered the same scheduler iteration.
 Artifacts: [`server response`](results/context-attention/pruned-server-smoke.json)
 and [`server log`](results/context-attention/pruned-server.log).
+
+## Matched prefill versus TPS AITER unified attention (2026-09-15)
+
+The isolated comparison tested the union of **all 211 previously saved
+distinct workloads** for HQ=12/HKV=2/D=256/page=784, each in BF16 and E4M3 FP8
+KV: **422 cases** on one gfx1201 R9700. Both backends used identical logical
+Q/K/V and the same page size, in their required packed versus NHD layouts.
+This is Qwen TP2 rank-local kernel work, not distributed serving. The complete
+578-cell long-context plan was not newly swept.
+
+Historical source fingerprints were retuned before timing: **35 tuned, 176
+loaded**, in **311.41 s**. Offline warmup selected this exact saved array with
+an 8 GiB scratch allowance for the historical large-query points; engine
+default pruning and serving limits are unchanged. The current cache now holds
+**211 records / 5064 validated candidate pairs**. Automatic dispatch then
+forbade retuning and left cache SHA256/mtime unchanged.
+
+| KV / AITER path | Shapes | ROCM wins >2% | AITER wins >2% | Within 2% | Geometric-mean result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| BF16, all | 211 | 132 | 72 | 7 | AITER 1.049x faster; strongly depends on workload |
+| BF16, 2D | 136 | 125 | 6 | 5 | ROCM 1.366x faster |
+| BF16, 3D multi-query | 75 | 7 | 66 | 2 | AITER 2.016x faster |
+| FP8, actual default fallback | 211 | 0 | 211 | 0 | AITER 5.515x faster |
+
+FP8 KV **bypasses the current BF16-only autotune gate**, even when the flag is
+enabled. These measurements compare its actual default launch, not a separately
+tuned FP8 candidate. To match attention values, FP8 current-chunk dense K/V
+were dequantized from the same FP8 values AITER consumes; quantization and
+layout preparation were excluded from timing.
+
+All 422 cases passed full-output baseline/pair checks, sampled FP32 causal
+references for every sequence, graph capture, and changed-Q graph replay.
+Worst full-output pair relative L2 was **0.2878%**; worst sampled FP32 row error
+was **0.2329%**. Five rounds alternated candidates with cold-L2 CUDA graph GPU
+event timing. A six-case recheck of the final reusable harness passed and
+preserved winner directions and the cache.
+
+The AITER source was pinned to TPS `f07170b53a`. Our earlier roadmap review
+incorrectly assumed all multi-query AITER calls use 2D. Its gfx1201 selector
+chooses 3D for 75 of these shapes, and the BF16 patch changes all 75 launches.
+The 2D prefill policy is unchanged by that commit. **Keep roadmap item 4:** our
+BF16 tuning wins most 2D shapes but does not supersede patched segmented
+prefill. Matched SplitKV-versus-AITER decode and end-to-end backend selection
+remain separate work.
+
+See [the complete paired table and methodology](../tps-rdna4-qwen38-tp2/PREFILL_AUTOTUNE_VS_AITER_UNIFIED.md),
+[`benchmark source`](benchmarks/kernels/bench_rocm_prefill_vs_aiter.py),
+[`exact workload manifest`](results/context-attention/aiter-prefill-manifest.json),
+[`full timings`](results/context-attention/aiter-prefill-full.json),
+[`CSV`](results/context-attention/aiter-prefill-full.csv), and
+[`summary`](results/context-attention/aiter-prefill-summary.json).
