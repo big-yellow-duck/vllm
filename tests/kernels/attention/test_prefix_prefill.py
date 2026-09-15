@@ -1025,7 +1025,14 @@ def test_qwen3_nonstandard_block_size(
 
 @pytest.mark.parametrize(
     "dim,page,query_len,context_len",
-    [(64, 32, 33, 35), (128, 16, 129, 65), (256, 1568, 65, 1601)],
+    [
+        (64, 32, 2, 35),
+        (128, 16, 3, 65),
+        (256, 784, 9, 1601),
+        (64, 32, 33, 35),
+        (128, 16, 129, 65),
+        (256, 1568, 65, 1601),
+    ],
 )
 @torch.inference_mode()
 def test_rocm_context_tuning_candidates_match_sdpa(dim, page, query_len, context_len):
@@ -1160,15 +1167,18 @@ def test_rocm_context_tuning_recovers_corrupt_cache(tmp_path, monkeypatch):
     monkeypatch.setattr(tuning, "_tune_workload", tune)
     args = (torch.device("cuda:0"), torch.bfloat16, 4, 2, 64, 32, 0.125, 32, 64, 1)
     tuning.warmup_context_attention(*args)
+    original_workloads = calls.copy()
     cache = next(tmp_path.rglob("*.json"))
     cache.write_text('{"identity":')
     tuning._TABLES.clear()
     calls.clear()
     tuning.warmup_context_attention(*args)
-    assert len(calls) == 2
+    assert calls == original_workloads
     import json
 
-    assert len(json.loads(cache.read_text())["records"]) == 2
+    assert [r["workload"] for r in json.loads(cache.read_text())["records"]] == [
+        list(workload) for workload in original_workloads
+    ]
 
 
 def test_rocm_context_tuning_extends_buckets_and_reuses_saved_limits(
@@ -1194,6 +1204,8 @@ def test_rocm_context_tuning_extends_buckets_and_reuses_saved_limits(
         workload = args[-1]
         calls.append(workload)
         best = tuning._CONFIGS[0] if workload[1] == 8192 else tuning._DEFAULT
+        if workload[1] == 4:
+            best = tuning._CONFIGS[1]
         return {"workload": list(workload), "best": best, "results": []}
 
     monkeypatch.setattr(tuning, "_tune_workload", tune)
@@ -1210,7 +1222,14 @@ def test_rocm_context_tuning_extends_buckets_and_reuses_saved_limits(
         1,
     )
     tuning.warmup_context_attention(*args)
-    assert len(calls) == 34
+    assert len(calls) == 46
+    assert {q for _, q, _ in calls} == {2**exponent for exponent in range(1, 17)}
+    assert (
+        tuning.get_context_attention_config(
+            torch.device("cuda:0"), 4, 2, 64, 32, 1, 3, 4099, 0.125
+        )
+        == tuning._CONFIGS[1]
+    )
     assert (
         tuning.get_context_attention_config(
             torch.device("cuda:0"), 4, 2, 64, 32, 1, 5155, 5155, 0.125
@@ -1232,7 +1251,9 @@ def test_rocm_context_tuning_extends_buckets_and_reuses_saved_limits(
     calls.clear()
     short = (*args[:-3], 2048, 2048, 1)
     tuning.warmup_context_attention(*short)
-    assert set(calls) == {(1, q, 2048) for q in (32, 64, 128, 256, 512, 1024)}
+    assert set(calls) == {
+        (1, q, 2048) for q in (2, 4, 8, 16, 32, 64, 128, 256, 512, 1024)
+    }
     cache = next(tmp_path.rglob("*.json"))
     saved = cache.read_bytes(), cache.stat().st_mtime_ns
     tuning._TABLES.clear()

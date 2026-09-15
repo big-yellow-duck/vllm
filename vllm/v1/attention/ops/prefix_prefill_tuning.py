@@ -20,7 +20,7 @@ from vllm.triton_utils import triton
 
 logger = init_logger(__name__)
 _TABLES: dict[tuple, dict] = {}
-_QUERY_BUCKETS = tuple(2**exponent for exponent in range(5, 17))
+_QUERY_BUCKETS = tuple(2**exponent for exponent in range(1, 17))
 _DEFAULT = dict(
     BLOCK_M=128,
     BLOCK_N=64,
