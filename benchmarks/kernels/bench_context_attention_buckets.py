@@ -7,6 +7,7 @@ import hashlib
 import json
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 import torch
 
@@ -50,6 +51,16 @@ def probe(device, heads, kv_heads, dim, page, qlen, context):
 
     run(tuning._DEFAULT, baseline)
     run(config, output)
+    automatic = torch.empty_like(q)
+    with patch.object(
+        tuning,
+        "get_context_attention_config",
+        wraps=tuning.get_context_attention_config,
+    ) as lookup:
+        run(None, automatic)
+        assert lookup.call_count == 1
+        assert lookup.call_args.args[5:8] == (1, qlen, qlen + context)
+    torch.testing.assert_close(automatic, output, atol=0, rtol=0)
     torch.testing.assert_close(output, baseline, atol=0.01, rtol=0.01)
     relative_l2 = (
         (output.float() - baseline.float()).norm() / baseline.float().norm()
@@ -116,6 +127,7 @@ def probe(device, heads, kv_heads, dim, page, qlen, context):
         "config": config,
         "us": timings,
         "relative_l2_vs_baseline": relative_l2,
+        "automatic_matches_saved": True,
         "sampled_fp32_max_row_relative_l2": errors,
     }
 
@@ -126,6 +138,7 @@ def main():
     parser.add_argument("--load-only", action="store_true")
     parser.add_argument("--warm-short-engine", action="store_true")
     parser.add_argument("--probes", action="store_true")
+    parser.add_argument("--short-probes", action="store_true")
     args = parser.parse_args()
     device = torch.device("cuda:0")
     if args.load_only:
@@ -163,6 +176,12 @@ def main():
         result["probes"] = [
             probe(device, 12, 2, 256, 784, q, c)
             for q, c in ((5155, 0), (5155, 8192), (32769, 0), (65535, 0))
+        ]
+    if args.short_probes:
+        result["short_probes"] = [
+            probe(device, 12, 2, 256, 784, q, c)
+            for q in (2, 3, 4, 5, 8, 9, 16, 17)
+            for c in (0, 4096, 8192)
         ]
     assert (
         tuning.get_context_attention_config(

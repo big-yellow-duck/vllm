@@ -1,7 +1,7 @@
 # Persistent ROCm context attention startup tuning
 
 Branch: `perf/rocm-context-attention-autotune`, based on vanilla vLLM
-`8ebc5b0a18`. Initial feature commit: `d435f5f38f`; expanded tuning commit: `0b19ba894c`. This isolates launch configuration tuning; the attention math and
+`8ebc5b0a18`. Initial feature commit: `d435f5f38f`; 65,536-token expansion: `0b19ba894c`; two-token minimum: `771ae79b64`. This isolates launch configuration tuning; the attention math and
 Triton kernel are unchanged. It does not depend on the SplitKV feature branch.
 
 Start the Qwen TP2 server in this workspace:
@@ -46,12 +46,13 @@ remain separate; this feature removes repeated **context attention tuning**.
 
 ## Workloads and scope
 
-Query representatives are every power of two from **32 through 65,536**:
-32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16,384, 32,768, and 65,536.
+Query representatives are every power of two from **2 through 65,536**:
+2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16,384,
+32,768, and 65,536.
 They are clipped to the engine's token and sequence limits. Context representatives are 0, 4096, and 8192, clipped to
 its sequence limit. Batch representatives are 1 and up to 4, subject to scheduler
-limits. The current 2048-token, batch-one launcher uses 13 buckets. With both limits
-set to 65,536 and batch one, startup uses 34 buckets. The limit is an autotune
+limits. The current 2048-token, batch-one launcher uses 21 buckets. With both limits
+set to 65,536 and batch one, startup uses 46 buckets. The limit is an autotune
 query ceiling; it does not automatically raise the launcher's engine limits.
 
 There are 24 candidates: query tiles 32/64/128, KV tiles 32/64, cache unrolling
@@ -77,6 +78,11 @@ original launch. Tuning is currently enabled for validated gfx1201 BF16 layouts
 with head dimensions 64/128/256. ALiBi, sliding windows, sinks, noncausal attention,
 FP8 caches/output, and cached-only K/V retain their existing paths. The
 single-query decode path is separate and continues to use existing decode code.
+Multi-token speculative verification through `ROCM_ATTN` uses
+`context_attention_fwd` when `max_query_len > 1`, so it can use the 2/4/8/16
+buckets too. For example, a three-token query selects the four-token bucket
+and runs with its actual query length. This does not tune another attention
+backend or guarantee an end-to-end speculative decoding speedup.
 
 ## Repeat the restart validation
 
@@ -190,7 +196,7 @@ The earlier cold timing table remains the initial compilation/tuning measurement
 repository API cleanup intentionally created this new source fingerprint.
 All repository pre-commit checks passed for both the feature and setup commits.
 
-## Expanded power-of-two sweep through 65,536 (2026-09-15)
+## Previous 32–65,536 power-of-two sweep (2026-09-15)
 
 The new sweep covers every query power of two from 32 to 65,536. Measurements
 use one GPU with the **per-rank Qwen TP2 dimensions** listed above, batch one,
@@ -292,7 +298,7 @@ The validated default launcher remains at 2048 tokens. Raw sweep/probe results:
 [`buckets-65536.json`](results/context-attention/buckets-65536.json),
 [`sweep log`](results/context-attention/buckets-65536.log), and
 [`cache-only reload`](results/context-attention/buckets-65536-reload.json).
-Current source fingerprint/cache filename:
+Source fingerprint/cache filename for the previous 32-token-minimum sweep:
 `dfb277ee8348e7e61d5254c118b349034b9cfa68c61b85fb479f17f11057ce69.json`.
 
 Two independent default-limit Qwen TP2 engines also passed the restart check
@@ -303,3 +309,97 @@ startup was **33.99 s** and **37.42 s**, with no context retuning. The three CPU
 persistence/recovery/limit-change tests passed, and repository checks passed for
 the tuning commit. Its final source hash matches the measured cache identity.
 Logs and JSON: [`expanded restart validation`](results/context-attention/buckets-65536-restart).
+
+## Dedicated 2/4/8/16-token tuning (2026-09-15)
+
+The minimum query representative is now **2**, retaining every power of two up
+to 65,536. No attention math, tiles, candidate list, or decode kernel changed.
+This targets small multi-token queries, including speculative verification when
+it uses `ROCM_ATTN`. The dispatch in
+[`chunked_prefill_paged_decode.py`](vllm/v1/attention/ops/chunked_prefill_paged_decode.py)
+calls `context_attention_fwd` for `max_query_len > 1`. Its saved configuration
+lookup therefore covers these queries. Single-token decode still uses the
+existing decode implementation. Query representatives describe total target
+verification tokens, not the configured number of draft tokens alone.
+
+Previously, queries below 32 already selected the 32-query ceiling bucket.
+Dedicated small representatives let startup benchmark their actual workload
+instead of borrowing that representative. On the tested Qwen TP2 dimensions,
+**all twelve new full-range workloads chose the same parameters as the previous
+32-query bucket**: `BLOCK_M=32, BLOCK_N=32, cache-unroll=1, warps=8`, with stages
+and request unroll 1. Accordingly, the gains below are versus vanilla vLLM's
+original `128/64/4/4` launch, not an additional gain over the previous autotuned
+branch. This range extension alone does not establish speculative end-to-end
+throughput gains.
+
+New representatives, batch one, BF16, local HQ=12/HKV=2/D=256, page=784, on the
+same gfx1201 R9700 and runtime as the previous sweep. Compilation/allocation are
+excluded; timing uses Triton's median L2-clearing benchmark described above.
+
+| Query | Cached prefix | Original (us) | Tuned (us) | Speedup |
+| ---: | ---: | ---: | ---: | ---: |
+| 2 | 0 | 106.36 | 9.92 | 10.72x |
+| 2 | 4096 | 1388.21 | 267.08 | 5.20x |
+| 2 | 8192 | 2632.45 | 520.25 | 5.06x |
+| 4 | 0 | 104.52 | 9.72 | 10.75x |
+| 4 | 4096 | 1342.98 | 261.04 | 5.14x |
+| 4 | 8192 | 2619.03 | 513.09 | 5.10x |
+| 8 | 0 | 103.92 | 9.92 | 10.48x |
+| 8 | 4096 | 1357.85 | 261.78 | 5.19x |
+| 8 | 8192 | 2619.05 | 512.63 | 5.11x |
+| 16 | 0 | 104.36 | 10.08 | 10.35x |
+| 16 | 4096 | 1352.30 | 262.40 | 5.15x |
+| 16 | 8192 | 2614.45 | 514.37 | 5.08x |
+
+The current-source sweep validated **1344 candidate/workload pairs** across
+**56 saved records**. The full 65,536-token limits tuned 46 records in 225.31 s;
+warming the 2048-token launcher afterwards added only ten clipped-prefix records
+in 6.57 s, reusing eleven shared records. Total tuning time was **231.92 s**.
+The default launcher now needs 21 of those records.
+
+Separate probes tested queries **2, 3, 4, 5, 8, 9, 16, and 17**, each with
+**0, 4096, and 8192** cached-prefix tokens (24 cases). All full outputs matched
+the original launch bitwise on these short inputs, and the independent sampled
+FP32 reference passed, with worst row relative L2 **0.2332%**. Exact and odd
+sizes exercised ceiling selection; for example, 3 selects 4 and 17 selects 32.
+A fresh cache-only process also ran each probe with `_launch_config=None`, so
+normal runtime lookup selected the saved configuration. A lookup spy required
+exactly one call with the actual batch/query/total-sequence lengths for each
+automatic invocation. Every automatic output
+was bitwise identical to the explicitly supplied winner. No probe tuned at
+runtime.
+
+With `_tune_workload` patched to raise, fresh-process loading took
+**0.037 s** and left cache SHA256 and nanosecond mtime unchanged. Every saved
+winner equals its minimum median candidate timing. Worst candidate relative L2
+across the full range was **0.1010%**. Three CPU persistence/recovery/limit-change
+tests and three new GPU SDPA tests passed; the latter exercised 2-, 3-, and
+9-token, batch-two paged queries at head dimensions 64, 128, and 256 against
+all 24 launch candidates.
+
+Reproduce the current range and normal automatic lookup probes:
+
+```bash
+source context-attention-env.bash
+.venv/bin/python benchmarks/kernels/bench_context_attention_buckets.py \
+    --warm-short-engine --short-probes \
+    --output results/context-attention/buckets-2-65536.json
+.venv/bin/python benchmarks/kernels/bench_context_attention_buckets.py \
+    --load-only --warm-short-engine --short-probes \
+    --output results/context-attention/buckets-2-65536-reload.json
+```
+
+Raw results: [`2–65,536 sweep`](results/context-attention/buckets-2-65536.json),
+[`fresh-process automatic probes`](results/context-attention/buckets-2-65536-reload.json),
+[`CPU tests`](results/context-attention/buckets-2-cpu-tests.log), and
+[`short-query SDPA tests`](results/context-attention/buckets-2-gpu-tests.log).
+Current feature commit: `771ae79b64`. Current source fingerprint/cache filename:
+`653e368f4c73b1e1186242d59d94a41305ff127a212abc19d8ba25037570adff.json`.
+
+An independent default-limit Qwen TP2 engine started with tuning forbidden in
+spawned workers. Both ranks reported **`tuned=0 loaded=21`**, using the same
+current-source cache. Engine startup was **36.66 s**; its greedy inference for
+33-, 129-, and 513-token prompts completed, and cache SHA256/mtime stayed
+unchanged. This was a cache/startup check, not an end-to-end speculative decoding
+benchmark. Results: [`cached engine`](results/context-attention/buckets-2-engine.json)
+and [`engine log`](results/context-attention/buckets-2-engine.log).
