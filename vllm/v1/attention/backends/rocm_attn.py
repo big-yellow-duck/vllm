@@ -443,7 +443,7 @@ class RocmAttentionImpl(AttentionImpl):
             envs.VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE
             and not self._context_attention_warmed_up
             and self.attn_type == AttentionType.DECODER
-            and self.kv_cache_dtype == "auto"
+            and self.kv_cache_dtype in ("auto", "bfloat16", "fp8", "fp8_e4m3")
             and self.alibi_slopes is None
             and self.sliding_window == (-1, -1)
             and self.sinks is None
@@ -467,6 +467,7 @@ class RocmAttentionImpl(AttentionImpl):
                 config.scheduler_config.max_num_batched_tokens,
                 config.model_config.max_model_len,
                 config.scheduler_config.max_num_seqs,
+                kv_dtype=spec.dtype if spec.dtype != torch.uint8 else self.fp8_dtype,
                 **limits,
             )
             self._context_attention_warmed_up = True

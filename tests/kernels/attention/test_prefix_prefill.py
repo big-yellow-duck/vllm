@@ -1035,7 +1035,10 @@ def test_qwen3_nonstandard_block_size(
     ],
 )
 @torch.inference_mode()
-def test_rocm_context_tuning_candidates_match_sdpa(dim, page, query_len, context_len):
+@pytest.mark.parametrize("kv_dtype", [torch.bfloat16, torch.float8_e4m3fn])
+def test_rocm_context_tuning_candidates_match_sdpa(
+    dim, page, query_len, context_len, kv_dtype
+):
     """Launch tuning must preserve attention at ragged tile/page boundaries."""
     if not current_platform.is_rocm():
         pytest.skip("ROCm context launch configurations")
@@ -1043,16 +1046,23 @@ def test_rocm_context_tuning_candidates_match_sdpa(dim, page, query_len, context
 
     device = torch.device("cuda:0")
     q, k, v, kc, vc, table, starts, lengths, one = _make_inputs(
-        device, 4, 2, dim, page, 2, query_len, query_len + context_len
+        device, 4, 2, dim, page, 2, query_len, query_len + context_len, kv_dtype
     )
     output = torch.empty_like(q)
     references = []
+    v_scale = one * 2 if kv_dtype == torch.float8_e4m3fn else one
     for b in range(2):
         context_k = (
-            kc[table[b].long()].permute(0, 3, 1, 2, 4).reshape(-1, 2, dim)[:context_len]
+            kc.float()[table[b].long()]
+            .permute(0, 3, 1, 2, 4)
+            .reshape(-1, 2, dim)[:context_len]
+            * one
         )
         context_v = (
-            vc[table[b].long()].permute(0, 3, 1, 2).reshape(-1, 2, dim)[:context_len]
+            vc.float()[table[b].long()]
+            .permute(0, 3, 1, 2)
+            .reshape(-1, 2, dim)[:context_len]
+            * v_scale
         )
         full_k = torch.cat(
             (context_k, k[b * query_len : (b + 1) * query_len])
@@ -1065,7 +1075,7 @@ def test_rocm_context_tuning_candidates_match_sdpa(dim, page, query_len, context
         )
         references.append(
             F.scaled_dot_product_attention(
-                q[b * query_len : (b + 1) * query_len].transpose(0, 1),
+                q[b * query_len : (b + 1) * query_len].float().transpose(0, 1),
                 full_k.transpose(0, 1),
                 full_v.transpose(0, 1),
                 attn_mask=mask,
@@ -1079,7 +1089,7 @@ def test_rocm_context_tuning_candidates_match_sdpa(dim, page, query_len, context
                 k,
                 v,
                 output,
-                "auto",
+                "auto" if kv_dtype == torch.bfloat16 else "fp8",
                 kc,
                 vc,
                 table,
@@ -1088,16 +1098,17 @@ def test_rocm_context_tuning_candidates_match_sdpa(dim, page, query_len, context
                 query_len + context_len,
                 query_len,
                 one,
-                one,
+                v_scale,
                 skip_decode=True,
                 _launch_config=config,
             )
         except triton.OutOfResources:
             continue
-        torch.testing.assert_close(output, reference, atol=0.01, rtol=0.01)
+        torch.testing.assert_close(output.float(), reference, atol=0.01, rtol=0.01)
 
 
-def test_rocm_context_tuning_persists_without_retuning(tmp_path, monkeypatch):
+@pytest.mark.parametrize("kv_dtype", [torch.bfloat16, torch.float8_e4m3fn])
+def test_rocm_context_tuning_persists_without_retuning(tmp_path, monkeypatch, kv_dtype):
     """A fresh table must reuse disk winners without invoking the benchmark."""
     from types import SimpleNamespace
 
@@ -1119,7 +1130,7 @@ def test_rocm_context_tuning_persists_without_retuning(tmp_path, monkeypatch):
 
     monkeypatch.setattr(tuning, "_tune_workload", tune)
     args = (torch.device("cuda:0"), torch.bfloat16, 4, 2, 64, 32, 0.125, 32, 64, 1)
-    tuning.warmup_context_attention(*args)
+    tuning.warmup_context_attention(*args, kv_dtype=kv_dtype)
     cache = next(tmp_path.rglob("*.json"))
     saved = cache.read_bytes(), cache.stat().st_mtime_ns
     tuning._TABLES.clear()
@@ -1128,17 +1139,51 @@ def test_rocm_context_tuning_persists_without_retuning(tmp_path, monkeypatch):
         pytest.fail("Cached engine startup attempted to tune")
 
     monkeypatch.setattr(tuning, "_tune_workload", forbidden)
-    tuning.warmup_context_attention(*args)
+    tuning.warmup_context_attention(*args, kv_dtype=kv_dtype)
     assert (cache.read_bytes(), cache.stat().st_mtime_ns) == saved
     assert (
         tuning.get_context_attention_config(
-            torch.device("cuda:0"), 4, 2, 64, 32, 1, 31, 63, 0.125
+            torch.device("cuda:0"),
+            4,
+            2,
+            64,
+            32,
+            1,
+            31,
+            63,
+            0.125,
+            kv_dtype=kv_dtype,
         )
         == tuning._DEFAULT
     )
     assert (
         tuning.get_context_attention_config(
-            torch.device("cuda:0"), 4, 2, 64, 32, 1, 128, 128, 0.125
+            torch.device("cuda:0"),
+            4,
+            2,
+            64,
+            32,
+            1,
+            128,
+            128,
+            0.125,
+            kv_dtype=kv_dtype,
+        )
+        is None
+    )
+    other_dtype = torch.float8_e4m3fn if kv_dtype == torch.bfloat16 else torch.bfloat16
+    assert (
+        tuning.get_context_attention_config(
+            torch.device("cuda:0"),
+            4,
+            2,
+            64,
+            32,
+            1,
+            31,
+            63,
+            0.125,
+            kv_dtype=other_dtype,
         )
         is None
     )

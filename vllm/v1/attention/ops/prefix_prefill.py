@@ -953,7 +953,9 @@ def context_attention_fwd(
     elif (
         envs.VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE
         and current_platform.is_rocm()
-        and q.dtype == k_cache.dtype == v_cache.dtype == torch.bfloat16
+        and q.dtype == torch.bfloat16
+        and k_cache.dtype == v_cache.dtype
+        and k_cache.dtype in (torch.bfloat16, torch.float8_e4m3fn)
         and causal
         and not sliding_window
         and sinks is None
@@ -972,6 +974,7 @@ def context_attention_fwd(
             max_input_len,
             max_seq_len,
             sm_scale,
+            kv_dtype=k_cache.dtype,
         )
         if tuned_config is not None:
             launch_config = tuned_config

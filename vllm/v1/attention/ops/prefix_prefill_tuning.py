@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Startup-only, persistent launch tuning for BF16 ROCm context attention."""
+"""Startup-only, persistent launch tuning for ROCm context attention."""
 
 import hashlib
 import itertools
@@ -44,16 +44,16 @@ _CONFIGS = [
 ]
 
 
-def _key(device, heads, kv_heads, dim, page, scale):
-    return (torch.device(device).index, heads, kv_heads, dim, page, scale)
+def _key(device, heads, kv_heads, dim, page, scale, kv_dtype=torch.bfloat16):
+    return (torch.device(device).index, heads, kv_heads, dim, page, scale, kv_dtype)
 
 
-def _identity(device, heads, kv_heads, dim, page, scale):
+def _identity(device, heads, kv_heads, dim, page, scale, kv_dtype=torch.bfloat16):
     props = torch.cuda.get_device_properties(device)
     from triton._C.libtriton import get_cache_invalidating_env_vars
 
     return {
-        "schema": 1,
+        "schema": 2,
         "gpu": props.name,
         "arch": props.gcnArchName,
         "compute_units": props.multi_processor_count,
@@ -71,6 +71,7 @@ def _identity(device, heads, kv_heads, dim, page, scale):
         "page": page,
         "scale": scale,
         "dtype": "bfloat16",
+        "kv_dtype": str(kv_dtype),
         "configs": _CONFIGS,
     }
 
@@ -127,7 +128,17 @@ def _workloads(
             yield b, q, q + c
 
 
-def _make_inputs(device, heads, kv_heads, dim, page, batch, query_len, seq_len):
+def _make_inputs(
+    device,
+    heads,
+    kv_heads,
+    dim,
+    page,
+    batch,
+    query_len,
+    seq_len,
+    kv_dtype=torch.bfloat16,
+):
     generator = torch.Generator(device=device).manual_seed(1234)
 
     def randn(*shape):
@@ -139,14 +150,18 @@ def _make_inputs(device, heads, kv_heads, dim, page, batch, query_len, seq_len):
     k = randn(batch * query_len, kv_heads, dim)
     v = randn(batch * query_len, kv_heads, dim)
     blocks = max(1, triton.cdiv(seq_len - query_len, page))
-    kc = randn(batch * blocks, kv_heads, dim // 8, page, 8)
-    vc = randn(batch * blocks, kv_heads, dim, page)
+    x = 16 // kv_dtype.itemsize
+    scale_value = 1.0 if kv_dtype == torch.bfloat16 else 0.125
+    kc = (randn(batch * blocks, kv_heads, dim // x, page, x).float() / scale_value).to(
+        kv_dtype
+    )
+    vc = (randn(batch * blocks, kv_heads, dim, page).float() / scale_value).to(kv_dtype)
     table = torch.arange(batch * blocks, device=device, dtype=torch.int32).view(
         batch, blocks
     )
     starts = torch.arange(batch + 1, device=device, dtype=torch.int32) * query_len
     lengths = torch.full((batch,), seq_len, device=device, dtype=torch.int32)
-    scale = torch.ones((), device=device)
+    scale = torch.full((), scale_value, device=device)
     return q, k, v, kc, vc, table, starts, lengths, scale
 
 
@@ -165,12 +180,12 @@ def _bench_long_config(run, device, cache):
     return statistics.median(samples)
 
 
-def _tune_workload(device, heads, kv_heads, dim, page, scale, workload):
+def _tune_workload(device, heads, kv_heads, dim, page, scale, kv_dtype, workload):
     from .prefix_prefill import context_attention_fwd
 
     b, qlen, slen = workload
     q, k, v, kc, vc, table, starts, lengths, one = _make_inputs(
-        device, heads, kv_heads, dim, page, b, qlen, slen
+        device, heads, kv_heads, dim, page, b, qlen, slen, kv_dtype
     )
     reference, output = torch.empty_like(q), torch.empty_like(q)
 
@@ -180,7 +195,7 @@ def _tune_workload(device, heads, kv_heads, dim, page, scale, workload):
             k,
             v,
             out,
-            "auto",
+            "auto" if kv_dtype == torch.bfloat16 else "fp8",
             kc,
             vc,
             table,
@@ -276,16 +291,18 @@ def warmup_context_attention(
     memory_budget_bytes=None,
     cache_layouts=(),
     cache_budget_bytes=None,
+    kv_dtype=torch.bfloat16,
 ):
     """Benchmark missing buckets before KV allocation; share results across ranks."""
     props = torch.cuda.get_device_properties(device)
     if (
         dtype != torch.bfloat16
+        or kv_dtype not in (torch.bfloat16, torch.float8_e4m3fn)
         or not props.gcnArchName.startswith("gfx1201")
         or dim not in (64, 128, 256)
     ):
         return
-    key = _key(device, heads, kv_heads, dim, page, scale)
+    key = _key(device, heads, kv_heads, dim, page, scale, kv_dtype)
     if memory_budget_bytes is None:
         memory_budget_bytes = _memory_budget(device)
     workloads = list(
@@ -314,7 +331,7 @@ def warmup_context_attention(
     warmed = {tuple(r["workload"]) for r in _TABLES.get(key, {}).get("records", [])}
     if all(workload in warmed for workload in workloads):
         return
-    identity = _identity(device, heads, kv_heads, dim, page, scale)
+    identity = _identity(device, heads, kv_heads, dim, page, scale, kv_dtype)
     digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
     path = Path(envs.VLLM_CACHE_ROOT) / "rocm_context_attention" / f"{digest}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -347,7 +364,7 @@ def warmup_context_attention(
                 loaded += 1
                 continue
             records[workload] = _tune_workload(
-                device, heads, kv_heads, dim, page, scale, workload
+                device, heads, kv_heads, dim, page, scale, kv_dtype, workload
             )
             tuned += 1
             data["records"] = list(records.values())
@@ -364,10 +381,19 @@ def warmup_context_attention(
 
 
 def get_context_attention_config(
-    device, heads, kv_heads, dim, page, batch, query_len, seq_len, scale
+    device,
+    heads,
+    kv_heads,
+    dim,
+    page,
+    batch,
+    query_len,
+    seq_len,
+    scale,
+    kv_dtype=torch.bfloat16,
 ):
     """Look up an already warmed bucket; inference never benchmarks or reads disk."""
-    data = _TABLES.get(_key(device, heads, kv_heads, dim, page, scale))
+    data = _TABLES.get(_key(device, heads, kv_heads, dim, page, scale, kv_dtype))
     if data is None:
         return None
     records = data["records"]
