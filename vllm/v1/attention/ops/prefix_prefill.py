@@ -153,6 +153,7 @@ def _fwd_kernel(
     # paged KV cache. This supports layers that re-attend an already-cached
     # sequence with query only (e.g. IQuest LoopCoder's `attn(q, None, None)`).
     KV_FROM_CACHE: tl.constexpr = False,
+    SKIP_SHORT_PREFILL: tl.constexpr = 0,
 ):
     cur_batch = tl.program_id(0)
     cur_head = tl.program_id(1)
@@ -167,6 +168,8 @@ def _fwd_kernel(
     cur_batch_ctx_len = cur_batch_seq_len - cur_batch_query_len
 
     if SKIP_DECODE and cur_batch_query_len == 1:
+        return
+    if SKIP_SHORT_PREFILL > 0 and cur_batch_query_len <= SKIP_SHORT_PREFILL:
         return
 
     # start position inside of the query
@@ -935,6 +938,65 @@ def context_attention_fwd(
         extra_kargs = {}
 
     real_block_size = v_cache.shape[3]
+    skip_short_prefill = 0
+    if (
+        _launch_config is None
+        and envs.VLLM_ROCM_USE_SEGMENTED_PREFILL
+        and current_platform.is_rocm()
+        and causal
+        and not sliding_window
+        and sinks is None
+        and fp8_out_scale is None
+        and not kv_from_cache
+        and not is_block_table_ptr
+        and max_input_len > 0
+    ):
+        from vllm.platforms.rocm import on_gfx12x
+
+        from .segmented_prefill import (
+            MAX_QUERY_LEN,
+            can_use_segmented_prefill,
+            segmented_prefill_attention,
+        )
+
+        if (
+            on_gfx12x()
+            and (batch > 1 or max_input_len <= MAX_QUERY_LEN)
+            and can_use_segmented_prefill(
+                q,
+                k,
+                v,
+                o,
+                k_cache,
+                v_cache,
+                processed_b_loc,
+                b_start_loc,
+                b_seq_len,
+                k_scale,
+                v_scale,
+            )
+        ):
+            segmented_prefill_attention(
+                q,
+                k,
+                v,
+                o,
+                k_cache,
+                v_cache,
+                processed_b_loc,
+                b_start_loc,
+                b_seq_len,
+                max_input_len,
+                max_seq_len or processed_b_loc.shape[1] * real_block_size,
+                k_scale,
+                v_scale,
+                sm_scale,
+                skip_decode=skip_decode,
+            )
+            if max_input_len <= MAX_QUERY_LEN:
+                return
+            skip_short_prefill = MAX_QUERY_LEN
+
     # _paged_kv_cache_offsets resolves context tokens against PHYSICAL_BLOCK_SIZE
     # individually, so tiles need not divide the page size.
     BLOCK_M = 128
@@ -1031,6 +1093,7 @@ def context_attention_fwd(
         USE_SINKS=sinks is not None,
         CAUSAL=causal,
         KV_FROM_CACHE=kv_from_cache,
+        SKIP_SHORT_PREFILL=skip_short_prefill,
         **launch_config,
         **extra_kargs,
     )

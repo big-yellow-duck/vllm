@@ -106,6 +106,21 @@ def start_probe(worker):
             return config
 
         tuning.get_context_attention_config = lookup
+    segmented = sys.modules.get("vllm.v1.attention.ops.segmented_prefill")
+    worker._attention_bench_segmented_launches = []
+    if segmented is not None:
+        original_segmented = segmented.segmented_prefill_attention
+        worker._attention_bench_original_segmented = original_segmented
+
+        def segmented_call(*args, **kwargs):
+            entry = {"max_query": args[9], "max_seq": args[10]}
+            if not torch.cuda.is_current_stream_capturing():
+                entry["queries"] = torch.diff(args[7]).cpu().tolist()
+                entry["seq_lens"] = args[8].cpu().tolist()
+            worker._attention_bench_segmented_launches.append(entry)
+            return original_segmented(*args, **kwargs)
+
+        segmented.segmented_prefill_attention = segmented_call
     worker._attention_bench_profiler = torch.profiler.profile(
         activities=[
             torch.profiler.ProfilerActivity.CPU,
@@ -129,12 +144,21 @@ def stop_probe(worker):
         tuning = sys.modules["vllm.v1.attention.ops.prefix_prefill_tuning"]
         tuning.get_context_attention_config = worker._attention_bench_original_lookup
         del worker._attention_bench_original_lookup
+    if hasattr(worker, "_attention_bench_original_segmented"):
+        segmented = sys.modules["vllm.v1.attention.ops.segmented_prefill"]
+        segmented.segmented_prefill_attention = (
+            worker._attention_bench_original_segmented
+        )
+        del worker._attention_bench_original_segmented
+    segmented_launches = worker._attention_bench_segmented_launches
+    del worker._attention_bench_segmented_launches
     launches = worker._attention_bench_prefill_launches
     del worker._attention_bench_prefill_launches
     return {
         "rank": worker.rank,
         "gpu_kernel_counts": kernels,
         "prefill_launches": launches,
+        "segmented_launches": segmented_launches,
     }
 
 
@@ -152,7 +176,7 @@ class AttentionBenchWorkerExtension:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--variant", choices=["vanilla", "aiter", "ours"], required=True
+        "--variant", choices=["vanilla", "aiter", "ours", "before"], required=True
     )
     parser.add_argument("--kv", choices=["bf16", "fp8"], required=True)
     parser.add_argument("--output-json", type=Path, required=True)
@@ -161,6 +185,9 @@ def main():
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--reverse", action="store_true")
     parser.add_argument("--probe", action="store_true")
+    parser.add_argument("--workloads-json", type=Path)
+    parser.add_argument("--max-num-batched-tokens", type=int, default=8192)
+    parser.add_argument("--eval-prompts", type=Path)
     args = parser.parse_args()
 
     import torch
@@ -179,7 +206,7 @@ def main():
         attention_backend=backend,
         kv_cache_dtype="fp8" if args.kv == "fp8" else "auto",
         max_model_len=9216,
-        max_num_batched_tokens=8192,
+        max_num_batched_tokens=args.max_num_batched_tokens,
         max_num_seqs=32,
         gpu_memory_utilization=0.90,
         disable_custom_all_reduce=True,
@@ -215,6 +242,16 @@ def main():
                 "VLLM_CACHE_ROOT",
             )
         },
+        "source_hashes": {
+            str(path.relative_to(source)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in (
+                source / "vllm/v1/attention/ops/prefix_prefill.py",
+                source / "vllm/v1/attention/ops/prefix_prefill_tuning.py",
+                source / "vllm/v1/attention/ops/segmented_prefill.py",
+                source / "vllm/v1/attention/backends/rocm_attn.py",
+            )
+            if path.exists()
+        },
         "rows": [],
         "tuning_cache_before_startup": tuning_cache_snapshot(),
     }
@@ -224,7 +261,7 @@ def main():
     result["tuning_cache_after_startup"] = tuning_cache_snapshot()
     result["workers"] = llm.collective_rpc("attention_bench_inventory")
     save(args.output_json, result)
-    if args.variant == "ours":
+    if args.variant in ("ours", "before"):
         expected_kv_dtype = (
             "torch.float8_e4m3fn" if args.kv == "fp8" else "torch.bfloat16"
         )
@@ -283,6 +320,8 @@ def main():
     if args.smoke:
         pairs = [(128, 4)]
     workloads = [(i, o, b) for i, o in pairs for b in (1, 2, 4)]
+    if args.workloads_json:
+        workloads = json.loads(args.workloads_json.read_text())
     random.Random(1234).shuffle(workloads)
     if args.reverse:
         workloads.reverse()
@@ -322,6 +361,46 @@ def main():
         result["rows"].append(row)
         save(args.output_json, result)
         print(json.dumps({k: v for k, v in row.items() if k != "samples"}), flush=True)
+    if args.eval_prompts:
+        tokenizer = llm.get_tokenizer()
+        questions = json.loads(args.eval_prompts.read_text())
+        texts = [
+            tokenizer.apply_chat_template(
+                [{"role": "user", "content": entry["prompt"]}],
+                tokenize=False,
+                add_generation_prompt=True,
+                enable_thinking=False,
+            )
+            for entry in questions
+        ]
+        evaluated = llm.generate(
+            texts,
+            SamplingParams(
+                temperature=0.0,
+                max_tokens=64,
+                logprobs=5,
+            ),
+            use_tqdm=False,
+        )
+        result["model_eval"] = []
+        for entry, generated in zip(questions, evaluated):
+            output = generated.outputs[0]
+            answer = output.text.strip()
+            result["model_eval"].append(
+                {
+                    **entry,
+                    "text": answer,
+                    "ids": output.token_ids,
+                    "expected_answer_present": entry["answer"].casefold()
+                    in answer.casefold(),
+                    "finish_reason": output.finish_reason,
+                    "logprobs": [
+                        {str(token): lp.logprob for token, lp in step.items()}
+                        for step in (output.logprobs or [])
+                    ],
+                }
+            )
+        save(args.output_json, result)
     print(f"Saved {args.output_json}", flush=True)
 
 

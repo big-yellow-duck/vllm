@@ -151,6 +151,27 @@ class RocmAttentionMetadataBuilder(AttentionMetadataBuilder[RocmAttentionMetadat
                 allow_short_context=fp8_kv_supported,
             )
 
+        if (
+            splitkv_supported
+            and on_gfx12x()
+            and envs.VLLM_ROCM_USE_SEGMENTED_PREFILL
+            and self.headdim in (128, 256)
+            and self.num_heads_kv > 0
+            and self.num_heads_q % self.num_heads_kv == 0
+            and 1 <= self.num_heads_q // self.num_heads_kv <= 16
+        ):
+            from vllm.v1.attention.ops.segmented_prefill import (
+                reserve_segmented_prefill_workspace,
+            )
+
+            reserve_segmented_prefill_workspace(
+                vllm_config.scheduler_config.max_num_seqs,
+                self.num_heads_q,
+                self.num_heads_kv,
+                self.headdim,
+                model_config.max_model_len,
+            )
+
     def build_for_cudagraph_capture(
         self, common_attn_metadata: CommonAttentionMetadata
     ) -> RocmAttentionMetadata:

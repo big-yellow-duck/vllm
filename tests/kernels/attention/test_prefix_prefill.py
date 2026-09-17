@@ -1321,13 +1321,26 @@ def test_rocm_context_tuning_prunes_tokens_and_paged_kv_memory():
     raw = set(tuning._workloads(*limits))
     assert {b for b, _, _ in raw} == {1, 2, 4, 8, 16, 32}
     assert (1, 2, 262146) in raw
-    assert all(b * q <= 8192 and s <= 524288 for b, q, s in raw)
-    assert all(b == 1 for b, q, _ in raw if q == 8192)
+    assert all(
+        sum(tuning._query_lengths(b, q, 8192)) <= 8192 and s <= 524288
+        for b, q, s in raw
+    )
+    assert (4, 8192, 9216) in raw
+    assert tuning._query_lengths(4, 8192, 8192) == [8189, 1, 1, 1]
+    for token_limit in (17, 32, 8192):
+        bounded = set(tuning._workloads(token_limit, 9216, 32))
+        query_buckets = sorted({q for _, q, _ in bounded})
+        for b, q, _ in bounded:
+            actual = max(tuning._query_lengths(b, q, token_limit))
+            assert next(bucket for bucket in query_buckets if bucket >= actual) == q
 
     scratch = set(tuning._workloads(*limits, memory_budget_bytes=4 * 2**30))
     assert (1, 2, 262146) in scratch
     assert (32, 2, 262146) not in scratch
-    assert all(tuning._scratch_bytes(12, 2, 256, 784, *w) <= 4 * 2**30 for w in scratch)
+    assert all(
+        tuning._scratch_bytes(12, 2, 256, 784, *w, max_tokens=8192) <= 4 * 2**30
+        for w in scratch
+    )
 
     layouts = ((784, 784 * 2048 * 12), (0, 8 * 2**20))
     model = set(
@@ -1349,3 +1362,212 @@ def test_rocm_context_tuning_prunes_tokens_and_paged_kv_memory():
         <= 2**30
         for b, _, s in model
     )
+
+
+@pytest.mark.parametrize(
+    "dim,page,hq,hk,dtype,kv_dtype,byte_cache,force_splits",
+    [
+        (128, 16, 4, 4, torch.bfloat16, torch.bfloat16, False, None),
+        (128, 32, 8, 2, torch.float16, torch.float16, False, None),
+        (256, 784, 12, 2, torch.bfloat16, torch.bfloat16, False, None),
+        (256, 1568, 12, 2, torch.bfloat16, torch.float8_e4m3fn, False, None),
+        (128, 32, 16, 1, torch.bfloat16, torch.float8_e4m3fn, True, None),
+        (256, 32, 4, 2, torch.float16, torch.float8_e4m3fn, False, None),
+        (128, 32, 8, 2, torch.bfloat16, torch.bfloat16, False, 32),
+    ],
+)
+@torch.inference_mode()
+def test_segmented_prefill_ragged_fresh_kv_graph_ownership(
+    monkeypatch, dim, page, hq, hk, dtype, kv_dtype, byte_cache, force_splits
+):
+    """Short/long/decode ownership follows changed metadata on graph replay."""
+    from tests.kernels.attention.test_splitkv_paged_decode import _pack_cache
+    from vllm import envs
+    from vllm.platforms.rocm import on_gfx12x
+    from vllm.v1.attention.ops.prefix_prefill_tuning import _make_inputs
+
+    if not current_platform.is_rocm() or not on_gfx12x():
+        pytest.skip("RDNA4 segmented prefill")
+    monkeypatch.setattr(envs, "VLLM_ROCM_USE_SEGMENTED_PREFILL", True)
+    monkeypatch.setattr(envs, "VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE", False)
+    if force_splits is not None:
+        from vllm.v1.attention.ops import segmented_prefill as segmented
+
+        original = segmented.select_segmented_config
+        monkeypatch.setattr(
+            segmented,
+            "select_segmented_config",
+            lambda *args: dict(original(*args), splits=force_splits),
+        )
+    query_lengths = [0, 1, 2, 7, 33, 129]
+    contexts = [0, 67, 0, page - 1, page + 1, 33]
+    device = torch.device("cuda:0")
+    q, k, v, kc, vc, table, starts, lengths, _ = _make_inputs(
+        device,
+        hq,
+        hk,
+        dim,
+        page,
+        len(contexts),
+        max(query_lengths),
+        max(query_lengths) + max(contexts),
+        kv_dtype,
+    )
+    total = sum(query_lengths)
+    tensors = []
+    for source, heads in ((q, hq), (k, hk), (v, hk)):
+        target = torch.empty((total, heads + 1, dim), device=device, dtype=dtype)
+        target = target[:, :heads]
+        target.copy_(source[:total])
+        tensors.append(target)
+    q, k, v = tensors
+    # Recover NHD only to reuse the established interleaved-cache packing helper.
+    dense_k = kc.permute(0, 3, 1, 2, 4).reshape(kc.shape[0], page, hk, dim)
+    dense_v = vc.permute(0, 3, 1, 2)
+    if kv_dtype in (torch.float16, torch.bfloat16):
+        dense_k, dense_v = dense_k.to(dtype), dense_v.to(dtype)
+    kc, vc = _pack_cache(dense_k, dense_v, padded_stride=True)
+    table.copy_(torch.randperm(table.numel(), device=device).reshape_as(table))
+    ks = torch.tensor(0.13 if kv_dtype.itemsize == 1 else 1.0, device=device)
+    vs = torch.tensor(0.27 if kv_dtype.itemsize == 1 else 1.0, device=device)
+    output = torch.full((total, hq + 1, dim), 17.0, device=device, dtype=dtype)[:, :hq]
+
+    def metadata(qlens):
+        starts.copy_(
+            torch.tensor(
+                [0, *torch.tensor(qlens).cumsum(0).tolist()],
+                device=device,
+                dtype=torch.int32,
+            )
+        )
+        lengths.copy_(
+            torch.tensor(
+                [c + n for c, n in zip(contexts, qlens)],
+                device=device,
+                dtype=torch.int32,
+            )
+        )
+
+    def run():
+        context_attention_fwd(
+            q,
+            k,
+            v,
+            output,
+            "fp8" if kv_dtype.itemsize == 1 else "auto",
+            kc.view(torch.uint8) if byte_cache else kc,
+            vc.view(torch.uint8) if byte_cache else vc,
+            table,
+            starts,
+            lengths,
+            max(contexts) + 129,
+            129,
+            ks,
+            vs,
+            skip_decode=True,
+        )
+
+    def check(qlens):
+        first = 0
+        for seq, (nq, context) in enumerate(zip(qlens, contexts)):
+            if nq <= 1:
+                assert torch.all(output[first : first + nq] == 17.0)
+                first += nq
+                continue
+            physical = table[seq].long()
+            prefix_k = (
+                kc[physical]
+                .permute(0, 3, 1, 2, 4)
+                .reshape(-1, hk, dim)[:context]
+                .float()
+                * ks
+            )
+            prefix_v = (
+                vc[physical].permute(0, 3, 1, 2).reshape(-1, hk, dim)[:context].float()
+                * vs
+            )
+            full_k = torch.cat(
+                (prefix_k, k[first : first + nq].float())
+            ).repeat_interleave(hq // hk, 1)
+            full_v = torch.cat(
+                (prefix_v, v[first : first + nq].float())
+            ).repeat_interleave(hq // hk, 1)
+            logits = torch.einsum(
+                "qhd,khd->hqk", q[first : first + nq].float(), full_k
+            ) / math.sqrt(dim)
+            mask = (
+                torch.arange(context + nq, device=device)[None, :]
+                > context + torch.arange(nq, device=device)[:, None]
+            )
+            logits.masked_fill_(mask[None], -float("inf"))
+            ref = torch.einsum("hqk,khd->qhd", logits.softmax(-1), full_v)
+            actual = output[first : first + nq].float()
+            assert torch.isfinite(actual).all()
+            relative = (actual - ref).norm(dim=-1) / ref.norm(dim=-1).clamp_min(1e-6)
+            assert relative.max().item() < 0.01
+            first += nq
+
+    metadata(query_lengths)
+    run()
+    torch.cuda.synchronize()
+    check(query_lengths)
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        run()
+    replay_lengths = [1, 0, 7, 2, 34, 128]
+    metadata(replay_lengths)
+    q.mul_(0.75)
+    k.add_(0.25)
+    v.add_(0.5)
+    output.fill_(17.0)
+    graph.replay()
+    torch.cuda.synchronize()
+    check(replay_lengths)
+
+
+@torch.inference_mode()
+def test_segmented_prefill_cache_offsets_cross_int32_boundary():
+    """A small logical prefix can live beyond 2**31 elements in a strided cache."""
+    from vllm.platforms.rocm import on_gfx12x
+    from vllm.v1.attention.ops.segmented_prefill import segmented_prefill_attention
+
+    if not current_platform.is_rocm() or not on_gfx12x():
+        pytest.skip("RDNA4 segmented prefill")
+    torch.cuda.empty_cache()
+    free, _ = torch.cuda.mem_get_info()
+    if free < 10 * 2**30:
+        pytest.skip("The address-boundary fixture needs 10 GiB free VRAM")
+    device = torch.device("cuda:0")
+    stride = 2**30 + 4096
+    kc = torch.empty_strided(
+        (3, 1, 16, 32, 8),
+        (stride, 4096, 256, 8, 1),
+        device=device,
+        dtype=torch.bfloat16,
+    )
+    vc = torch.empty_strided(
+        (3, 1, 128, 32), (stride, 4096, 32, 1), device=device, dtype=torch.bfloat16
+    )
+    dense_k = torch.randn(2, 32, 1, 128, device=device, dtype=torch.bfloat16)
+    dense_v = torch.randn_like(dense_k)
+    for logical, physical in enumerate((2, 1)):
+        kc[physical].copy_(dense_k[logical].reshape(32, 1, 16, 8).permute(1, 2, 0, 3))
+        vc[physical].copy_(dense_v[logical].permute(1, 2, 0))
+    q = torch.randn(2, 4, 128, device=device, dtype=torch.bfloat16)
+    k = torch.randn(2, 1, 128, device=device, dtype=torch.bfloat16)
+    v = torch.randn_like(k)
+    out = torch.empty_like(q)
+    table = torch.tensor([[2, 1]], device=device, dtype=torch.int32)
+    starts = torch.tensor([0, 2], device=device, dtype=torch.int32)
+    lengths = torch.tensor([35], device=device, dtype=torch.int32)
+    one = torch.ones((), device=device)
+    segmented_prefill_attention(
+        q, k, v, out, kc, vc, table, starts, lengths, 2, 35, one, one, 128**-0.5
+    )
+    full_k = torch.cat((dense_k.flatten(0, 1)[:33], k)).float().repeat_interleave(4, 1)
+    full_v = torch.cat((dense_v.flatten(0, 1)[:33], v)).float().repeat_interleave(4, 1)
+    scores = torch.einsum("qhd,khd->hqk", q.float(), full_k) / math.sqrt(128)
+    scores[:, 0, -1] = -float("inf")
+    expected = torch.einsum("hqk,khd->qhd", scores.softmax(-1), full_v)
+    error = ((out.float() - expected).norm(dim=-1) / expected.norm(dim=-1)).max()
+    assert torch.isfinite(out).all() and error < 0.01

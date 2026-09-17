@@ -82,11 +82,21 @@ def _memory_budget(device):
     return 1 << (available.bit_length() - 1) if available else 0
 
 
-def _scratch_bytes(heads, kv_heads, dim, page, batch, query_len, seq_len):
-    context = max(page, triton.cdiv(seq_len - query_len, page) * page)
+def _query_lengths(batch, query_len, max_tokens):
+    if batch * query_len <= max_tokens:
+        return [query_len] * batch
+    # A scheduler can mix one long prefill with single-token decode requests.
+    return [min(query_len, max_tokens - batch + 1)] + [1] * (batch - 1)
+
+
+def _scratch_bytes(
+    heads, kv_heads, dim, page, batch, query_len, seq_len, max_tokens=None
+):
+    queries = _query_lengths(batch, query_len, max_tokens or batch * query_len)
+    context = max(page, triton.cdiv(seq_len - min(queries), page) * page)
     # Q/output/reference and temporary FP32 comparisons, dense K/V, paged K/V.
     return (
-        batch * query_len * dim * (32 * heads + 4 * kv_heads)
+        sum(queries) * dim * (32 * heads + 4 * kv_heads)
         + batch * context * kv_heads * dim * 4
         + 256 * 1024 * 1024
     )
@@ -107,14 +117,17 @@ def _workloads(
 ):
     limit = min(max_tokens, max_len)
     queries = sorted({min(q, limit) for q in _QUERY_BUCKETS if limit >= 2})
-    for q in queries:
-        batch_limit = min(32, max_seqs, max_tokens // q)
+    for index, q in enumerate(queries):
+        previous_query = queries[index - 1] if index else 1
+        batch_limit = min(32, max_seqs, max_tokens - previous_query)
         batches = sorted({min(b, batch_limit) for b in _BATCH_BUCKETS})
+        if batch_limit < 1:
+            continue
         contexts = sorted({min(c, max_len - q) for c in _CONTEXT_BUCKETS})
         for b, c in itertools.product(batches, contexts):
             if (
                 memory_budget_bytes is not None
-                and _scratch_bytes(heads, kv_heads, dim, page, b, q, q + c)
+                and _scratch_bytes(heads, kv_heads, dim, page, b, q, q + c, max_tokens)
                 > memory_budget_bytes
             ):
                 continue
@@ -138,6 +151,8 @@ def _make_inputs(
     query_len,
     seq_len,
     kv_dtype=torch.bfloat16,
+    *,
+    query_lengths=None,
 ):
     generator = torch.Generator(device=device).manual_seed(1234)
 
@@ -146,10 +161,11 @@ def _make_inputs(
             *shape, dtype=torch.bfloat16, device=device, generator=generator
         )
 
-    q = randn(batch * query_len, heads, dim)
-    k = randn(batch * query_len, kv_heads, dim)
-    v = randn(batch * query_len, kv_heads, dim)
-    blocks = max(1, triton.cdiv(seq_len - query_len, page))
+    queries = query_lengths if query_lengths is not None else [query_len] * batch
+    q = randn(sum(queries), heads, dim)
+    k = randn(sum(queries), kv_heads, dim)
+    v = randn(sum(queries), kv_heads, dim)
+    blocks = max(1, triton.cdiv(seq_len - min(queries), page))
     x = 16 // kv_dtype.itemsize
     scale_value = 1.0 if kv_dtype == torch.bfloat16 else 0.125
     kc = (randn(batch * blocks, kv_heads, dim // x, page, x).float() / scale_value).to(
@@ -159,7 +175,9 @@ def _make_inputs(
     table = torch.arange(batch * blocks, device=device, dtype=torch.int32).view(
         batch, blocks
     )
-    starts = torch.arange(batch + 1, device=device, dtype=torch.int32) * query_len
+    starts = torch.tensor(
+        [0, *itertools.accumulate(queries)], device=device, dtype=torch.int32
+    )
     lengths = torch.full((batch,), seq_len, device=device, dtype=torch.int32)
     scale = torch.full((), scale_value, device=device)
     return q, k, v, kc, vc, table, starts, lengths, scale
@@ -180,14 +198,25 @@ def _bench_long_config(run, device, cache):
     return statistics.median(samples)
 
 
-def _tune_workload(device, heads, kv_heads, dim, page, scale, kv_dtype, workload):
+def _tune_workload(
+    device, heads, kv_heads, dim, page, scale, kv_dtype, max_tokens, workload
+):
     from .prefix_prefill import context_attention_fwd
 
     b, qlen, slen = workload
     q, k, v, kc, vc, table, starts, lengths, one = _make_inputs(
-        device, heads, kv_heads, dim, page, b, qlen, slen, kv_dtype
+        device,
+        heads,
+        kv_heads,
+        dim,
+        page,
+        b,
+        qlen,
+        slen,
+        kv_dtype,
+        query_lengths=_query_lengths(b, qlen, max_tokens),
     )
-    reference, output = torch.empty_like(q), torch.empty_like(q)
+    reference, output = torch.zeros_like(q), torch.zeros_like(q)
 
     def run(config, out=output):
         context_attention_fwd(
@@ -256,7 +285,12 @@ def _tune_workload(device, heads, kv_heads, dim, page, scale, kv_dtype, workload
         winner["config"],
         winner["us"],
     )
-    return {"workload": list(workload), "best": winner["config"], "results": results}
+    return {
+        "workload": list(workload),
+        "query_lengths": _query_lengths(b, qlen, max_tokens),
+        "best": winner["config"],
+        "results": results,
+    }
 
 
 def _save(path, data):
@@ -364,7 +398,15 @@ def warmup_context_attention(
                 loaded += 1
                 continue
             records[workload] = _tune_workload(
-                device, heads, kv_heads, dim, page, scale, kv_dtype, workload
+                device,
+                heads,
+                kv_heads,
+                dim,
+                page,
+                scale,
+                kv_dtype,
+                max_tokens,
+                workload,
             )
             tuned += 1
             data["records"] = list(records.values())

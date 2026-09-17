@@ -156,3 +156,34 @@ def test_workspace_lane_validation(monkeypatch) -> None:
 
     with pytest.raises(ValueError, match="at least one"):
         workspace.WorkspaceManager(torch.device("cpu"), num_lanes=0)
+
+
+@pytest.mark.parametrize("dim,hq,hk", [(128, 16, 1), (256, 12, 2)])
+def test_segmented_prefill_reservation_covers_ragged_query_caps(
+    monkeypatch, dim, hq, hk
+):
+    """Every supported short query capacity fits the startup buffer after locking."""
+    from vllm.v1.attention.ops import segmented_prefill as segmented
+
+    monkeypatch.setattr(workspace, "dbo_current_ubatch_id", lambda: 0)
+    manager = workspace.WorkspaceManager(torch.device("cpu"), num_lanes=1)
+    monkeypatch.setattr(segmented, "is_workspace_manager_initialized", lambda: True)
+    monkeypatch.setattr(segmented, "current_workspace_manager", lambda: manager)
+    segmented.reserve_segmented_prefill_workspace(32, hq, hk, dim, 65536)
+    manager.lock()
+    pointers = set()
+    for batch in range(1, 33):
+        for qcap in range(1, 129):
+            cfg = segmented.select_segmented_config(
+                batch, qcap, 65536, hq, hk, dim, False
+            )
+            shapes = segmented.segmented_workspace_shapes(
+                batch, qcap, hq, hk, dim, cfg["splits"]
+            )
+            if shapes is not None:
+                partial, lse = manager.get_simultaneous(
+                    (shapes[0], torch.float32), (shapes[1], torch.float32)
+                )
+                pointers.add(partial.untyped_storage().data_ptr())
+                assert partial.data_ptr() != lse.data_ptr()
+    assert len(pointers) == 1
