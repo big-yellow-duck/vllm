@@ -133,7 +133,6 @@ if TYPE_CHECKING:
     VLLM_USE_OINK_OPS: bool = False
     VLLM_MXFP8_EMULATION_DEQUANT_AT_LOAD: bool = True
     VLLM_ROCM_USE_AITER: bool = False
-    VLLM_ROCM_USE_SEGMENTED_PREFILL: bool = False
     VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE: bool = False
     VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL: bool = False
     VLLM_ROCM_USE_AITER_CUSTOM_AR: bool = True
@@ -1235,10 +1234,6 @@ environment_variables: dict[str, Callable[[], Any]] = {
     ),
     # Tune eligible ROCM_ATTN prefill kernels before KV-cache allocation and
     # persist the winning launch configurations under VLLM_CACHE_ROOT.
-    # Enable the vLLM-owned RDNA4 segmented short-prefill path.
-    "VLLM_ROCM_USE_SEGMENTED_PREFILL": lambda: (
-        os.getenv("VLLM_ROCM_USE_SEGMENTED_PREFILL", "0").lower() in ("true", "1")
-    ),
     "VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE": lambda: bool(
         int(os.getenv("VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE", "0"))
     ),

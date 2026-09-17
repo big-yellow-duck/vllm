@@ -21,7 +21,7 @@ from vllm.v1.attention.ops import segmented_prefill
 QUERY_LENGTHS = (2, 8, 32, 128)
 BATCH_SIZES = (1, 2, 4, 8, 16, 32)
 SEQUENCE_LENGTHS = (128, 512, 2048, 8192, 32768, 131072, 262144)
-FAMILIES = (("tp2", 12, 2), ("tp4", 6, 1), ("tp8", 3, 1))
+FAMILIES = (("tp1", 24, 4), ("tp2", 12, 2), ("tp4", 6, 1))
 
 
 def _save(path: Path, value: dict) -> None:
@@ -123,14 +123,19 @@ def _relative_l2(left: torch.Tensor, right: torch.Tensor) -> float:
 
 
 @torch.inference_mode()
-def _probe(case: dict, samples: int) -> dict:
+def _probe(
+    case: dict, samples: int, rounds: int, segmented_config: dict | None
+) -> dict:
     data = make_inputs(**case)
     calls = {}
     outputs = {}
     selected = {}
     graphs = {}
     for backend in ("segmented", "aiter"):
-        calls[backend], outputs[backend], selected[backend] = make_call(data, backend)
+        config = segmented_config if backend == "segmented" else None
+        calls[backend], outputs[backend], selected[backend] = make_call(
+            data, backend, config
+        )
         calls[backend]()
     torch.cuda.synchronize()
     error = _relative_l2(outputs["segmented"], outputs["aiter"])
@@ -142,7 +147,12 @@ def _probe(case: dict, samples: int) -> dict:
     write = torch.empty(256 * 1024**2, device="cuda", dtype=torch.int8)
     times = {backend: {} for backend in graphs}
     for regime, eviction in (("read", read), ("write", write), ("reuse", None)):
-        for order in (("segmented", "aiter"), ("aiter", "segmented")):
+        for round_index in range(rounds):
+            order = (
+                ("segmented", "aiter")
+                if round_index % 2 == 0
+                else ("aiter", "segmented")
+            )
             for backend in order:
                 value = _measure(graphs[backend], eviction, samples)
                 times[backend].setdefault(regime, []).append(value)
@@ -172,11 +182,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--samples", type=int, default=7)
+    parser.add_argument("--rounds", type=int, default=4)
+    parser.add_argument("--segmented-config", type=json.loads)
     parser.add_argument("--memory-budget-gib", type=int, default=8)
     parser.add_argument("--case", action="append", default=[])
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--plan-only", action="store_true")
     args = parser.parse_args()
+    if args.samples < 1 or args.rounds < 1:
+        raise ValueError("Samples and rounds must be positive")
 
     candidates = _cases()
     if args.case:
@@ -191,13 +205,14 @@ def main() -> None:
     result = {
         "metadata": {
             "samples_per_round": args.samples,
-            "rounds_per_regime": 2,
+            "rounds_per_regime": args.rounds,
             "timing": "alternating CUDA-graph GPU events",
             "memory_budget_gib": args.memory_budget_gib,
             "query_lengths": list(QUERY_LENGTHS),
             "batch_sizes": list(BATCH_SIZES),
             "sequence_lengths": list(SEQUENCE_LENGTHS),
             "families": [list(family) for family in FAMILIES],
+            "segmented_config": args.segmented_config,
             "kernel_sha256": _sha256(
                 root / "vllm/v1/attention/ops/segmented_prefill.py"
             ),
@@ -235,7 +250,7 @@ def main() -> None:
         if name in done:
             continue
         try:
-            row = _probe(case, args.samples)
+            row = _probe(case, args.samples, args.rounds, args.segmented_config)
         except Exception as error:
             row = {"name": name, "case": case, "error": repr(error)}
             result["failures"].append(row)

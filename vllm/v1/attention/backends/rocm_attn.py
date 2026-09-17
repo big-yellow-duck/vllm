@@ -153,8 +153,6 @@ class RocmAttentionMetadataBuilder(AttentionMetadataBuilder[RocmAttentionMetadat
 
         if (
             splitkv_supported
-            and on_gfx12x()
-            and envs.VLLM_ROCM_USE_SEGMENTED_PREFILL
             and self.headdim in (128, 256)
             and self.num_heads_kv > 0
             and self.num_heads_q % self.num_heads_kv == 0
@@ -170,6 +168,8 @@ class RocmAttentionMetadataBuilder(AttentionMetadataBuilder[RocmAttentionMetadat
                 self.num_heads_kv,
                 self.headdim,
                 model_config.max_model_len,
+                fp8=fp8_kv_supported,
+                unified_layout=True,
             )
 
     def build_for_cudagraph_capture(
@@ -321,8 +321,11 @@ class RocmAttentionBackend(AttentionBackend):
 
     @classmethod
     def customize_spec(cls, spec: AttentionSpec) -> AttentionSpec:
-        """K and V as two head groups so the native HIP kernels address each side
-        as one contiguous region (x-packed interior applied in split_kv_cache)."""
+        """Keep K and V in separate contiguous groups.
+
+        Native HIP mode applies its packed views in ``split_kv_cache``; the
+        eligible Triton prefill path views the same groups as token-major NHD.
+        """
         if spec.state_content_bytes is not None:
             return spec
         assert spec.head_size == spec.head_size_v, (
@@ -397,6 +400,23 @@ class RocmAttentionImpl(AttentionImpl):
         self.fp8_dtype = current_platform.fp8_dtype()
 
         self.sinks = sinks
+        from vllm.platforms.rocm import on_gfx1x, on_gfx12x
+
+        fp8_segmented_prefill = self.kv_cache_dtype in ("fp8", "fp8_e4m3")
+        segmented_prefill_arch_supported = (
+            on_gfx12x() if fp8_segmented_prefill else on_gfx1x()
+        )
+
+        self._use_unified_kv_layout = (
+            segmented_prefill_arch_supported
+            and self.attn_type == AttentionType.DECODER
+            and self.head_size in (128, 256)
+            and self.num_kv_heads > 0
+            and self.num_heads % self.num_kv_heads == 0
+            and self.num_queries_per_kv <= 16
+            and self.kv_cache_dtype
+            in ("auto", "float16", "bfloat16", "fp8", "fp8_e4m3")
+        )
         self._context_attention_warmed_up = False
         self._context_attention_config: VllmConfig | None = None
         if envs.VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE:
@@ -409,6 +429,23 @@ class RocmAttentionImpl(AttentionImpl):
                 f"heads in the layer. Sinks shape: {sinks.shape}, "
                 f"num_heads: {num_heads}."
             )
+
+    def _split_kv_cache(
+        self,
+        kv_cache: torch.Tensor,
+        num_kv_heads: int | None = None,
+        head_size: int | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        num_kv_heads = num_kv_heads or self.num_kv_heads
+        head_size = head_size or self.head_size
+        if self._use_unified_kv_layout:
+            return (
+                kv_cache[:, 0].unflatten(-1, (num_kv_heads, head_size)),
+                kv_cache[:, 1].unflatten(-1, (num_kv_heads, head_size)),
+            )
+        return PagedAttention.split_kv_cache(
+            kv_cache.transpose(0, 1), num_kv_heads, head_size
+        )
 
     def _forward_encoder_attention(
         self,
@@ -558,11 +595,9 @@ class RocmAttentionImpl(AttentionImpl):
                 layer,
             )
 
-        # The bound view is logical [B, 2, N, H*hs]; split_kv_cache expects
-        # the K/V groups first.
-        key_cache, value_cache = PagedAttention.split_kv_cache(
-            kv_cache.transpose(0, 1), self.num_kv_heads, self.head_size
-        )
+        # For the segmented-prefill path this yields token-major
+        # [B, N, H, D] views; otherwise it preserves the native packed layout.
+        key_cache, value_cache = self._split_kv_cache(kv_cache)
 
         if is_quantized_kv_cache(self.kv_cache_dtype):
             key_cache = key_cache.view(self.fp8_dtype)
@@ -617,9 +652,22 @@ class RocmAttentionImpl(AttentionImpl):
     ):
         if self.attn_type in (AttentionType.ENCODER_ONLY, AttentionType.ENCODER):
             return
-        key_cache, value_cache = PagedAttention.split_kv_cache(
-            kv_cache.transpose(0, 1), self.num_kv_heads, self.head_size
-        )
+        key_cache, value_cache = self._split_kv_cache(kv_cache)
+        if self._use_unified_kv_layout:
+            if is_quantized_kv_cache(self.kv_cache_dtype):
+                key_cache = key_cache.view(self.fp8_dtype)
+                value_cache = value_cache.view(self.fp8_dtype)
+            triton_reshape_and_cache_flash(
+                key,
+                value,
+                key_cache,
+                value_cache,
+                slot_mapping,
+                self.kv_cache_dtype,
+                layer._k_scale,
+                layer._v_scale,
+            )
+            return
 
         # Reshape the input keys and values and store them in the cache.
         # Get the actual block_size from value_cache
@@ -672,12 +720,12 @@ class RocmAttentionImpl(AttentionImpl):
     ):
         if self.attn_type in (AttentionType.ENCODER_ONLY, AttentionType.ENCODER):
             return
-        key_cache, value_cache = PagedAttention.split_kv_cache(
-            kv_cache.transpose(0, 1),
+        key_cache, value_cache = self._split_kv_cache(
+            kv_cache,
             layer.num_kv_heads,  # type: ignore[attr-defined]
             layer.head_size,  # type: ignore[attr-defined]
         )
-        flash_layout = False
+        flash_layout = self._use_unified_kv_layout
 
         is_fp8_kv_cache = is_quantized_kv_cache(self.kv_cache_dtype)
         if is_fp8_kv_cache:

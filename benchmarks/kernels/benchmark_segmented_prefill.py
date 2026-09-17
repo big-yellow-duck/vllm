@@ -23,6 +23,7 @@ from vllm.v1.attention.ops.segmented_prefill import (
     segmented_prefill_attention,
     segmented_workspace_shapes,
     select_segmented_config,
+    select_segmented_unified_config,
 )
 
 
@@ -161,9 +162,14 @@ def make_call(data, backend, config=None):
     fp8 = data["kc"].element_size() == 1
     selected = {}
     if backend == "segmented":
-        cfg = config or select_segmented_config(
-            batch, min(maxq, MAX_QUERY_LEN), maxs, hq, hk, dim, fp8
-        )
+        if config and config.get("auto_unified"):
+            cfg = select_segmented_unified_config(
+                batch, min(maxq, MAX_QUERY_LEN), maxs, hq, hk, dim, fp8
+            )
+        else:
+            cfg = config or select_segmented_config(
+                batch, min(maxq, MAX_QUERY_LEN), maxs, hq, hk, dim, fp8
+            )
         shapes = segmented_workspace_shapes(
             batch, min(maxq, MAX_QUERY_LEN), hq, hk, dim, cfg["splits"]
         )
@@ -174,6 +180,8 @@ def make_call(data, backend, config=None):
                 torch.empty(s, device=q.device, dtype=torch.float32) for s in shapes
             )
         )
+        key_cache = data["kn"] if cfg.get("unified_layout", False) else data["kc"]
+        value_cache = data["vn"] if cfg.get("unified_layout", False) else data["vc"]
 
         def run():
             segmented_prefill_attention(
@@ -181,8 +189,8 @@ def make_call(data, backend, config=None):
                 k,
                 v,
                 out,
-                data["kc"],
-                data["vc"],
+                key_cache,
+                value_cache,
                 data["table"],
                 data["starts"],
                 data["lens"],
@@ -322,30 +330,37 @@ def make_call(data, backend, config=None):
                         cache_file=str(cache), cache_identity=identity, launch=config
                     )
                     break
+            if config is None:
+                config = {
+                    "BLOCK_M": 128,
+                    "BLOCK_N": 64,
+                    "num_unroll_cache": 4,
+                    "num_unroll_request": 1,
+                    "num_warps": 4,
+                    "num_stages": 1,
+                }
+                selected.update(launch=config)
 
         def run():
-            with patch.object(
-                envs, "VLLM_ROCM_USE_SEGMENTED_PREFILL", backend == "integrated"
-            ):
-                context_attention_fwd(
-                    q,
-                    k,
-                    v,
-                    out,
-                    "fp8" if fp8 else "auto",
-                    data["kc"],
-                    data["vc"],
-                    data["table"],
-                    data["starts"],
-                    data["lens"],
-                    maxs,
-                    maxq,
-                    data["ks"],
-                    data["vs"],
-                    sm_scale=scale,
-                    skip_decode=False,
-                    _launch_config=config,
-                )
+            context_attention_fwd(
+                q,
+                k,
+                v,
+                out,
+                "fp8" if fp8 else "auto",
+                data["kc"],
+                data["vc"],
+                data["table"],
+                data["starts"],
+                data["lens"],
+                maxs,
+                maxq,
+                data["ks"],
+                data["vs"],
+                sm_scale=scale,
+                skip_decode=False,
+                _launch_config=config,
+            )
 
     return run, out, selected
 

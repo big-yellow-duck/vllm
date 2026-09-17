@@ -1000,6 +1000,142 @@ def chunked_prefill_paged_decode(
     if sliding_window is None or sliding_window <= 0:
         sliding_window = 0
 
+    unified_layout = (
+        key_cache.ndim == 4
+        and value_cache.ndim == 4
+        and key_cache.shape == value_cache.shape
+    )
+
+    if unified_layout:
+        if "fp8" in kv_cache_dtype:
+            if kv_cache_dtype in ("fp8", "fp8_e4m3"):
+                target_dtype = current_platform.fp8_dtype()
+            elif kv_cache_dtype == "fp8_e5m2":
+                target_dtype = torch.float8_e5m2
+            else:
+                raise ValueError(
+                    f"Unsupported FP8 kv_cache_dtype {kv_cache_dtype}: "
+                    "should be one of 'fp8', 'fp8_e4m3', 'fp8_e5m2'."
+                )
+            assert key_cache.dtype in (torch.uint8, target_dtype)
+            assert value_cache.dtype in (torch.uint8, target_dtype)
+            key_cache = key_cache.view(target_dtype)
+            value_cache = value_cache.view(target_dtype)
+
+        if is_block_table_ptr:
+            raise ValueError("Unified KV layout requires an indexed block table.")
+
+        from vllm.platforms.rocm import on_gfx1x, on_gfx12x
+
+        used_segmented = False
+        segmented_pattern = (
+            (on_gfx12x() if key_cache.element_size() == 1 else on_gfx1x())
+            and causal
+            and not use_alibi_slopes
+            and not sliding_window
+            and sinks is None
+            and output_scale is None
+        )
+        if segmented_pattern:
+            from .segmented_prefill import (
+                MAX_QUERY_LEN,
+                can_use_segmented_prefill,
+                segmented_prefill_attention,
+                select_segmented_unified_config,
+            )
+
+            if 0 < max_query_len <= MAX_QUERY_LEN and can_use_segmented_prefill(
+                query,
+                key,
+                value,
+                output,
+                key_cache,
+                value_cache,
+                block_table,
+                query_start_loc,
+                seq_lens,
+                k_scale,
+                v_scale,
+            ):
+                config = select_segmented_unified_config(
+                    len(seq_lens),
+                    max_query_len,
+                    max_seq_len,
+                    query.shape[1],
+                    key_cache.shape[2],
+                    query.shape[2],
+                    key_cache.element_size() == 1,
+                )
+                segmented_prefill_attention(
+                    query,
+                    key,
+                    value,
+                    output,
+                    key_cache,
+                    value_cache,
+                    block_table,
+                    query_start_loc,
+                    seq_lens,
+                    max_query_len,
+                    max_seq_len,
+                    k_scale,
+                    v_scale,
+                    sm_scale,
+                    skip_decode=False,
+                    config=config,
+                )
+                used_segmented = True
+
+        if not used_segmented:
+            if segmented_pattern and max_query_len > 1:
+                context_attention_fwd(
+                    q=query,
+                    k=key,
+                    v=value,
+                    o=output,
+                    kv_cache_dtype=kv_cache_dtype,
+                    k_cache=key_cache,
+                    v_cache=value_cache,
+                    b_loc=block_table,
+                    b_start_loc=query_start_loc,
+                    b_seq_len=seq_lens,
+                    max_seq_len=max_seq_len,
+                    max_input_len=max_query_len,
+                    k_scale=k_scale,
+                    v_scale=v_scale,
+                    sliding_window=sliding_window,
+                    sm_scale=sm_scale,
+                    skip_decode=False,
+                    causal=causal,
+                )
+                return
+            from .triton_unified_attention import unified_attention
+
+            window_size = (-1, -1) if not sliding_window else (sliding_window, 0)
+            unified_attention(
+                q=query,
+                k=key_cache,
+                v=value_cache,
+                out=output,
+                cu_seqlens_q=query_start_loc,
+                max_seqlen_q=max_query_len,
+                seqused_k=seq_lens,
+                max_seqlen_k=max_seq_len,
+                softmax_scale=sm_scale,
+                causal=causal,
+                window_size=window_size,
+                block_table=block_table,
+                softcap=0,
+                q_descale=None,
+                k_descale=k_scale,
+                v_descale=v_scale,
+                alibi_slopes=alibi_slopes,
+                output_scale=output_scale,
+                sinks=sinks,
+                kv_quant_mode=get_kv_quant_mode(kv_cache_dtype),
+            )
+        return
+
     if max_query_len > 1:
         context_attention_fwd(
             q=query,
@@ -1033,8 +1169,8 @@ def chunked_prefill_paged_decode(
     num_queries_per_kv = num_query_heads // num_kv_heads
     head_size = query.shape[2]
 
-    # Conversion of FP8 Tensor from uint8 storage to
-    # appropriate torch.dtype for interpretation by Triton
+    # Conversion of legacy FP8 storage for the decode kernel. Prefill keeps
+    # its historical conversion inside context_attention_fwd above.
     if "fp8" in kv_cache_dtype:
         assert key_cache.dtype in [torch.uint8, current_platform.fp8_dtype()]
         assert value_cache.dtype in [torch.uint8, current_platform.fp8_dtype()]

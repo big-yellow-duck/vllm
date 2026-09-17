@@ -159,8 +159,11 @@ def test_workspace_lane_validation(monkeypatch) -> None:
 
 
 @pytest.mark.parametrize("dim,hq,hk", [(128, 16, 1), (256, 12, 2)])
+@pytest.mark.parametrize(
+    "unified_layout,fp8", [(False, False), (True, False), (True, True)]
+)
 def test_segmented_prefill_reservation_covers_ragged_query_caps(
-    monkeypatch, dim, hq, hk
+    monkeypatch, dim, hq, hk, unified_layout, fp8
 ):
     """Every supported short query capacity fits the startup buffer after locking."""
     from vllm.v1.attention.ops import segmented_prefill as segmented
@@ -169,14 +172,25 @@ def test_segmented_prefill_reservation_covers_ragged_query_caps(
     manager = workspace.WorkspaceManager(torch.device("cpu"), num_lanes=1)
     monkeypatch.setattr(segmented, "is_workspace_manager_initialized", lambda: True)
     monkeypatch.setattr(segmented, "current_workspace_manager", lambda: manager)
-    segmented.reserve_segmented_prefill_workspace(32, hq, hk, dim, 65536)
+    segmented.reserve_segmented_prefill_workspace(
+        32,
+        hq,
+        hk,
+        dim,
+        65536,
+        fp8=fp8,
+        unified_layout=unified_layout,
+    )
     manager.lock()
     pointers = set()
+    selector = (
+        segmented.select_segmented_unified_config
+        if unified_layout
+        else segmented.select_segmented_config
+    )
     for batch in range(1, 33):
         for qcap in range(1, 129):
-            cfg = segmented.select_segmented_config(
-                batch, qcap, 65536, hq, hk, dim, False
-            )
+            cfg = selector(batch, qcap, 65536, hq, hk, dim, fp8)
             shapes = segmented.segmented_workspace_shapes(
                 batch, qcap, hq, hk, dim, cfg["splits"]
             )

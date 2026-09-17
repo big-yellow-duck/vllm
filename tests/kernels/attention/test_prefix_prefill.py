@@ -101,6 +101,131 @@ def create_alibi_causal_mask(
     return alibi_bias.unsqueeze(0)
 
 
+def _make_unified_paged_case(
+    query_lens: list[int],
+    context_lens: list[int],
+    *,
+    num_heads: int,
+    num_kv_heads: int,
+    head_size: int,
+    block_size: int,
+    fp8: bool,
+    causal: bool = True,
+):
+    device = torch.device("cuda:0")
+    generator = torch.Generator(device=device).manual_seed(419)
+    total_queries = sum(query_lens)
+    qkv = (
+        torch.randn(
+            total_queries,
+            num_heads + 2 * num_kv_heads,
+            head_size,
+            device=device,
+            dtype=torch.bfloat16,
+            generator=generator,
+        )
+        * 0.25
+    )
+    query, key, value = qkv.split((num_heads, num_kv_heads, num_kv_heads), dim=1)
+    cache_dtype = current_platform.fp8_dtype() if fp8 else torch.bfloat16
+    k_scale = torch.tensor(0.125 if fp8 else 1.0, device=device)
+    v_scale = torch.tensor(0.25 if fp8 else 1.0, device=device)
+    max_seq_len = max(q + c for q, c in zip(query_lens, context_lens))
+    blocks_per_seq = triton.cdiv(max_seq_len, block_size)
+    num_blocks = len(query_lens) * blocks_per_seq
+    key_cache = (
+        torch.randn(
+            num_blocks,
+            block_size,
+            num_kv_heads,
+            head_size,
+            device=device,
+            dtype=torch.float32,
+            generator=generator,
+        )
+        * 0.25
+        / k_scale
+    ).to(cache_dtype)
+    value_cache = (
+        torch.randn(
+            num_blocks,
+            block_size,
+            num_kv_heads,
+            head_size,
+            device=device,
+            dtype=torch.float32,
+            generator=generator,
+        )
+        * 0.25
+        / v_scale
+    ).to(cache_dtype)
+    block_table = torch.arange(num_blocks, device=device, dtype=torch.int32).view(
+        len(query_lens), blocks_per_seq
+    )
+    starts = torch.tensor(
+        [0, *torch.tensor(query_lens).cumsum(0).tolist()],
+        device=device,
+        dtype=torch.int32,
+    )
+    seq_lens = torch.tensor(
+        [q + c for q, c in zip(query_lens, context_lens)],
+        device=device,
+        dtype=torch.int32,
+    )
+
+    first = 0
+    for seq, (query_len, context_len) in enumerate(zip(query_lens, context_lens)):
+        for query_pos in range(query_len):
+            cache_pos = context_len + query_pos
+            block = block_table[seq, cache_pos // block_size]
+            offset = cache_pos % block_size
+            key_cache[block, offset] = (key[first + query_pos].float() / k_scale).to(
+                cache_dtype
+            )
+            value_cache[block, offset] = (
+                value[first + query_pos].float() / v_scale
+            ).to(cache_dtype)
+        first += query_len
+
+    references = []
+    first = 0
+    for seq, (query_len, context_len) in enumerate(zip(query_lens, context_lens)):
+        physical = block_table[seq].long()
+        seq_len = context_len + query_len
+        full_key = (
+            key_cache[physical].flatten(0, 1)[:seq_len].float() * k_scale
+        ).repeat_interleave(num_heads // num_kv_heads, dim=1)
+        full_value = (
+            value_cache[physical].flatten(0, 1)[:seq_len].float() * v_scale
+        ).repeat_interleave(num_heads // num_kv_heads, dim=1)
+        scores = torch.einsum(
+            "qhd,khd->hqk", query[first : first + query_len].float(), full_key
+        ) / math.sqrt(head_size)
+        causal_mask = (
+            torch.arange(seq_len, device=device)[None, :]
+            > context_len + torch.arange(query_len, device=device)[:, None]
+        )
+        if causal:
+            scores.masked_fill_(causal_mask[None], -float("inf"))
+        references.append(torch.einsum("hqk,khd->qhd", scores.softmax(-1), full_value))
+        first += query_len
+
+    return {
+        "query": query,
+        "key": key,
+        "value": value,
+        "key_cache": key_cache,
+        "value_cache": value_cache,
+        "block_table": block_table,
+        "starts": starts,
+        "seq_lens": seq_lens,
+        "k_scale": k_scale,
+        "v_scale": v_scale,
+        "reference": torch.cat(references),
+        "max_seq_len": max_seq_len,
+    }
+
+
 @pytest.mark.parametrize("num_heads", NUM_HEADS)
 @pytest.mark.parametrize("num_queries_per_kv", NUM_QUERIES_PER_KV)
 @pytest.mark.parametrize("head_size", HEAD_SIZES)
@@ -1383,12 +1508,13 @@ def test_segmented_prefill_ragged_fresh_kv_graph_ownership(
     """Short/long/decode ownership follows changed metadata on graph replay."""
     from tests.kernels.attention.test_splitkv_paged_decode import _pack_cache
     from vllm import envs
-    from vllm.platforms.rocm import on_gfx12x
+    from vllm.platforms.rocm import on_gfx1x, on_gfx12x
     from vllm.v1.attention.ops.prefix_prefill_tuning import _make_inputs
 
-    if not current_platform.is_rocm() or not on_gfx12x():
-        pytest.skip("RDNA4 segmented prefill")
-    monkeypatch.setattr(envs, "VLLM_ROCM_USE_SEGMENTED_PREFILL", True)
+    if not current_platform.is_rocm() or not (
+        on_gfx12x() if kv_dtype.itemsize == 1 else on_gfx1x()
+    ):
+        pytest.skip("gfx1x segmented prefill (FP8 requires gfx12)")
     monkeypatch.setattr(envs, "VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE", False)
     if force_splits is not None:
         from vllm.v1.attention.ops import segmented_prefill as segmented
@@ -1525,14 +1651,221 @@ def test_segmented_prefill_ragged_fresh_kv_graph_ownership(
     check(replay_lengths)
 
 
+@pytest.mark.parametrize("fp8", [False, True])
+@torch.inference_mode()
+def test_chunked_prefill_routes_unified_cache_to_segmented(monkeypatch, fp8):
+    from vllm.platforms.rocm import on_gfx1x, on_gfx12x
+    from vllm.v1.attention.ops import segmented_prefill as segmented
+
+    if not current_platform.is_rocm() or not (on_gfx12x() if fp8 else on_gfx1x()):
+        pytest.skip("gfx1x segmented prefill (FP8 requires gfx12)")
+    case = _make_unified_paged_case(
+        [1, 2, 7, 33],
+        [31, 64, 97, 128],
+        num_heads=12,
+        num_kv_heads=2,
+        head_size=256,
+        block_size=32,
+        fp8=fp8,
+    )
+    output = torch.empty_like(case["query"])
+    routed = []
+    original = segmented.segmented_prefill_attention
+
+    def segmented_spy(*args, **kwargs):
+        routed.append(True)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(segmented, "segmented_prefill_attention", segmented_spy)
+    chunked_prefill_paged_decode(
+        query=case["query"],
+        key=case["key"],
+        value=case["value"],
+        output=output,
+        kv_cache_dtype="fp8" if fp8 else "auto",
+        key_cache=case["key_cache"],
+        value_cache=case["value_cache"],
+        block_table=case["block_table"],
+        query_start_loc=case["starts"],
+        seq_lens=case["seq_lens"],
+        max_seq_len=case["max_seq_len"],
+        max_query_len=33,
+        k_scale=case["k_scale"],
+        v_scale=case["v_scale"],
+    )
+
+    assert routed == [True]
+    relative = (output.float() - case["reference"]).norm(dim=-1) / case[
+        "reference"
+    ].norm(dim=-1).clamp_min(1e-6)
+    assert torch.isfinite(output).all() and relative.max().item() < 0.01
+
+
+@pytest.mark.parametrize("fp8", [False, True])
+@torch.inference_mode()
+def test_rocm_attn_segmented_layout_cache_update(monkeypatch, fp8):
+    from types import SimpleNamespace
+
+    from vllm.platforms.rocm import on_gfx1x, on_gfx12x
+    from vllm.v1.attention.backend import AttentionType
+    from vllm.v1.attention.backends.rocm_attn import RocmAttentionImpl
+
+    if not current_platform.is_rocm() or not (on_gfx12x() if fp8 else on_gfx1x()):
+        pytest.skip("gfx1x segmented prefill (FP8 requires gfx12)")
+    cache_dtype = torch.uint8 if fp8 else torch.bfloat16
+    kv_cache_dtype = "fp8" if fp8 else "auto"
+    impl = RocmAttentionImpl(
+        12,
+        256,
+        256**-0.5,
+        2,
+        None,
+        None,
+        kv_cache_dtype,
+        attn_type=AttentionType.DECODER,
+    )
+    assert impl._use_unified_kv_layout
+    cache = torch.zeros(3, 2, 32, 512, device="cuda", dtype=cache_dtype)
+    key = torch.randn(5, 2, 256, device="cuda", dtype=torch.bfloat16)
+    value = torch.randn_like(key)
+    slots = torch.tensor([0, 7, 32, 65, 95], device="cuda", dtype=torch.int64)
+    k_scale = torch.tensor(0.125 if fp8 else 1.0, device="cuda")
+    v_scale = torch.tensor(0.25 if fp8 else 1.0, device="cuda")
+    layer = SimpleNamespace(_k_scale=k_scale, _v_scale=v_scale)
+
+    impl.do_kv_cache_update(layer, key, value, cache, slots)
+    key_cache, value_cache = impl._split_kv_cache(cache)
+    if fp8:
+        key_cache = key_cache.view(impl.fp8_dtype)
+        value_cache = value_cache.view(impl.fp8_dtype)
+    cached_key = torch.stack(
+        [key_cache[int(slot) // 32, int(slot) % 32] for slot in slots]
+    )
+    cached_value = torch.stack(
+        [value_cache[int(slot) // 32, int(slot) % 32] for slot in slots]
+    )
+    expected_key = (key.float() / k_scale).to(key_cache.dtype)
+    expected_value = (value.float() / v_scale).to(value_cache.dtype)
+    torch.testing.assert_close(cached_key, expected_key, rtol=0, atol=0)
+    torch.testing.assert_close(cached_value, expected_value, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize(
+    "kv_cache_dtype,is_gfx1x,is_gfx12x,expected",
+    [
+        ("auto", True, False, True),
+        ("fp8", True, False, False),
+        ("auto", False, False, False),
+        ("fp8", True, True, True),
+    ],
+)
+def test_rocm_attn_segmented_layout_arch_gate(
+    monkeypatch, kv_cache_dtype, is_gfx1x, is_gfx12x, expected
+):
+    from vllm.platforms import rocm
+    from vllm.v1.attention.backend import AttentionType
+    from vllm.v1.attention.backends.rocm_attn import RocmAttentionImpl
+
+    monkeypatch.setattr(rocm, "on_gfx1x", lambda: is_gfx1x)
+    monkeypatch.setattr(rocm, "on_gfx12x", lambda: is_gfx12x)
+    impl = RocmAttentionImpl(
+        12,
+        256,
+        256**-0.5,
+        2,
+        None,
+        None,
+        kv_cache_dtype,
+        attn_type=AttentionType.DECODER,
+    )
+    assert impl._use_unified_kv_layout is expected
+
+
+@pytest.mark.parametrize(
+    "query_lens,context_lens,causal",
+    [([129, 1], [31, 64], True), ([33, 1], [31, 64], False)],
+)
+@torch.inference_mode()
+def test_chunked_prefill_unified_cache_routes_outside_segmented_query_range(
+    monkeypatch, query_lens, context_lens, causal
+):
+    import importlib
+
+    from vllm.platforms.rocm import on_gfx1x
+    from vllm.v1.attention.ops import segmented_prefill as segmented
+    from vllm.v1.attention.ops import triton_unified_attention as unified
+
+    chunked = importlib.import_module(
+        "vllm.v1.attention.ops.chunked_prefill_paged_decode"
+    )
+
+    if not current_platform.is_rocm() or not on_gfx1x():
+        pytest.skip("gfx1x unified prefill fallback")
+    case = _make_unified_paged_case(
+        query_lens,
+        context_lens,
+        num_heads=8,
+        num_kv_heads=2,
+        head_size=128,
+        block_size=32,
+        fp8=False,
+        causal=causal,
+    )
+    output = torch.empty_like(case["query"])
+    routed = []
+    original_unified = unified.unified_attention
+    original_context = chunked.context_attention_fwd
+
+    def unified_spy(*args, **kwargs):
+        routed.append("unified")
+        return original_unified(*args, **kwargs)
+
+    def context_spy(*args, **kwargs):
+        routed.append("context")
+        return original_context(*args, **kwargs)
+
+    monkeypatch.setattr(unified, "unified_attention", unified_spy)
+    monkeypatch.setattr(chunked, "context_attention_fwd", context_spy)
+    monkeypatch.setattr(
+        segmented,
+        "segmented_prefill_attention",
+        lambda *args, **kwargs: pytest.fail(
+            "unsupported pattern routed to segmented prefill"
+        ),
+    )
+    chunked_prefill_paged_decode(
+        query=case["query"],
+        key=case["key"],
+        value=case["value"],
+        output=output,
+        kv_cache_dtype="auto",
+        key_cache=case["key_cache"],
+        value_cache=case["value_cache"],
+        block_table=case["block_table"],
+        query_start_loc=case["starts"],
+        seq_lens=case["seq_lens"],
+        max_seq_len=case["max_seq_len"],
+        max_query_len=max(query_lens),
+        k_scale=case["k_scale"],
+        v_scale=case["v_scale"],
+        causal=causal,
+    )
+
+    assert routed == ["context" if causal else "unified"]
+    relative = (output.float() - case["reference"]).norm(dim=-1) / case[
+        "reference"
+    ].norm(dim=-1).clamp_min(1e-6)
+    assert torch.isfinite(output).all() and relative.max().item() < 0.01
+
+
 @torch.inference_mode()
 def test_segmented_prefill_cache_offsets_cross_int32_boundary():
     """A small logical prefix can live beyond 2**31 elements in a strided cache."""
-    from vllm.platforms.rocm import on_gfx12x
+    from vllm.platforms.rocm import on_gfx1x
     from vllm.v1.attention.ops.segmented_prefill import segmented_prefill_attention
 
-    if not current_platform.is_rocm() or not on_gfx12x():
-        pytest.skip("RDNA4 segmented prefill")
+    if not current_platform.is_rocm() or not on_gfx1x():
+        pytest.skip("gfx1x segmented prefill")
     torch.cuda.empty_cache()
     free, _ = torch.cuda.mem_get_info()
     if free < 10 * 2**30:
