@@ -352,7 +352,7 @@ def _probe(case: dict, samples: int, rounds: int, config_overrides: dict) -> dic
     data = make_inputs(**case["inputs"], legacy_layout=False)
     inputs = case["inputs"]
     config = dict(
-        segmented_prefill.select_segmented_unified_config(
+        segmented_prefill.select_segmented_config(
             len(inputs["queries"]),
             max(inputs["queries"]),
             max(q + c for q, c in zip(inputs["queries"], inputs["contexts"])),

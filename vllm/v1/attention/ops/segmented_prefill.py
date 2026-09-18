@@ -35,8 +35,6 @@ def _segmented_prefill_stage(
     Q,
     K,
     V,
-    KD,
-    VD,
     TABLE,
     STARTS,
     LENS,
@@ -49,10 +47,6 @@ def _segmented_prefill_stage(
     Q1: tl.constexpr,
     O0: tl.constexpr,
     O1: tl.constexpr,
-    KD0: tl.constexpr,
-    KD1: tl.constexpr,
-    VD0: tl.constexpr,
-    VD1: tl.constexpr,
     K0: tl.constexpr,
     K1: tl.constexpr,
     K2: tl.constexpr,
@@ -64,7 +58,6 @@ def _segmented_prefill_stage(
     T0: tl.constexpr,
     T1: tl.constexpr,
     PAGE: tl.constexpr,
-    PACK: tl.constexpr,
     BATCH: tl.constexpr,
     HQ: tl.constexpr,
     HK: tl.constexpr,
@@ -78,8 +71,6 @@ def _segmented_prefill_stage(
     BN: tl.constexpr,
     BK: tl.constexpr,
     SPLITS: tl.constexpr,
-    CACHE_CURRENT: tl.constexpr,
-    UNIFIED_LAYOUT: tl.constexpr,
 ):
     item, mb, split = tl.program_id(0), tl.program_id(1), tl.program_id(2)
     seq, kh = item // HK, item % HK
@@ -93,7 +84,6 @@ def _segmented_prefill_stage(
         return
     sequence = tl.load(LENS + seq)
     prefix = sequence - nq
-    context = sequence if CACHE_CURRENT else prefix
     m = mb * BM + tl.arange(0, BM)
     qpos, qh = m // G, kh * G + m % G
     n = tl.arange(0, BN)
@@ -107,12 +97,11 @@ def _segmented_prefill_stage(
     maximum = tl.full((BM,), -float("inf"), tl.float32)
     denom = tl.zeros((BM,), tl.float32)
     acc = tl.zeros((BM, D), tl.float32)
-    segment = tl.cdiv(context, SPLITS * BN) * BN
+    segment = tl.cdiv(sequence, SPLITS * BN) * BN
     begin = split * segment
-    end = tl.minimum(begin + segment, context)
-    if CACHE_CURRENT:
-        tile_rows = tl.minimum((mb + 1) * BM, nq * G)
-        end = tl.minimum(end, prefix + tl.cdiv(tile_rows, G))
+    end = tl.minimum(begin + segment, sequence)
+    tile_rows = tl.minimum((mb + 1) * BM, nq * G)
+    end = tl.minimum(end, prefix + tl.cdiv(tile_rows, G))
     k_scale = 1.0
     v_scale = 1.0
     if FP8:
@@ -148,112 +137,43 @@ def _segmented_prefill_stage(
                         mask=(m < nq * G)[:, None],
                         other=0.0,
                     )
-                if UNIFIED_LAYOUT:
-                    k = tl.load(
-                        K
-                        + block[None, :] * K0
-                        + inside[None, :] * K1
-                        + kh * K2
-                        + kd[:, None] * K3,
-                        mask=valid[None, :],
-                        other=0.0,
-                    )
-                else:
-                    k = tl.load(
-                        K
-                        + block[None, :] * K0
-                        + kh * K1
-                        + (kd[:, None] // PACK) * K2
-                        + inside[None, :] * K3
-                        + kd[:, None] % PACK,
-                        mask=valid[None, :],
-                        other=0.0,
-                    )
+                k = tl.load(
+                    K
+                    + block[None, :] * K0
+                    + inside[None, :] * K1
+                    + kh * K2
+                    + kd[:, None] * K3,
+                    mask=valid[None, :],
+                    other=0.0,
+                )
                 scores = tl.dot(q, k.to(q.dtype), scores)
             scores *= SCALE * 1.4426950408889634 * k_scale
-            if CACHE_CURRENT:
-                score_mask = (
-                    valid[None, :]
-                    & (m[:, None] < nq * G)
-                    & (ns[None, :] <= prefix + qpos[:, None])
-                )
-                scores = tl.where(score_mask, scores, -float("inf"))
-            else:
-                scores = tl.where(valid[None, :], scores, -float("inf"))
+            score_mask = (
+                valid[None, :]
+                & (m[:, None] < nq * G)
+                & (ns[None, :] <= prefix + qpos[:, None])
+            )
+            scores = tl.where(score_mask, scores, -float("inf"))
             new_max = tl.maximum(maximum, tl.max(scores, 1))
             safe_max = tl.where(new_max == -float("inf"), 0.0, new_max)
             alpha = tl.exp2(maximum - safe_max)
             p = tl.exp2(scores - safe_max[:, None])
             acc *= alpha[:, None]
-            if UNIFIED_LAYOUT:
-                v = tl.load(
-                    V
-                    + block[:, None] * V0
-                    + inside[:, None] * V1
-                    + kh * V2
-                    + d[None, :] * V3,
-                    mask=valid[:, None],
-                    other=0.0,
-                )
-            else:
-                v = tl.load(
-                    V
-                    + block[:, None] * V0
-                    + kh * V1
-                    + d[None, :] * V2
-                    + inside[:, None] * V3,
-                    mask=valid[:, None],
-                    other=0.0,
-                )
+            v = tl.load(
+                V
+                + block[:, None] * V0
+                + inside[:, None] * V1
+                + kh * V2
+                + d[None, :] * V3,
+                mask=valid[:, None],
+                other=0.0,
+            )
             if FP8:
                 acc += (
                     tl.dot(p.to(Q.dtype.element_ty), v.to(Q.dtype.element_ty)) * v_scale
                 )
             else:
                 acc = tl.dot(p.to(Q.dtype.element_ty), v, acc)
-            denom = denom * alpha + tl.sum(p, 1)
-            maximum = safe_max
-    if not CACHE_CURRENT and split == SPLITS - 1:
-        for start in range(tl.cdiv(nq, BN)):
-            ns = start * BN + n
-            scores = tl.zeros((BM, BN), tl.float32)
-            for ki in range(D // BK):
-                kd = ki * BK + tl.arange(0, BK)
-                if BK == D:
-                    q = q_full
-                else:
-                    q = tl.load(
-                        Q
-                        + (first + qpos[:, None]) * Q0
-                        + qh[:, None] * Q1
-                        + kd[None, :],
-                        mask=(m < nq * G)[:, None],
-                        other=0.0,
-                    )
-                k = tl.load(
-                    KD + (first + ns[None, :]) * KD0 + kh * KD1 + kd[:, None],
-                    mask=(ns < nq)[None, :],
-                    other=0.0,
-                )
-                scores = tl.dot(q, k, scores)
-            scores *= SCALE * 1.4426950408889634
-            scores = tl.where(
-                (ns < nq)[None, :] & (ns[None, :] <= qpos[:, None]),
-                scores,
-                -float("inf"),
-            )
-            new_max = tl.maximum(maximum, tl.max(scores, 1))
-            # Later current-chunk tiles may be entirely masked for an early row.
-            safe_max = tl.where(new_max == -float("inf"), 0.0, new_max)
-            alpha = tl.exp2(maximum - safe_max)
-            p = tl.exp2(scores - safe_max[:, None])
-            acc *= alpha[:, None]
-            v = tl.load(
-                VD + (first + ns[:, None]) * VD0 + kh * VD1 + d[None, :],
-                mask=(ns < nq)[:, None],
-                other=0.0,
-            )
-            acc = tl.dot(p.to(Q.dtype.element_ty), v, acc)
             denom = denom * alpha + tl.sum(p, 1)
             maximum = safe_max
     norm = tl.where(denom > 0.0, denom, 1.0)
@@ -323,7 +243,7 @@ def _segmented_prefill_reduce(
 
 @lru_cache(maxsize=512)
 def select_segmented_config(batch, max_query_len, max_seq_len, hq, hk, dim, fp8):
-    """Choose bounded initial launch ranges; benchmark overrides remain explicit."""
+    """Select the token-major cache configuration used by ROCM_ATTN."""
     qcap = min(max_query_len, MAX_QUERY_LEN)
     if batch < 1 or qcap < 1:
         raise ValueError("Batch and query capacity must be positive")
@@ -349,7 +269,7 @@ def select_segmented_config(batch, max_query_len, max_seq_len, hq, hk, dim, fp8)
     splits = min(split_cap, triton.next_power_of_2(triton.cdiv(target, groups)))
     while splits > 1 and max_seq_len < splits * 128:
         splits //= 2
-    return dict(
+    cfg = dict(
         bm=bm,
         bn=bn,
         bk=bk,
@@ -357,17 +277,6 @@ def select_segmented_config(batch, max_query_len, max_seq_len, hq, hk, dim, fp8)
         warps=4,
         stages=stages,
     )
-
-
-@lru_cache(maxsize=512)
-def select_segmented_unified_config(
-    batch, max_query_len, max_seq_len, hq, hk, dim, fp8
-):
-    """Select the token-major cache configuration used by ROCM_ATTN."""
-    cfg = dict(
-        select_segmented_config(batch, max_query_len, max_seq_len, hq, hk, dim, fp8)
-    )
-    qcap = min(max_query_len, MAX_QUERY_LEN)
     if qcap <= 2:
         if batch * hk == 1:
             cfg.update(bm=16, bn=64, bk=128, splits=32, stages=1)
@@ -428,7 +337,6 @@ def select_segmented_unified_config(
             )
         else:
             cfg.update(bm=32, bn=64, bk=64, splits=1, warps=4, stages=2)
-    cfg.update(cache_current=True, unified_layout=True)
     return cfg
 
 
@@ -440,21 +348,20 @@ def segmented_workspace_shapes(batch, query_cap, hq, hk, dim, splits):
 
 
 def reserve_segmented_prefill_workspace(
-    max_batch, hq, hk, dim, max_seq_len, *, fp8=False, unified_layout=False
+    max_batch, hq, hk, dim, max_seq_len, *, fp8=False
 ):
     """Reserve the largest selected prefill workspace before graph capture."""
     if not is_workspace_manager_initialized():
         return
-    selector = (
-        select_segmented_unified_config if unified_layout else select_segmented_config
-    )
     largest = 0
     previous_capacity = 0
     for query_capacity in _query_capacity_buckets():
         query_lengths = {previous_capacity + 1, query_capacity}
         for batch in range(1, max_batch + 1):
             for query_len in query_lengths:
-                cfg = selector(batch, query_len, max_seq_len, hq, hk, dim, fp8)
+                cfg = select_segmented_config(
+                    batch, query_len, max_seq_len, hq, hk, dim, fp8
+                )
                 if cfg["splits"] > 1:
                     largest = max(
                         largest,
@@ -471,12 +378,12 @@ def can_use_segmented_prefill(
     q, k, v, out, kc, vc, table, starts, lengths, k_scale, v_scale
 ):
     """Check tensor metadata; unsupported feature checks live in the caller."""
-    unified_layout = kc.ndim == 4 and vc.ndim == 4
     if (
         k is None
         or v is None
         or q.ndim != 3
-        or (not unified_layout and (kc.ndim != 5 or vc.ndim != 4))
+        or kc.ndim != 4
+        or vc.ndim != 4
         or q.dtype not in (torch.bfloat16, torch.float16)
         or out.dtype != q.dtype
         or q.shape != out.shape
@@ -498,26 +405,16 @@ def can_use_segmented_prefill(
         or not q.is_cuda
     ):
         return False
-    hkv = kc.shape[2] if unified_layout else kc.shape[1]
+    hkv = kc.shape[2]
     dim = q.shape[-1]
-    page = kc.shape[1] if unified_layout else kc.shape[3]
+    page = kc.shape[1]
     if hkv < 1 or q.shape[1] % hkv or not 1 <= q.shape[1] // hkv <= 16:
         return False
-    pack = 16 // kc.element_size()
     if (
         k.shape != (q.shape[0], hkv, dim)
         or v.shape != k.shape
-        or (
-            unified_layout
-            and (kc.shape != (kc.shape[0], page, hkv, dim) or vc.shape != kc.shape)
-        )
-        or (
-            not unified_layout
-            and (
-                kc.shape[2:] != (dim // pack, page, pack)
-                or vc.shape != (kc.shape[0], hkv, dim, page)
-            )
-        )
+        or kc.shape != (kc.shape[0], page, hkv, dim)
+        or vc.shape != kc.shape
         or any(
             t.device != q.device for t in (k, v, out, kc, vc, table, starts, lengths)
         )
@@ -537,8 +434,6 @@ def can_use_segmented_prefill(
 
 def segmented_prefill_attention(
     q,
-    k,
-    v,
     out,
     kc,
     vc,
@@ -555,18 +450,17 @@ def segmented_prefill_attention(
     config=None,
     workspace=None,
 ):
-    """Write eligible short-prefill rows; leave other requests untouched."""
+    """Write eligible unified-cache prefill rows; leave other requests untouched."""
     batch, hq, dim = lengths.numel(), q.shape[1], q.shape[2]
     if batch == 0 or max_query_len == 0 or q.numel() == 0:
         return out
     query_len = min(max_query_len, MAX_QUERY_LEN)
     qcap = segmented_query_capacity(query_len)
     fp8 = kc.element_size() == 1
+    hk = kc.shape[2]
     cfg = config or select_segmented_config(
-        batch, query_len, max_seq_len, hq, kc.shape[1], dim, fp8
+        batch, query_len, max_seq_len, hq, hk, dim, fp8
     )
-    unified_layout = cfg.get("unified_layout", False)
-    hk = kc.shape[2] if unified_layout else kc.shape[1]
     splits = cfg["splits"]
     shapes = segmented_workspace_shapes(batch, qcap, hq, hk, dim, splits)
     if shapes is None:
@@ -587,8 +481,6 @@ def segmented_prefill_attention(
         q,
         kc,
         vc,
-        k,
-        v,
         table,
         starts,
         lengths,
@@ -601,15 +493,10 @@ def segmented_prefill_attention(
         q.stride(1),
         out.stride(0),
         out.stride(1),
-        k.stride(0),
-        k.stride(1),
-        v.stride(0),
-        v.stride(1),
-        *kc.stride()[:4],
+        *kc.stride(),
         *vc.stride(),
         *table.stride(),
-        kc.shape[1] if unified_layout else kc.shape[3],
-        1 if unified_layout else kc.shape[4],
+        kc.shape[1],
         batch,
         hq,
         hk,
@@ -623,8 +510,6 @@ def segmented_prefill_attention(
         cfg["bn"],
         cfg["bk"],
         splits,
-        cfg.get("cache_current", False),
-        unified_layout,
         num_warps=cfg["warps"],
         num_stages=cfg["stages"],
         waves_per_eu=cfg.get("waves_per_eu", 2),

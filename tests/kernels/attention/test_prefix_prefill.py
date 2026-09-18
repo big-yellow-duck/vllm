@@ -1502,12 +1502,10 @@ def test_rocm_context_tuning_prunes_tokens_and_paged_kv_memory():
     ],
 )
 @torch.inference_mode()
-def test_segmented_prefill_ragged_fresh_kv_graph_ownership(
+def test_segmented_prefill_ragged_unified_graph_replay(
     monkeypatch, dim, page, hq, hk, dtype, kv_dtype, byte_cache, force_splits
 ):
-    """Short/long/decode ownership follows changed metadata on graph replay."""
-    from tests.kernels.attention.test_splitkv_paged_decode import _pack_cache
-    from vllm import envs
+    """Unified-cache segmented prefill follows metadata on graph replay."""
     from vllm.platforms.rocm import on_gfx1x, on_gfx12x
     from vllm.v1.attention.ops.prefix_prefill_tuning import _make_inputs
 
@@ -1515,7 +1513,6 @@ def test_segmented_prefill_ragged_fresh_kv_graph_ownership(
         on_gfx12x() if kv_dtype.itemsize == 1 else on_gfx1x()
     ):
         pytest.skip("gfx1x segmented prefill (FP8 requires gfx12)")
-    monkeypatch.setattr(envs, "VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE", False)
     if force_splits is not None:
         from vllm.v1.attention.ops import segmented_prefill as segmented
 
@@ -1538,6 +1535,7 @@ def test_segmented_prefill_ragged_fresh_kv_graph_ownership(
         max(query_lengths),
         max(query_lengths) + max(contexts),
         kv_dtype,
+        query_lengths=query_lengths,
     )
     total = sum(query_lengths)
     tensors = []
@@ -1547,13 +1545,25 @@ def test_segmented_prefill_ragged_fresh_kv_graph_ownership(
         target.copy_(source[:total])
         tensors.append(target)
     q, k, v = tensors
-    # Recover NHD only to reuse the established interleaved-cache packing helper.
+    # Recover token-major cache data from the legacy fixture, then place K/V in
+    # the interleaved allocation used by ROCM_ATTN.
     dense_k = kc.permute(0, 3, 1, 2, 4).reshape(kc.shape[0], page, hk, dim)
     dense_v = vc.permute(0, 3, 1, 2)
     if kv_dtype in (torch.float16, torch.bfloat16):
         dense_k, dense_v = dense_k.to(dtype), dense_v.to(dtype)
-    kc, vc = _pack_cache(dense_k, dense_v, padded_stride=True)
+    page_elements = dense_k[0].numel()
+    backing = torch.empty(
+        dense_k.shape[0] * 2 * page_elements,
+        device=device,
+        dtype=kv_dtype,
+    )
+    strides = (2 * page_elements, hk * dim, dim, 1)
+    kc = torch.as_strided(backing, dense_k.shape, strides)
+    vc = torch.as_strided(backing, dense_v.shape, strides, page_elements)
+    kc.copy_(dense_k)
+    vc.copy_(dense_v)
     table.copy_(torch.randperm(table.numel(), device=device).reshape_as(table))
+    host_table = table.cpu().tolist()
     ks = torch.tensor(0.13 if kv_dtype.itemsize == 1 else 1.0, device=device)
     vs = torch.tensor(0.27 if kv_dtype.itemsize == 1 else 1.0, device=device)
     output = torch.full((total, hq + 1, dim), 17.0, device=device, dtype=dtype)[:, :hq]
@@ -1573,50 +1583,46 @@ def test_segmented_prefill_ragged_fresh_kv_graph_ownership(
                 dtype=torch.int32,
             )
         )
+        first = 0
+        for seq, (nq, context) in enumerate(zip(qlens, contexts)):
+            for local in range(nq):
+                position = context + local
+                physical = host_table[seq][position // page]
+                offset = position % page
+                kc[physical, offset].copy_((k[first + local].float() / ks).to(kv_dtype))
+                vc[physical, offset].copy_((v[first + local].float() / vs).to(kv_dtype))
+            first += nq
 
     def run():
-        context_attention_fwd(
-            q,
-            k,
-            v,
-            output,
-            "fp8" if kv_dtype.itemsize == 1 else "auto",
-            kc.view(torch.uint8) if byte_cache else kc,
-            vc.view(torch.uint8) if byte_cache else vc,
-            table,
-            starts,
-            lengths,
-            max(contexts) + 129,
-            129,
-            ks,
-            vs,
-            skip_decode=True,
+        chunked_prefill_paged_decode(
+            query=q,
+            key=k,
+            value=v,
+            output=output,
+            kv_cache_dtype="fp8" if kv_dtype.itemsize == 1 else "auto",
+            key_cache=kc.view(torch.uint8) if byte_cache else kc,
+            value_cache=vc.view(torch.uint8) if byte_cache else vc,
+            block_table=table,
+            query_start_loc=starts,
+            seq_lens=lengths,
+            max_seq_len=max(contexts) + 129,
+            max_query_len=129,
+            k_scale=ks,
+            v_scale=vs,
         )
 
     def check(qlens):
         first = 0
         for seq, (nq, context) in enumerate(zip(qlens, contexts)):
-            if nq <= 1:
-                assert torch.all(output[first : first + nq] == 17.0)
+            if nq == 0:
                 first += nq
                 continue
             physical = table[seq].long()
-            prefix_k = (
-                kc[physical]
-                .permute(0, 3, 1, 2, 4)
-                .reshape(-1, hk, dim)[:context]
-                .float()
-                * ks
-            )
-            prefix_v = (
-                vc[physical].permute(0, 3, 1, 2).reshape(-1, hk, dim)[:context].float()
-                * vs
-            )
-            full_k = torch.cat(
-                (prefix_k, k[first : first + nq].float())
+            full_k = (
+                kc[physical].reshape(-1, hk, dim)[: context + nq].float() * ks
             ).repeat_interleave(hq // hk, 1)
-            full_v = torch.cat(
-                (prefix_v, v[first : first + nq].float())
+            full_v = (
+                vc[physical].reshape(-1, hk, dim)[: context + nq].float() * vs
             ).repeat_interleave(hq // hk, 1)
             logits = torch.einsum(
                 "qhd,khd->hqk", q[first : first + nq].float(), full_k
@@ -1641,10 +1647,10 @@ def test_segmented_prefill_ragged_fresh_kv_graph_ownership(
     with torch.cuda.graph(graph):
         run()
     replay_lengths = [1, 0, 7, 2, 34, 128]
-    metadata(replay_lengths)
     q.mul_(0.75)
     k.add_(0.25)
     v.add_(0.5)
+    metadata(replay_lengths)
     output.fill_(17.0)
     graph.replay()
     torch.cuda.synchronize()
@@ -1677,10 +1683,10 @@ def test_chunked_prefill_routes_unified_cache_to_segmented(
     routed = []
     original = segmented.segmented_prefill_attention
     if force_splits is not None:
-        original_selector = segmented.select_segmented_unified_config
+        original_selector = segmented.select_segmented_config
         monkeypatch.setattr(
             segmented,
-            "select_segmented_unified_config",
+            "select_segmented_config",
             lambda *args: dict(original_selector(*args), splits=force_splits),
         )
 
@@ -1885,32 +1891,33 @@ def test_segmented_prefill_cache_offsets_cross_int32_boundary():
     device = torch.device("cuda:0")
     stride = 2**30 + 4096
     kc = torch.empty_strided(
-        (3, 1, 16, 32, 8),
-        (stride, 4096, 256, 8, 1),
+        (3, 32, 1, 128),
+        (stride, 128, 128, 1),
         device=device,
         dtype=torch.bfloat16,
     )
     vc = torch.empty_strided(
-        (3, 1, 128, 32), (stride, 4096, 32, 1), device=device, dtype=torch.bfloat16
+        (3, 32, 1, 128),
+        (stride, 128, 128, 1),
+        device=device,
+        dtype=torch.bfloat16,
     )
     dense_k = torch.randn(2, 32, 1, 128, device=device, dtype=torch.bfloat16)
     dense_v = torch.randn_like(dense_k)
     for logical, physical in enumerate((2, 1)):
-        kc[physical].copy_(dense_k[logical].reshape(32, 1, 16, 8).permute(1, 2, 0, 3))
-        vc[physical].copy_(dense_v[logical].permute(1, 2, 0))
+        kc[physical].copy_(dense_k[logical])
+        vc[physical].copy_(dense_v[logical])
     q = torch.randn(2, 4, 128, device=device, dtype=torch.bfloat16)
-    k = torch.randn(2, 1, 128, device=device, dtype=torch.bfloat16)
-    v = torch.randn_like(k)
     out = torch.empty_like(q)
     table = torch.tensor([[2, 1]], device=device, dtype=torch.int32)
     starts = torch.tensor([0, 2], device=device, dtype=torch.int32)
     lengths = torch.tensor([35], device=device, dtype=torch.int32)
     one = torch.ones((), device=device)
     segmented_prefill_attention(
-        q, k, v, out, kc, vc, table, starts, lengths, 2, 35, one, one, 128**-0.5
+        q, out, kc, vc, table, starts, lengths, 2, 35, one, one, 128**-0.5
     )
-    full_k = torch.cat((dense_k.flatten(0, 1)[:33], k)).float().repeat_interleave(4, 1)
-    full_v = torch.cat((dense_v.flatten(0, 1)[:33], v)).float().repeat_interleave(4, 1)
+    full_k = dense_k.flatten(0, 1)[:35].float().repeat_interleave(4, 1)
+    full_v = dense_v.flatten(0, 1)[:35].float().repeat_interleave(4, 1)
     scores = torch.einsum("qhd,khd->hqk", q.float(), full_k) / math.sqrt(128)
     scores[:, 0, -1] = -float("inf")
     expected = torch.einsum("hqk,khd->qhd", scores.softmax(-1), full_v)

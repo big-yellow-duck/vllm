@@ -169,7 +169,6 @@ class RocmAttentionMetadataBuilder(AttentionMetadataBuilder[RocmAttentionMetadat
                 self.headdim,
                 model_config.max_model_len,
                 fp8=fp8_kv_supported,
-                unified_layout=True,
             )
 
     def build_for_cudagraph_capture(

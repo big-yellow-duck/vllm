@@ -964,63 +964,6 @@ def context_attention_fwd(
         stride_v_cache_d = v_cache.stride(2)
         stride_v_cache_bl = v_cache.stride(3)
     skip_short_prefill = 0
-    if (
-        _launch_config is None
-        and current_platform.is_rocm()
-        and causal
-        and not sliding_window
-        and sinks is None
-        and fp8_out_scale is None
-        and not kv_from_cache
-        and not unified_layout
-        and not is_block_table_ptr
-        and max_input_len > 0
-    ):
-        from vllm.platforms.rocm import on_gfx1x, on_gfx12x
-
-        from .segmented_prefill import (
-            MAX_QUERY_LEN,
-            can_use_segmented_prefill,
-            segmented_prefill_attention,
-        )
-
-        if (
-            (on_gfx12x() if k_cache.element_size() == 1 else on_gfx1x())
-            and (batch > 1 or max_input_len <= MAX_QUERY_LEN)
-            and can_use_segmented_prefill(
-                q,
-                k,
-                v,
-                o,
-                k_cache,
-                v_cache,
-                processed_b_loc,
-                b_start_loc,
-                b_seq_len,
-                k_scale,
-                v_scale,
-            )
-        ):
-            segmented_prefill_attention(
-                q,
-                k,
-                v,
-                o,
-                k_cache,
-                v_cache,
-                processed_b_loc,
-                b_start_loc,
-                b_seq_len,
-                max_input_len,
-                max_seq_len or processed_b_loc.shape[1] * real_block_size,
-                k_scale,
-                v_scale,
-                sm_scale,
-                skip_decode=skip_decode,
-            )
-            if max_input_len <= MAX_QUERY_LEN:
-                return
-            skip_short_prefill = MAX_QUERY_LEN
 
     # _paged_kv_cache_offsets resolves context tokens against PHYSICAL_BLOCK_SIZE
     # individually, so tiles need not divide the page size.

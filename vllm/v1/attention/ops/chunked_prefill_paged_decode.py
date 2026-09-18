@@ -1041,7 +1041,7 @@ def chunked_prefill_paged_decode(
                 MAX_QUERY_LEN,
                 can_use_segmented_prefill,
                 segmented_prefill_attention,
-                select_segmented_unified_config,
+                select_segmented_config,
             )
 
             if 0 < max_query_len <= MAX_QUERY_LEN and can_use_segmented_prefill(
@@ -1057,7 +1057,7 @@ def chunked_prefill_paged_decode(
                 k_scale,
                 v_scale,
             ):
-                config = select_segmented_unified_config(
+                config = select_segmented_config(
                     len(seq_lens),
                     max_query_len,
                     max_seq_len,
@@ -1068,8 +1068,6 @@ def chunked_prefill_paged_decode(
                 )
                 segmented_prefill_attention(
                     query,
-                    key,
-                    value,
                     output,
                     key_cache,
                     value_cache,

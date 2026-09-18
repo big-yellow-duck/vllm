@@ -76,10 +76,11 @@ def _estimated_bytes(case: dict) -> int:
     cache_elements = batch * math.ceil(sequence / page) * page * kv_heads * dim
     cache_bytes = 2 * cache_elements * (1 if case["fp8"] else 2)
     dense_bytes = batch * query * (heads + 2 * kv_heads) * dim * 2
-    config = segmented_prefill.select_segmented_unified_config(
+    config = segmented_prefill.select_segmented_config(
         batch, query, sequence, heads, kv_heads, dim, case["fp8"]
     )
-    workspace_rows = config["splits"] * batch * query * heads
+    query_capacity = segmented_prefill.segmented_query_capacity(query)
+    workspace_rows = config["splits"] * batch * query_capacity * heads
     workspace_bytes = workspace_rows * (dim + 1) * 4
     # Includes eviction buffers, graph pools, AITER partials, and allocator headroom.
     return cache_bytes + dense_bytes + workspace_bytes + 1024**3
@@ -132,10 +133,7 @@ def _probe(
     selected = {}
     graphs = {}
     for backend in ("segmented", "aiter"):
-        if backend == "segmented":
-            config = segmented_config or {"auto_unified": True}
-        else:
-            config = None
+        config = segmented_config if backend == "segmented" else None
         calls[backend], outputs[backend], selected[backend] = make_call(
             data, backend, config
         )

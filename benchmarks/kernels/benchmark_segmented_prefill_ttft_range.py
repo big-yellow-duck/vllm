@@ -113,7 +113,7 @@ def _probe(case: dict, samples: int, rounds: int) -> dict:
     outputs = {}
     selected = {}
     calls["segmented"], outputs["segmented"], selected["segmented"] = make_call(
-        data, "segmented", {"auto_unified": True}
+        data, "segmented"
     )
     calls["aiter"], outputs["aiter"], selected["aiter"] = make_call(data, "aiter")
     outputs["context"] = torch.empty_like(data["q"])

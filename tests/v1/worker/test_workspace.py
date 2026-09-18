@@ -159,11 +159,9 @@ def test_workspace_lane_validation(monkeypatch) -> None:
 
 
 @pytest.mark.parametrize("dim,hq,hk", [(128, 16, 1), (256, 12, 2)])
-@pytest.mark.parametrize(
-    "unified_layout,fp8", [(False, False), (True, False), (True, True)]
-)
+@pytest.mark.parametrize("fp8", [False, True])
 def test_segmented_prefill_reservation_covers_ragged_query_caps(
-    monkeypatch, dim, hq, hk, unified_layout, fp8
+    monkeypatch, dim, hq, hk, fp8
 ):
     """Every supported query bucket fits the startup buffer after locking."""
     from vllm.v1.attention.ops import segmented_prefill as segmented
@@ -179,15 +177,9 @@ def test_segmented_prefill_reservation_covers_ragged_query_caps(
         dim,
         65536,
         fp8=fp8,
-        unified_layout=unified_layout,
     )
     manager.lock()
     pointers = set()
-    selector = (
-        segmented.select_segmented_unified_config
-        if unified_layout
-        else segmented.select_segmented_config
-    )
     query_lengths = {
         query_len
         for capacity in segmented._query_capacity_buckets()
@@ -196,7 +188,9 @@ def test_segmented_prefill_reservation_covers_ragged_query_caps(
     for batch in range(1, 33):
         for query_len in query_lengths:
             qcap = segmented.segmented_query_capacity(query_len)
-            cfg = selector(batch, query_len, 65536, hq, hk, dim, fp8)
+            cfg = segmented.select_segmented_config(
+                batch, query_len, 65536, hq, hk, dim, fp8
+            )
             shapes = segmented.segmented_workspace_shapes(
                 batch, qcap, hq, hk, dim, cfg["splits"]
             )

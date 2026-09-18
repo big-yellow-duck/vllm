@@ -21,9 +21,9 @@ from vllm.v1.attention.ops.prefix_prefill import context_attention_fwd
 from vllm.v1.attention.ops.segmented_prefill import (
     MAX_QUERY_LEN,
     segmented_prefill_attention,
+    segmented_query_capacity,
     segmented_workspace_shapes,
     select_segmented_config,
-    select_segmented_unified_config,
 )
 
 
@@ -188,16 +188,12 @@ def make_call(data, backend, config=None):
     fp8 = data["kn"].element_size() == 1
     selected = {}
     if backend == "segmented":
-        if config and config.get("auto_unified"):
-            cfg = select_segmented_unified_config(
-                batch, min(maxq, MAX_QUERY_LEN), maxs, hq, hk, dim, fp8
-            )
-        else:
-            cfg = config or select_segmented_config(
-                batch, min(maxq, MAX_QUERY_LEN), maxs, hq, hk, dim, fp8
-            )
+        cfg = config or select_segmented_config(
+            batch, min(maxq, MAX_QUERY_LEN), maxs, hq, hk, dim, fp8
+        )
+        query_capacity = segmented_query_capacity(min(maxq, MAX_QUERY_LEN))
         shapes = segmented_workspace_shapes(
-            batch, min(maxq, MAX_QUERY_LEN), hq, hk, dim, cfg["splits"]
+            batch, query_capacity, hq, hk, dim, cfg["splits"]
         )
         workspace = (
             None
@@ -206,17 +202,13 @@ def make_call(data, backend, config=None):
                 torch.empty(s, device=q.device, dtype=torch.float32) for s in shapes
             )
         )
-        key_cache = data["kn"] if cfg.get("unified_layout", False) else data["kc"]
-        value_cache = data["vn"] if cfg.get("unified_layout", False) else data["vc"]
 
         def run():
             segmented_prefill_attention(
                 q,
-                k,
-                v,
                 out,
-                key_cache,
-                value_cache,
+                data["kn"],
+                data["vn"],
                 data["table"],
                 data["starts"],
                 data["lens"],
