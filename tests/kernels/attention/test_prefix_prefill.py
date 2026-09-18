@@ -1651,16 +1651,21 @@ def test_segmented_prefill_ragged_fresh_kv_graph_ownership(
     check(replay_lengths)
 
 
-@pytest.mark.parametrize("fp8", [False, True])
+@pytest.mark.parametrize(
+    "fp8,force_splits",
+    [(False, None), (True, None), (False, 4), (True, 4)],
+)
 @torch.inference_mode()
-def test_chunked_prefill_routes_unified_cache_to_segmented(monkeypatch, fp8):
+def test_chunked_prefill_routes_unified_cache_to_segmented(
+    monkeypatch, fp8, force_splits
+):
     from vllm.platforms.rocm import on_gfx1x, on_gfx12x
     from vllm.v1.attention.ops import segmented_prefill as segmented
 
     if not current_platform.is_rocm() or not (on_gfx12x() if fp8 else on_gfx1x()):
         pytest.skip("gfx1x segmented prefill (FP8 requires gfx12)")
     case = _make_unified_paged_case(
-        [1, 2, 7, 33],
+        [1, 2, 7, 129],
         [31, 64, 97, 128],
         num_heads=12,
         num_kv_heads=2,
@@ -1671,6 +1676,13 @@ def test_chunked_prefill_routes_unified_cache_to_segmented(monkeypatch, fp8):
     output = torch.empty_like(case["query"])
     routed = []
     original = segmented.segmented_prefill_attention
+    if force_splits is not None:
+        original_selector = segmented.select_segmented_unified_config
+        monkeypatch.setattr(
+            segmented,
+            "select_segmented_unified_config",
+            lambda *args: dict(original_selector(*args), splits=force_splits),
+        )
 
     def segmented_spy(*args, **kwargs):
         routed.append(True)
@@ -1689,7 +1701,7 @@ def test_chunked_prefill_routes_unified_cache_to_segmented(monkeypatch, fp8):
         query_start_loc=case["starts"],
         seq_lens=case["seq_lens"],
         max_seq_len=case["max_seq_len"],
-        max_query_len=33,
+        max_query_len=129,
         k_scale=case["k_scale"],
         v_scale=case["v_scale"],
     )
@@ -1782,12 +1794,12 @@ def test_rocm_attn_segmented_layout_arch_gate(
 
 
 @pytest.mark.parametrize(
-    "query_lens,context_lens,causal",
-    [([129, 1], [31, 64], True), ([33, 1], [31, 64], False)],
+    "query_lens,context_lens,max_query_len,causal",
+    [([129, 1], [31, 64], 4097, True), ([33, 1], [31, 64], 33, False)],
 )
 @torch.inference_mode()
-def test_chunked_prefill_unified_cache_routes_outside_segmented_query_range(
-    monkeypatch, query_lens, context_lens, causal
+def test_chunked_prefill_unified_cache_routes_unsupported_segmented_patterns(
+    monkeypatch, query_lens, context_lens, max_query_len, causal
 ):
     import importlib
 
@@ -1845,7 +1857,7 @@ def test_chunked_prefill_unified_cache_routes_outside_segmented_query_range(
         query_start_loc=case["starts"],
         seq_lens=case["seq_lens"],
         max_seq_len=case["max_seq_len"],
-        max_query_len=max(query_lens),
+        max_query_len=max_query_len,
         k_scale=case["k_scale"],
         v_scale=case["v_scale"],
         causal=causal,

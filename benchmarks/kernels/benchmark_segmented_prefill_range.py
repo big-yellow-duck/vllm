@@ -74,9 +74,9 @@ def _estimated_bytes(case: dict) -> int:
     page = case["page"]
     heads, kv_heads, dim = case["heads"], case["kv_heads"], 256
     cache_elements = batch * math.ceil(sequence / page) * page * kv_heads * dim
-    cache_bytes = 4 * cache_elements * (1 if case["fp8"] else 2)
+    cache_bytes = 2 * cache_elements * (1 if case["fp8"] else 2)
     dense_bytes = batch * query * (heads + 2 * kv_heads) * dim * 2
-    config = segmented_prefill.select_segmented_config(
+    config = segmented_prefill.select_segmented_unified_config(
         batch, query, sequence, heads, kv_heads, dim, case["fp8"]
     )
     workspace_rows = config["splits"] * batch * query * heads
@@ -126,13 +126,16 @@ def _relative_l2(left: torch.Tensor, right: torch.Tensor) -> float:
 def _probe(
     case: dict, samples: int, rounds: int, segmented_config: dict | None
 ) -> dict:
-    data = make_inputs(**case)
+    data = make_inputs(**case, legacy_layout=False)
     calls = {}
     outputs = {}
     selected = {}
     graphs = {}
     for backend in ("segmented", "aiter"):
-        config = segmented_config if backend == "segmented" else None
+        if backend == "segmented":
+            config = segmented_config or {"auto_unified": True}
+        else:
+            config = None
         calls[backend], outputs[backend], selected[backend] = make_call(
             data, backend, config
         )
@@ -217,6 +220,9 @@ def main() -> None:
                 root / "vllm/v1/attention/ops/segmented_prefill.py"
             ),
             "harness_sha256": _sha256(Path(__file__)),
+            "fixture_sha256": _sha256(
+                Path(__file__).with_name("benchmark_segmented_prefill.py")
+            ),
         },
         "plan": {
             "candidates": len(candidates),

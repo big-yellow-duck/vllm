@@ -165,7 +165,7 @@ def test_workspace_lane_validation(monkeypatch) -> None:
 def test_segmented_prefill_reservation_covers_ragged_query_caps(
     monkeypatch, dim, hq, hk, unified_layout, fp8
 ):
-    """Every supported short query capacity fits the startup buffer after locking."""
+    """Every supported query bucket fits the startup buffer after locking."""
     from vllm.v1.attention.ops import segmented_prefill as segmented
 
     monkeypatch.setattr(workspace, "dbo_current_ubatch_id", lambda: 0)
@@ -188,9 +188,15 @@ def test_segmented_prefill_reservation_covers_ragged_query_caps(
         if unified_layout
         else segmented.select_segmented_config
     )
+    query_lengths = {
+        query_len
+        for capacity in segmented._query_capacity_buckets()
+        for query_len in (max(1, capacity // 2 + 1), capacity)
+    }
     for batch in range(1, 33):
-        for qcap in range(1, 129):
-            cfg = selector(batch, qcap, 65536, hq, hk, dim, fp8)
+        for query_len in query_lengths:
+            qcap = segmented.segmented_query_capacity(query_len)
+            cfg = selector(batch, query_len, 65536, hq, hk, dim, fp8)
             shapes = segmented.segmented_workspace_shapes(
                 batch, qcap, hq, hk, dim, cfg["splits"]
             )
@@ -201,3 +207,17 @@ def test_segmented_prefill_reservation_covers_ragged_query_caps(
                 pointers.add(partial.untyped_storage().data_ptr())
                 assert partial.data_ptr() != lse.data_ptr()
     assert len(pointers) == 1
+
+
+def test_segmented_prefill_query_capacity_buckets() -> None:
+    from vllm.v1.attention.ops.segmented_prefill import (
+        MAX_QUERY_LEN,
+        segmented_query_capacity,
+    )
+
+    assert [
+        segmented_query_capacity(query_len)
+        for query_len in (1, 2, 3, 33, 129, 1025, 2049, MAX_QUERY_LEN)
+    ] == [1, 2, 4, 64, 256, 2048, 4096, 4096]
+    with pytest.raises(ValueError, match="Query length"):
+        segmented_query_capacity(MAX_QUERY_LEN + 1)

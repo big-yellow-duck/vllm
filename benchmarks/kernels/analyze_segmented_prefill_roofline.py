@@ -163,13 +163,14 @@ def main() -> None:
     parser.add_argument("--output-plot", type=Path)
     parser.add_argument("--bandwidth-gbps", type=float, default=640.0)
     parser.add_argument("--matrix-tflops", type=float, default=191.0)
+    parser.add_argument("--allow-failures", action="store_true")
     args = parser.parse_args()
 
     source_rows = []
     source_metadata = []
     for path in args.inputs:
         result = json.loads(path.read_text())
-        if result["failures"]:
+        if result["failures"] and not args.allow_failures:
             raise ValueError(f"{path} contains benchmark failures")
         source_rows.extend(result["rows"])
         source_metadata.append(
@@ -177,6 +178,7 @@ def main() -> None:
                 "path": str(path),
                 "kernel_sha256": result["metadata"]["kernel_sha256"],
                 "cases": len(result["rows"]),
+                "failures_ignored": len(result["failures"]),
             }
         )
     if not source_rows:

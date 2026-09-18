@@ -54,6 +54,7 @@ def make_inputs(
     dtype=torch.bfloat16,
     seed=419,
     matched_current=True,
+    legacy_layout=True,
 ):
     torch.manual_seed(seed)
     batch, total = len(queries), sum(queries)
@@ -69,33 +70,58 @@ def make_inputs(
     cache_dtype = torch.float8_e4m3fn if fp8 else dtype
     ks = torch.tensor(0.125 if fp8 else 1.0, device="cuda")
     vs = torch.tensor(0.25 if fp8 else 1.0, device="cuda")
-    kn = (
-        torch.randn(batch * blocks, page, kv_heads, dim, device="cuda") * 0.25 / ks
-    ).to(cache_dtype)
-    vn = (torch.randn_like(kn, dtype=torch.float32) * 0.25 / vs).to(cache_dtype)
+    cache_shape = (batch * blocks, page, kv_heads, dim)
+
+    def fill_cache(cache, scale):
+        block_elements = math.prod(cache_shape[1:])
+        chunk_blocks = max(1, (64 * 1024**2) // block_elements)
+        for start in range(0, cache_shape[0], chunk_blocks):
+            chunk = cache[start : start + chunk_blocks]
+            values = torch.randn(chunk.shape, device="cuda") * 0.25 / scale
+            chunk.copy_(values)
+
+    if legacy_layout:
+        kn = torch.empty(cache_shape, device="cuda", dtype=cache_dtype)
+        vn = torch.empty_like(kn)
+    else:
+        page_elements = math.prod(cache_shape[1:])
+        backing = torch.empty(
+            cache_shape[0] * 2 * page_elements,
+            device="cuda",
+            dtype=cache_dtype,
+        )
+        strides = (2 * page_elements, kv_heads * dim, dim, 1)
+        kn = torch.as_strided(backing, cache_shape, strides)
+        vn = torch.as_strided(backing, cache_shape, strides, page_elements)
+    fill_cache(kn, ks)
+    fill_cache(vn, vs)
     table = torch.randperm(batch * blocks, device="cuda", dtype=torch.int32).view(
         batch, blocks
     )
     first = 0
     for seq, (n, c) in enumerate(zip(queries, contexts)):
-        for local in range(n):
-            physical = table[seq, (c + local) // page]
-            off = (c + local) % page
-            kn[physical, off] = (k[first + local].float() / ks).to(cache_dtype)
-            vn[physical, off] = (v[first + local].float() / vs).to(cache_dtype)
-            if matched_current:
-                k[first + local].copy_((kn[physical, off].float() * ks).to(dtype))
-                v[first + local].copy_((vn[physical, off].float() * vs).to(dtype))
+        positions = c + torch.arange(n, device="cuda")
+        physical = table[seq, positions // page].long()
+        offsets = positions % page
+        kn[physical, offsets] = (k[first : first + n].float() / ks).to(cache_dtype)
+        vn[physical, offsets] = (v[first : first + n].float() / vs).to(cache_dtype)
+        if matched_current:
+            k[first : first + n].copy_((kn[physical, offsets].float() * ks).to(dtype))
+            v[first : first + n].copy_((vn[physical, offsets].float() * vs).to(dtype))
         first += n
     pack = 16 // kn.element_size()
-    kc = (
-        kn.reshape(batch * blocks, page, kv_heads, dim // pack, pack)
-        .permute(0, 2, 3, 1, 4)
-        .contiguous()
-    )
-    vc = vn.permute(0, 2, 3, 1).contiguous()
-    kc, vc = _padded_cache_views(kc, vc)
-    kn, vn = _padded_cache_views(kn, vn)
+    if legacy_layout:
+        kc = (
+            kn.reshape(batch * blocks, page, kv_heads, dim // pack, pack)
+            .permute(0, 2, 3, 1, 4)
+            .contiguous()
+        )
+        vc = vn.permute(0, 2, 3, 1).contiguous()
+        kc, vc = _padded_cache_views(kc, vc)
+    else:
+        kc = vc = None
+    if legacy_layout:
+        kn, vn = _padded_cache_views(kn, vn)
     starts = torch.tensor(
         [0, *torch.tensor(queries).cumsum(0).tolist()], device="cuda", dtype=torch.int32
     )
@@ -124,7 +150,7 @@ def reference(data):
     refs = []
     first = 0
     hq, dim = data["q"].shape[1:]
-    hk = data["kc"].shape[1]
+    hk = data["kn"].shape[2]
     for seq, (n, c) in enumerate(zip(data["queries"], data["contexts"])):
         ids = data["table"][seq].long()
         k = data["kn"][ids].reshape(-1, hk, dim)[:c].float() * data["ks"]
@@ -156,10 +182,10 @@ def make_call(data, backend, config=None):
         max(q + c for q, c in zip(data["queries"], data["contexts"])),
     )
     hq, dim = q.shape[1:]
-    hk = data["kc"].shape[1]
+    hk = data["kn"].shape[2]
     batch = len(data["queries"])
     scale = dim**-0.5
-    fp8 = data["kc"].element_size() == 1
+    fp8 = data["kn"].element_size() == 1
     selected = {}
     if backend == "segmented":
         if config and config.get("auto_unified"):

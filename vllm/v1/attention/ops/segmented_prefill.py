@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-"""Paged, grouped-query short prefill with bounded segmented workspace."""
+"""Paged, grouped-query prefill with bounded segmented workspace."""
 
 from __future__ import annotations
 
@@ -15,8 +15,19 @@ from vllm.v1.worker.workspace import (
     is_workspace_manager_initialized,
 )
 
-MAX_QUERY_LEN = 128
+MAX_QUERY_LEN = 4096
 MAX_SPLITS = 64
+
+
+def segmented_query_capacity(max_query_len: int) -> int:
+    """Round a supported query length to its compiled power-of-two capacity."""
+    if not 1 <= max_query_len <= MAX_QUERY_LEN:
+        raise ValueError(f"Query length must be in [1, {MAX_QUERY_LEN}]")
+    return 1 << (max_query_len - 1).bit_length()
+
+
+def _query_capacity_buckets() -> tuple[int, ...]:
+    return tuple(1 << exponent for exponent in range(MAX_QUERY_LEN.bit_length()))
 
 
 @triton.jit
@@ -70,7 +81,7 @@ def _segmented_prefill_stage(
     CACHE_CURRENT: tl.constexpr,
     UNIFIED_LAYOUT: tl.constexpr,
 ):
-    mb, item, split = tl.program_id(0), tl.program_id(1), tl.program_id(2)
+    item, mb, split = tl.program_id(0), tl.program_id(1), tl.program_id(2)
     seq, kh = item // HK, item % HK
     first = tl.load(STARTS + seq)
     nq = tl.load(STARTS + seq + 1) - first
@@ -99,6 +110,9 @@ def _segmented_prefill_stage(
     segment = tl.cdiv(context, SPLITS * BN) * BN
     begin = split * segment
     end = tl.minimum(begin + segment, context)
+    if CACHE_CURRENT:
+        tile_rows = tl.minimum((mb + 1) * BM, nq * G)
+        end = tl.minimum(end, prefix + tl.cdiv(tile_rows, G))
     k_scale = 1.0
     v_scale = 1.0
     if FP8:
@@ -158,15 +172,18 @@ def _segmented_prefill_stage(
                 scores = tl.dot(q, k.to(q.dtype), scores)
             scores *= SCALE * 1.4426950408889634 * k_scale
             if CACHE_CURRENT:
-                score_mask = valid[None, :] & (m[:, None] < nq * G)
-                if split == SPLITS - 1:
-                    score_mask = score_mask & (ns[None, :] <= prefix + qpos[:, None])
+                score_mask = (
+                    valid[None, :]
+                    & (m[:, None] < nq * G)
+                    & (ns[None, :] <= prefix + qpos[:, None])
+                )
                 scores = tl.where(score_mask, scores, -float("inf"))
             else:
                 scores = tl.where(valid[None, :], scores, -float("inf"))
             new_max = tl.maximum(maximum, tl.max(scores, 1))
-            alpha = tl.exp2(maximum - new_max)
-            p = tl.exp2(scores - new_max[:, None])
+            safe_max = tl.where(new_max == -float("inf"), 0.0, new_max)
+            alpha = tl.exp2(maximum - safe_max)
+            p = tl.exp2(scores - safe_max[:, None])
             acc *= alpha[:, None]
             if UNIFIED_LAYOUT:
                 v = tl.load(
@@ -195,7 +212,7 @@ def _segmented_prefill_stage(
             else:
                 acc = tl.dot(p.to(Q.dtype.element_ty), v, acc)
             denom = denom * alpha + tl.sum(p, 1)
-            maximum = new_max
+            maximum = safe_max
     if not CACHE_CURRENT and split == SPLITS - 1:
         for start in range(tl.cdiv(nq, BN)):
             ns = start * BN + n
@@ -364,6 +381,53 @@ def select_segmented_unified_config(
             cfg["splits"] //= 2
     elif qcap <= 8:
         cfg.update(bm=16, bn=64, bk=64, stages=1)
+    elif dim == 128 and fp8 and qcap <= 256 and max_seq_len <= qcap:
+        cfg.update(splits=1)
+    elif dim == 256 and not fp8 and qcap >= 2048 and max_seq_len >= 131072:
+        cfg.update(
+            bm=128,
+            bn=32,
+            bk=128,
+            warps=8,
+            stages=1,
+            waves_per_eu=6,
+        )
+        groups = batch * hk * triton.cdiv(qcap * (hq // hk), cfg["bm"])
+        cfg["splits"] = min(16, triton.next_power_of_2(triton.cdiv(192, groups)))
+    elif dim == 128 and not fp8 and qcap > 128:
+        if max_seq_len >= 8192:
+            cfg.update(
+                bm=128,
+                bn=32,
+                bk=128,
+                warps=8,
+                stages=1,
+                waves_per_eu=6,
+            )
+            groups = batch * hk * triton.cdiv(qcap * (hq // hk), cfg["bm"])
+            cfg["splits"] = min(16, triton.next_power_of_2(triton.cdiv(192, groups)))
+        elif qcap >= 4096:
+            cfg.update(
+                bm=128,
+                bn=32,
+                bk=128,
+                splits=1,
+                warps=8,
+                stages=1,
+                waves_per_eu=6,
+            )
+        elif qcap > 256 or hq > 10:
+            cfg.update(
+                bm=64,
+                bn=32,
+                bk=128,
+                splits=1,
+                warps=4,
+                stages=1,
+                waves_per_eu=6,
+            )
+        else:
+            cfg.update(bm=32, bn=64, bk=64, splits=1, warps=4, stages=2)
     cfg.update(cache_current=True, unified_layout=True)
     return cfg
 
@@ -378,18 +442,25 @@ def segmented_workspace_shapes(batch, query_cap, hq, hk, dim, splits):
 def reserve_segmented_prefill_workspace(
     max_batch, hq, hk, dim, max_seq_len, *, fp8=False, unified_layout=False
 ):
-    """Reserve the largest selected short-prefill workspace before graph capture."""
+    """Reserve the largest selected prefill workspace before graph capture."""
     if not is_workspace_manager_initialized():
         return
     selector = (
         select_segmented_unified_config if unified_layout else select_segmented_config
     )
     largest = 0
-    for batch in range(1, max_batch + 1):
-        for qcap in range(1, MAX_QUERY_LEN + 1):
-            cfg = selector(batch, qcap, max_seq_len, hq, hk, dim, fp8)
-            if cfg["splits"] > 1:
-                largest = max(largest, cfg["splits"] * batch * qcap * hq)
+    previous_capacity = 0
+    for query_capacity in _query_capacity_buckets():
+        query_lengths = {previous_capacity + 1, query_capacity}
+        for batch in range(1, max_batch + 1):
+            for query_len in query_lengths:
+                cfg = selector(batch, query_len, max_seq_len, hq, hk, dim, fp8)
+                if cfg["splits"] > 1:
+                    largest = max(
+                        largest,
+                        cfg["splits"] * batch * query_capacity * hq,
+                    )
+        previous_capacity = query_capacity
     if largest:
         current_workspace_manager()._reserve_simultaneous(
             ((largest * dim,), torch.float32), ((largest,), torch.float32)
@@ -488,10 +559,11 @@ def segmented_prefill_attention(
     batch, hq, dim = lengths.numel(), q.shape[1], q.shape[2]
     if batch == 0 or max_query_len == 0 or q.numel() == 0:
         return out
-    qcap = min(max_query_len, MAX_QUERY_LEN)
+    query_len = min(max_query_len, MAX_QUERY_LEN)
+    qcap = segmented_query_capacity(query_len)
     fp8 = kc.element_size() == 1
     cfg = config or select_segmented_config(
-        batch, qcap, max_seq_len, hq, kc.shape[1], dim, fp8
+        batch, query_len, max_seq_len, hq, kc.shape[1], dim, fp8
     )
     unified_layout = cfg.get("unified_layout", False)
     hk = kc.shape[2] if unified_layout else kc.shape[1]
@@ -510,7 +582,7 @@ def segmented_prefill_attention(
         lse = torch.empty(shapes[1], device=q.device, dtype=torch.float32)
     minimum = 2 if skip_decode else 1
     _segmented_prefill_stage[
-        (triton.cdiv(qcap * (hq // hk), cfg["bm"]), batch * hk, splits)
+        (batch * hk, triton.cdiv(qcap * (hq // hk), cfg["bm"]), splits)
     ](
         q,
         kc,
