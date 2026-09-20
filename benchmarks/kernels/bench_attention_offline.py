@@ -20,8 +20,8 @@ def save(path, data):
     temporary.replace(path)
 
 
-def tuning_cache_snapshot():
-    root = Path(os.environ["VLLM_CACHE_ROOT"]) / "rocm_context_attention"
+def tuning_cache_snapshot(cache_name="rocm_context_attention"):
+    root = Path(os.environ["VLLM_CACHE_ROOT"]) / cache_name
     return {
         str(path): {
             "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
@@ -113,7 +113,11 @@ def start_probe(worker):
         worker._attention_bench_original_segmented = original_segmented
 
         def segmented_call(*args, **kwargs):
-            entry = {"max_query": args[9], "max_seq": args[10]}
+            entry = {
+                "max_query": args[9],
+                "max_seq": args[10],
+                "config": kwargs.get("config"),
+            }
             if not torch.cuda.is_current_stream_capturing():
                 entry["queries"] = torch.diff(args[7]).cpu().tolist()
                 entry["seq_lens"] = args[8].cpu().tolist()
@@ -196,7 +200,15 @@ def main():
     from vllm import LLM, SamplingParams
     from vllm.inputs import TokensPrompt
 
-    backend = "ROCM_AITER_UNIFIED_ATTN" if args.variant == "aiter" else "ROCM_ATTN"
+    backend = {
+        "aiter": "ROCM_AITER_UNIFIED_ATTN",
+        "ours": "ROCM_SEGMENTED_ATTN",
+    }.get(args.variant, "ROCM_ATTN")
+    tuning_cache_name = (
+        "rocm_segmented_attention"
+        if args.variant == "ours"
+        else "rocm_context_attention"
+    )
     settings = dict(
         model="Qwen/Qwen3.8-27B-FP8",
         tensor_parallel_size=2,
@@ -248,20 +260,25 @@ def main():
                 source / "vllm/v1/attention/ops/prefix_prefill.py",
                 source / "vllm/v1/attention/ops/prefix_prefill_tuning.py",
                 source / "vllm/v1/attention/ops/segmented_prefill.py",
+                source / "vllm/v1/attention/ops/segmented_prefill_tuning.py",
                 source / "vllm/v1/attention/backends/rocm_attn.py",
+                source / "vllm/v1/attention/backends/rocm_segmented_attn.py",
             )
             if path.exists()
         },
         "rows": [],
-        "tuning_cache_before_startup": tuning_cache_snapshot(),
+        "tuning_cache_before_startup": tuning_cache_snapshot(tuning_cache_name),
     }
     before = time.perf_counter()
     llm = LLM(**settings)
     result["engine_startup_s"] = time.perf_counter() - before
-    result["tuning_cache_after_startup"] = tuning_cache_snapshot()
+    result["tuning_cache_after_startup"] = tuning_cache_snapshot(tuning_cache_name)
     result["workers"] = llm.collective_rpc("attention_bench_inventory")
     save(args.output_json, result)
-    if args.variant in ("ours", "before"):
+    if args.variant == "before" or (
+        args.variant == "ours"
+        and os.environ.get("VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE") == "1"
+    ):
         expected_kv_dtype = (
             "torch.float8_e4m3fn" if args.kv == "fp8" else "torch.bfloat16"
         )
@@ -269,11 +286,10 @@ def main():
             cache["kv_dtype"] == expected_kv_dtype and cache["records"] > 0
             for cache in result["tuning_cache_after_startup"].values()
         )
-    expected_impl = (
-        "RocmAiterUnifiedAttentionImpl"
-        if args.variant == "aiter"
-        else "RocmAttentionImpl"
-    )
+    expected_impl = {
+        "aiter": "RocmAiterUnifiedAttentionImpl",
+        "ours": "RocmSegmentedAttentionImpl",
+    }.get(args.variant, "RocmAttentionImpl")
     assert all(
         layer["impl"] == expected_impl
         for worker in result["workers"]

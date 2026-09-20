@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""TP2 engine startup, persistent tuning cache, and greedy output validation."""
+"""TP2 ROCm attention startup, persistent tuning, and output validation."""
 
 import argparse
 import hashlib
@@ -10,12 +10,16 @@ import time
 from pathlib import Path
 
 if os.environ.get("CONTEXT_TUNING_FORBID") == "1":
-    from vllm.v1.attention.ops import prefix_prefill_tuning
+    from vllm.v1.attention.ops import (
+        prefix_prefill_tuning,
+        segmented_prefill_tuning,
+    )
 
     def forbidden(*args, **kwargs):
         raise RuntimeError("Warm engine attempted to benchmark context attention")
 
     prefix_prefill_tuning._tune_workload = forbidden
+    segmented_prefill_tuning._tune_workload = forbidden
 
 
 if os.environ.get("CONTEXT_VALIDATE_NUMERICS") == "1":
@@ -61,27 +65,44 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--tp-size", type=int, default=int(os.environ.get("TP_SIZE", "2"))
+    )
     args = parser.parse_args()
+    backend = os.environ.get("ATTENTION_BACKEND", "ROCM_ATTN")
+    scheduler_args = {}
+    if value := os.environ.get("MAX_MODEL_LEN"):
+        scheduler_args["max_model_len"] = int(value)
+    if value := os.environ.get("MAX_BATCHED_TOKENS"):
+        scheduler_args["max_num_batched_tokens"] = int(value)
+    if value := os.environ.get("MAX_NUM_SEQS"):
+        scheduler_args["max_num_seqs"] = int(value)
     start = time.monotonic()
     llm = LLM(
         model="Qwen/Qwen3.8-27B-FP8",
-        tensor_parallel_size=2,
+        tensor_parallel_size=args.tp_size,
         language_model_only=True,
         load_format="fastsafetensors",
         linear_backend="triton",
-        attention_backend="ROCM_ATTN",
-        kv_cache_dtype="auto",
-        max_model_len=int(os.environ.get("MAX_MODEL_LEN", "2048")),
-        max_num_batched_tokens=int(os.environ.get("MAX_BATCHED_TOKENS", "8192")),
-        max_num_seqs=int(os.environ.get("MAX_NUM_SEQS", "32")),
+        attention_backend=backend,
+        kv_cache_dtype=os.environ.get("KV_CACHE_DTYPE", "auto"),
         gpu_memory_utilization=0.90,
         disable_custom_all_reduce=True,
         enable_prefix_caching=False,
         enforce_eager=True,
+        **scheduler_args,
     )
     startup = time.monotonic() - start
     results = []
-    for length in (33, 129, 513):
+    max_model_len = scheduler_args.get("max_model_len")
+    lengths = (
+        (33, 129, 513)
+        if max_model_len is None
+        else sorted(
+            {max(1, min(length, max_model_len - 8)) for length in (33, 129, 513)}
+        )
+    )
+    for length in lengths:
         prompt = TokensPrompt(prompt_token_ids=[1000 + i % 9000 for i in range(length)])
         outputs = llm.generate(
             [prompt],
@@ -93,10 +114,13 @@ def main():
         results.append(
             {"input_len": length, "token_ids": outputs[0].outputs[0].token_ids}
         )
+    cache_name = (
+        "rocm_segmented_attention"
+        if backend == "ROCM_SEGMENTED_ATTN"
+        else "rocm_context_attention"
+    )
     caches = {}
-    for path in (Path(os.environ["VLLM_CACHE_ROOT"]) / "rocm_context_attention").glob(
-        "*.json"
-    ):
+    for path in (Path(os.environ["VLLM_CACHE_ROOT"]) / cache_name).glob("*.json"):
         caches[path.name] = {
             "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
             "mtime_ns": path.stat().st_mtime_ns,
@@ -105,7 +129,13 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(
-            {"startup_s": startup, "outputs": results, "caches": caches}, indent=2
+            {
+                "backend": backend,
+                "startup_s": startup,
+                "outputs": results,
+                "caches": caches,
+            },
+            indent=2,
         )
         + "\n"
     )

@@ -58,7 +58,6 @@ def _segmented_prefill_stage(
     T0: tl.constexpr,
     T1: tl.constexpr,
     PAGE: tl.constexpr,
-    BATCH: tl.constexpr,
     HQ: tl.constexpr,
     HK: tl.constexpr,
     D: tl.constexpr,
@@ -119,10 +118,18 @@ def _segmented_prefill_stage(
             valid = tl.full((BN,), True, tl.int1)
             if tail:
                 valid = ns < end
-            block = tl.load(
-                TABLE + seq * T0 + (ns // PAGE) * T1, mask=valid, other=0
-            ).to(tl.int64)
-            inside = ns % PAGE
+            if FP8 and PAGE >= BN:
+                page = start // PAGE
+                inside = start - page * PAGE + n
+                crossed = inside >= PAGE
+                page += crossed
+                inside = tl.where(crossed, inside - PAGE, inside)
+            else:
+                page = ns // PAGE
+                inside = ns % PAGE
+            block = tl.load(TABLE + seq * T0 + page * T1, mask=valid, other=0).to(
+                tl.int64
+            )
             scores = tl.zeros((BM, BN), tl.float32)
             for ki in range(D // BK):
                 kd = ki * BK + tl.arange(0, BK)
@@ -168,7 +175,11 @@ def _segmented_prefill_stage(
                 mask=valid[:, None],
                 other=0.0,
             )
-            if FP8:
+            if FP8 and D == 256 and BM >= 32:
+                # Defer the scalar V dequantization to shorten the D-wide
+                # accumulator live range for the register-heavy 256-D tiles.
+                acc = tl.dot(p.to(Q.dtype.element_ty), v.to(Q.dtype.element_ty), acc)
+            elif FP8:
                 acc += (
                     tl.dot(p.to(Q.dtype.element_ty), v.to(Q.dtype.element_ty)) * v_scale
                 )
@@ -177,17 +188,20 @@ def _segmented_prefill_stage(
             denom = denom * alpha + tl.sum(p, 1)
             maximum = safe_max
     norm = tl.where(denom > 0.0, denom, 1.0)
+    result = acc / norm[:, None]
+    if FP8 and D == 256 and BM >= 32:
+        result *= v_scale
     if SPLITS == 1:
         tl.store(
             OUT + (first + qpos[:, None]) * O0 + qh[:, None] * O1 + d[None, :],
-            acc / norm[:, None],
+            result,
             mask=(m < nq * G)[:, None],
         )
     else:
         row = ((seq * HK + kh) * ROWS + m) * SPLITS + split
         tl.store(
             PART + row[:, None] * D + d[None, :],
-            acc / norm[:, None],
+            result,
             mask=(m < nq * G)[:, None],
         )
         tl.store(
@@ -205,7 +219,6 @@ def _segmented_prefill_reduce(
     STARTS,
     O0: tl.constexpr,
     O1: tl.constexpr,
-    BATCH: tl.constexpr,
     HQ: tl.constexpr,
     HK: tl.constexpr,
     D: tl.constexpr,
@@ -243,18 +256,41 @@ def _segmented_prefill_reduce(
 
 @lru_cache(maxsize=512)
 def select_segmented_config(batch, max_query_len, max_seq_len, hq, hk, dim, fp8):
-    """Select the token-major cache configuration used by ROCM_ATTN."""
+    """Select the token-major cache configuration for segmented attention."""
     qcap = min(max_query_len, MAX_QUERY_LEN)
     if batch < 1 or qcap < 1:
         raise ValueError("Batch and query capacity must be positive")
-    narrow_bf16 = qcap <= 2 and not fp8 and batch * hk == 1
-    if narrow_bf16:
-        bm, bn, bk, stages = 16, 64, 128, 1
-    elif qcap <= 2:
-        bm, bn, bk, stages = 16, 32, dim, 1
-    elif qcap <= 8:
+
+    if qcap <= 2:
+        if batch * hk == 1:
+            cfg = dict(
+                bm=16,
+                bn=64,
+                bk=128,
+                splits=32,
+                warps=4,
+                stages=1,
+            )
+        else:
+            groups = batch * hk * triton.cdiv(qcap * (hq // hk), 16)
+            cfg = dict(
+                bm=16,
+                bn=32,
+                bk=dim,
+                splits=min(
+                    MAX_SPLITS,
+                    triton.next_power_of_2(triton.cdiv(64, groups)),
+                ),
+                warps=4,
+                stages=1,
+            )
+        while cfg["splits"] > 1 and max_seq_len < cfg["splits"] * cfg["bn"] * 2:
+            cfg["splits"] //= 2
+        return cfg
+
+    if qcap <= 8:
         bm, bn = 16, 64
-        bk, stages = (64, 1) if fp8 else (128, 1)
+        bk, stages = 64, 1
     elif qcap <= 32:
         bm, bk = 32, 64
         bn, stages = (32, 2) if fp8 else (64, 1)
@@ -262,11 +298,10 @@ def select_segmented_config(batch, max_query_len, max_seq_len, hq, hk, dim, fp8)
         bm, bn, bk = 32, 64, 64
         stages = 1 if fp8 else 2
     groups = batch * hk * triton.cdiv(qcap * (hq // hk), bm)
-    target = 32 if narrow_bf16 else (64 if qcap <= 2 else 96)
+    target = 96
     if fp8 and qcap > 32:
         target = 192
-    split_cap = MAX_SPLITS if qcap <= 2 else 32
-    splits = min(split_cap, triton.next_power_of_2(triton.cdiv(target, groups)))
+    splits = min(32, triton.next_power_of_2(triton.cdiv(target, groups)))
     while splits > 1 and max_seq_len < splits * 128:
         splits //= 2
     cfg = dict(
@@ -277,20 +312,7 @@ def select_segmented_config(batch, max_query_len, max_seq_len, hq, hk, dim, fp8)
         warps=4,
         stages=stages,
     )
-    if qcap <= 2:
-        if batch * hk == 1:
-            cfg.update(bm=16, bn=64, bk=128, splits=32, stages=1)
-        else:
-            cfg.update(bm=16, bn=32, bk=dim, stages=1)
-            groups = batch * hk * triton.cdiv(qcap * (hq // hk), cfg["bm"])
-            cfg["splits"] = min(
-                MAX_SPLITS, triton.next_power_of_2(triton.cdiv(64, groups))
-            )
-        while cfg["splits"] > 1 and max_seq_len < cfg["splits"] * cfg["bn"] * 2:
-            cfg["splits"] //= 2
-    elif qcap <= 8:
-        cfg.update(bm=16, bn=64, bk=64, stages=1)
-    elif dim == 128 and fp8 and qcap <= 256 and max_seq_len <= qcap:
+    if dim == 128 and fp8 and qcap <= 256 and max_seq_len <= qcap:
         cfg.update(splits=1)
     elif dim == 256 and not fp8 and qcap >= 2048 and max_seq_len >= 131072:
         cfg.update(
@@ -348,17 +370,34 @@ def segmented_workspace_shapes(batch, query_cap, hq, hk, dim, splits):
 
 
 def reserve_segmented_prefill_workspace(
-    max_batch, hq, hk, dim, max_seq_len, *, fp8=False
+    max_batch,
+    hq,
+    hk,
+    dim,
+    max_seq_len,
+    *,
+    max_tokens=None,
+    fp8=False,
 ):
-    """Reserve the largest selected prefill workspace before graph capture."""
+    """Reserve the largest selected prefill workspace before graph capture.
+
+    ``max_tokens`` bounds reachable ``(batch, query_len)`` pairs using one
+    longest query and one token for each remaining sequence. Omitting it keeps
+    the legacy reservation behavior for callers without scheduler limits.
+    """
     if not is_workspace_manager_initialized():
         return
     largest = 0
     previous_capacity = 0
     for query_capacity in _query_capacity_buckets():
         query_lengths = {previous_capacity + 1, query_capacity}
-        for batch in range(1, max_batch + 1):
-            for query_len in query_lengths:
+        for query_len in query_lengths:
+            if max_tokens is not None and query_len > max_tokens:
+                continue
+            batch_limit = max_batch
+            if max_tokens is not None:
+                batch_limit = min(batch_limit, max_tokens - query_len + 1)
+            for batch in range(1, batch_limit + 1):
                 cfg = select_segmented_config(
                     batch, query_len, max_seq_len, hq, hk, dim, fp8
                 )
@@ -475,9 +514,103 @@ def segmented_prefill_attention(
         partial = torch.empty(shapes[0], device=q.device, dtype=torch.float32)
         lse = torch.empty(shapes[1], device=q.device, dtype=torch.float32)
     minimum = 2 if skip_decode else 1
-    _segmented_prefill_stage[
-        (batch * hk, triton.cdiv(qcap * (hq // hk), cfg["bm"]), splits)
-    ](
+    _launch_segmented_prefill(
+        q,
+        out,
+        kc,
+        vc,
+        table,
+        starts,
+        lengths,
+        k_scale,
+        v_scale,
+        scale,
+        cfg,
+        partial,
+        lse,
+        qcap,
+        minimum,
+        compile_only=False,
+    )
+    return out
+
+
+def compile_segmented_prefill_attention(
+    q,
+    out,
+    kc,
+    vc,
+    table,
+    starts,
+    lengths,
+    max_query_len,
+    k_scale,
+    v_scale,
+    scale,
+    config,
+    workspace,
+    *,
+    skip_decode=False,
+):
+    """Compile one segmented attention configuration without launching it."""
+    batch, hq, dim = lengths.numel(), q.shape[1], q.shape[2]
+    qcap = segmented_query_capacity(min(max_query_len, MAX_QUERY_LEN))
+    hk = kc.shape[2]
+    shapes = segmented_workspace_shapes(batch, qcap, hq, hk, dim, config["splits"])
+    if shapes is None:
+        partial = lse = out
+    else:
+        partial, lse = workspace
+    _launch_segmented_prefill(
+        q,
+        out,
+        kc,
+        vc,
+        table,
+        starts,
+        lengths,
+        k_scale,
+        v_scale,
+        scale,
+        config,
+        partial,
+        lse,
+        qcap,
+        2 if skip_decode else 1,
+        compile_only=True,
+    )
+
+
+def _launch_segmented_prefill(
+    q,
+    out,
+    kc,
+    vc,
+    table,
+    starts,
+    lengths,
+    k_scale,
+    v_scale,
+    scale,
+    cfg,
+    partial,
+    lse,
+    qcap,
+    minimum,
+    *,
+    compile_only,
+):
+    """Launch or compile the exact stage and reduction specializations."""
+    batch, hq, dim = lengths.numel(), q.shape[1], q.shape[2]
+    hk = kc.shape[2]
+    fp8 = kc.element_size() == 1
+    splits = cfg["splits"]
+    stage_grid = (
+        batch * hk,
+        triton.cdiv(qcap * (hq // hk), cfg["bm"]),
+        splits,
+    )
+    stage_args = (
         q,
         kc,
         vc,
@@ -497,7 +630,6 @@ def segmented_prefill_attention(
         *vc.stride(),
         *table.stride(),
         kc.shape[1],
-        batch,
         hq,
         hk,
         dim,
@@ -510,22 +642,30 @@ def segmented_prefill_attention(
         cfg["bn"],
         cfg["bk"],
         splits,
+    )
+    stage_options = dict(
         num_warps=cfg["warps"],
         num_stages=cfg["stages"],
         waves_per_eu=cfg.get("waves_per_eu", 2),
     )
+    if compile_only:
+        _segmented_prefill_stage.warmup(*stage_args, grid=stage_grid, **stage_options)
+    else:
+        _segmented_prefill_stage[stage_grid](*stage_args, **stage_options)
     if splits > 1:
         reduce_d = cfg.get("reduce_d", 64 if batch * qcap * hq < 64 else dim)
-        _segmented_prefill_reduce[
-            (qcap * (hq // hk), batch * hk, triton.cdiv(dim, reduce_d))
-        ](
+        reduce_grid = (
+            qcap * (hq // hk),
+            batch * hk,
+            triton.cdiv(dim, reduce_d),
+        )
+        reduce_args = (
             partial,
             lse,
             out,
             starts,
             out.stride(0),
             out.stride(1),
-            batch,
             hq,
             hk,
             dim,
@@ -534,6 +674,11 @@ def segmented_prefill_attention(
             MAX_QUERY_LEN,
             splits,
             reduce_d,
-            num_warps=cfg.get("reduce_warps", 4),
         )
-    return out
+        reduce_options = {"num_warps": cfg.get("reduce_warps", 4)}
+        if compile_only:
+            _segmented_prefill_reduce.warmup(
+                *reduce_args, grid=reduce_grid, **reduce_options
+            )
+        else:
+            _segmented_prefill_reduce[reduce_grid](*reduce_args, **reduce_options)

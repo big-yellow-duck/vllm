@@ -991,6 +991,7 @@ def chunked_prefill_paged_decode(
     sinks=None,
     is_block_table_ptr: bool = False,
     causal: bool = True,
+    softcap=0.0,
 ):
     if sm_scale is None:
         sm_scale = 1.0 / (query.shape[2] ** 0.5)
@@ -1033,6 +1034,7 @@ def chunked_prefill_paged_decode(
             and causal
             and not use_alibi_slopes
             and not sliding_window
+            and not softcap
             and sinks is None
             and output_scale is None
         )
@@ -1043,6 +1045,7 @@ def chunked_prefill_paged_decode(
                 segmented_prefill_attention,
                 select_segmented_config,
             )
+            from .segmented_prefill_tuning import get_segmented_config
 
             if 0 < max_query_len <= MAX_QUERY_LEN and can_use_segmented_prefill(
                 query,
@@ -1057,15 +1060,29 @@ def chunked_prefill_paged_decode(
                 k_scale,
                 v_scale,
             ):
-                config = select_segmented_config(
-                    len(seq_lens),
-                    max_query_len,
-                    max_seq_len,
+                config = get_segmented_config(
+                    query.device,
+                    query.dtype,
+                    key_cache.dtype,
                     query.shape[1],
                     key_cache.shape[2],
                     query.shape[2],
-                    key_cache.element_size() == 1,
+                    key_cache.shape[1],
+                    sm_scale,
+                    len(seq_lens),
+                    max_query_len,
+                    max_seq_len,
                 )
+                if config is None:
+                    config = select_segmented_config(
+                        len(seq_lens),
+                        max_query_len,
+                        max_seq_len,
+                        query.shape[1],
+                        key_cache.shape[2],
+                        query.shape[2],
+                        key_cache.element_size() == 1,
+                    )
                 segmented_prefill_attention(
                     query,
                     output,
@@ -1109,6 +1126,11 @@ def chunked_prefill_paged_decode(
                 return
             from .triton_unified_attention import unified_attention
 
+            if sliding_window:
+                logger.info_once(
+                    "ROCM_SEGMENTED_ATTN is routing sliding-window attention "
+                    "to the unified Triton attention fallback."
+                )
             window_size = (-1, -1) if not sliding_window else (sliding_window, 0)
             unified_attention(
                 q=query,
@@ -1123,7 +1145,7 @@ def chunked_prefill_paged_decode(
                 causal=causal,
                 window_size=window_size,
                 block_table=block_table,
-                softcap=0,
+                softcap=softcap,
                 q_descale=None,
                 k_descale=k_scale,
                 v_descale=v_scale,
@@ -1133,6 +1155,11 @@ def chunked_prefill_paged_decode(
                 kv_quant_mode=get_kv_quant_mode(kv_cache_dtype),
             )
         return
+
+    if softcap:
+        raise NotImplementedError(
+            "Attention logits soft cap requires the unified KV cache layout."
+        )
 
     if max_query_len > 1:
         context_attention_fwd(

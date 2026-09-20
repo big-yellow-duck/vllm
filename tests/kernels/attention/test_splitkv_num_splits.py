@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from vllm.v1.attention.backends.rocm_attn import _splitkv_workspace_support
+from vllm.v1.attention.backends.rocm_attn import _kv_cache_workspace_support
 from vllm.v1.attention.ops.chunked_prefill_paged_decode import (
     _MAX_SPLITS,
     _choose_compute_block_size,
@@ -267,7 +267,7 @@ def test_splitkv_workspace_supports_byte_storage_fp8_specs(
         kv_quant_mode=quant_mode,
     )
     assert (
-        _splitkv_workspace_support(
+        _kv_cache_workspace_support(
             spec,
             torch.bfloat16,
             is_e4m3_kv_cache=is_e4m3,

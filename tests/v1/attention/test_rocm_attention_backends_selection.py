@@ -51,6 +51,81 @@ def test_aiter_unified_attention_uses_dedicated_metadata_builder():
     )
 
 
+def test_segmented_attention_uses_dedicated_backend_components():
+    from vllm.v1.attention.backends.rocm_segmented_attn import (
+        RocmSegmentedAttentionBackend,
+        RocmSegmentedAttentionImpl,
+        RocmSegmentedAttentionMetadataBuilder,
+    )
+
+    assert (
+        RocmSegmentedAttentionBackend.get_builder_cls()
+        is RocmSegmentedAttentionMetadataBuilder
+    )
+    assert RocmSegmentedAttentionBackend.get_impl_cls() is RocmSegmentedAttentionImpl
+    assert RocmSegmentedAttentionBackend.get_name() == "ROCM_SEGMENTED_ATTN"
+    assert RocmSegmentedAttentionBackend.supports_sliding_window()
+    assert RocmSegmentedAttentionBackend.supports_sink()
+
+
+@pytest.mark.parametrize(
+    "sliding_window,logits_soft_cap,has_sinks",
+    [(4096, None, False), (None, 50.0, False), (None, None, True)],
+)
+def test_segmented_attention_admits_unified_fallback_features(
+    monkeypatch, sliding_window, logits_soft_cap, has_sinks
+):
+    from vllm.platforms import rocm
+    from vllm.v1.attention.backend import AttentionType
+    from vllm.v1.attention.backends.rocm_segmented_attn import (
+        RocmSegmentedAttentionImpl,
+    )
+
+    monkeypatch.setattr(rocm, "on_gfx1x", lambda: True)
+    monkeypatch.setattr(rocm, "on_gfx12x", lambda: True)
+    sinks = torch.zeros(8) if has_sinks else None
+
+    impl = RocmSegmentedAttentionImpl(
+        num_heads=8,
+        head_size=128,
+        scale=128**-0.5,
+        num_kv_heads=2,
+        alibi_slopes=None,
+        sliding_window=sliding_window,
+        kv_cache_dtype="auto",
+        logits_soft_cap=logits_soft_cap,
+        attn_type=AttentionType.DECODER,
+        sinks=sinks,
+    )
+
+    assert isinstance(impl, RocmSegmentedAttentionImpl)
+
+
+def test_segmented_attention_is_opt_in(monkeypatch):
+    from vllm.platforms import rocm
+    from vllm.platforms.rocm import RocmPlatform, _get_backend_priorities
+
+    assert AttentionBackendEnum.ROCM_SEGMENTED_ATTN not in _get_backend_priorities(
+        use_mla=False, use_sparse=False
+    )
+
+    monkeypatch.setattr(rocm, "on_gfx1x", lambda: True)
+    monkeypatch.setattr(rocm, "on_gfx12x", lambda: True)
+    config = AttentionSelectorConfig(
+        head_size=128,
+        dtype=torch.bfloat16,
+        kv_cache_dtype="fp8",
+        block_size=32,
+    )
+
+    path = RocmPlatform.get_attn_backend_cls(
+        selected_backend=AttentionBackendEnum.ROCM_SEGMENTED_ATTN,
+        attn_selector_config=config,
+    )
+
+    assert path == AttentionBackendEnum.ROCM_SEGMENTED_ATTN.get_path()
+
+
 def test_aiter_unified_attention_capture_preserves_query_start_locations():
     from vllm.v1.attention.backends.rocm_aiter_unified_attn import (
         RocmAiterUnifiedAttentionMetadataBuilder,

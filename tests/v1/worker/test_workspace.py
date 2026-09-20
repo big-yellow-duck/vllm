@@ -203,6 +203,35 @@ def test_segmented_prefill_reservation_covers_ragged_query_caps(
     assert len(pointers) == 1
 
 
+def test_segmented_prefill_reservation_respects_scheduler_token_limit(
+    monkeypatch,
+) -> None:
+    """Workspace planning excludes batch/query pairs the scheduler cannot form."""
+    from vllm.v1.attention.ops import segmented_prefill as segmented
+
+    calls = []
+
+    def record_config(batch, query_len, *_args):
+        calls.append((batch, query_len))
+        return {"splits": 1}
+
+    monkeypatch.setattr(segmented, "is_workspace_manager_initialized", lambda: True)
+    monkeypatch.setattr(segmented, "select_segmented_config", record_config)
+    segmented.reserve_segmented_prefill_workspace(
+        32,
+        16,
+        2,
+        128,
+        65536,
+        max_tokens=8,
+    )
+
+    assert calls
+    assert all(batch + query_len - 1 <= 8 for batch, query_len in calls)
+    assert (8, 1) in calls
+    assert (1, 8) in calls
+
+
 def test_segmented_prefill_query_capacity_buckets() -> None:
     from vllm.v1.attention.ops.segmented_prefill import (
         MAX_QUERY_LEN,

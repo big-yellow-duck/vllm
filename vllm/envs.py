@@ -1232,8 +1232,8 @@ environment_variables: dict[str, Callable[[], Any]] = {
         os.getenv("VLLM_MXFP8_EMULATION_DEQUANT_AT_LOAD", "True").lower()
         in ("true", "1")
     ),
-    # Tune eligible ROCM_ATTN prefill kernels before KV-cache allocation and
-    # persist the winning launch configurations under VLLM_CACHE_ROOT.
+    # Tune eligible ROCm context and segmented-attention kernels before
+    # KV-cache allocation and persist the winners under VLLM_CACHE_ROOT.
     "VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE": lambda: bool(
         int(os.getenv("VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE", "0"))
     ),

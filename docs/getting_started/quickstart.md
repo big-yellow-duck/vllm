@@ -326,8 +326,24 @@ python script.py --attention-backend FLASHINFER
 Some of the available backend options include:
 
 - On NVIDIA CUDA: `FLASH_ATTN` or `FLASHINFER`.
-- On AMD ROCm: `TRITON_ATTN`, `ROCM_ATTN`, `ROCM_AITER_FA`, `ROCM_AITER_UNIFIED_ATTN`, `TRITON_MLA`, `ROCM_AITER_MLA` or `ROCM_AITER_TRITON_MLA`.
+- On AMD ROCm: `TRITON_ATTN`, `ROCM_ATTN`, `ROCM_SEGMENTED_ATTN`, `ROCM_AITER_FA`, `ROCM_AITER_UNIFIED_ATTN`, `TRITON_MLA`, `ROCM_AITER_MLA` or `ROCM_AITER_TRITON_MLA`.
 - On Intel XPU: `FLASH_ATTN`, `TRITON_ATTN`, `TRITON_MLA`, `XPU_MLA_SPARSE`, `TORCH_SDPA` or `TURBOQUANT`.
+
+`ROCM_SEGMENTED_ATTN` is opt-in and is not selected automatically. Enable it
+explicitly when serving:
+
+```bash
+vllm serve MODEL --attention-backend ROCM_SEGMENTED_ATTN
+```
+
+On ROCm, set `VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE=1` to tune eligible
+`ROCM_ATTN` and `ROCM_SEGMENTED_ATTN` launch configurations during engine
+startup. Winners are persisted under `VLLM_CACHE_ROOT`; unsupported or untuned
+shapes continue to use their built-in static configurations. The segmented
+backend balances cold tuning across compatible tensor-parallel ranks and merges
+their results into one persistent table. It precompiles the bounded candidate
+set before timing, screens every valid candidate, and only replaces the built-in
+configuration when repeated finalist measurements show at least a 2% speedup.
 
 !!! warning
     There are no pre-built vllm wheels containing Flash Infer, so you must install it in your environment first. Refer to the [Flash Infer official docs](https://docs.flashinfer.ai/) or see [docker/Dockerfile](../../docker/Dockerfile) for instructions on how to install it.
