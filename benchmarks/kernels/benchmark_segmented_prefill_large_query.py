@@ -44,7 +44,7 @@ BOUNDARY_QUERIES = (
     8191,
 )
 GQA_QUERIES = (128, 129, 256, 512, 1024, 2048, 4096)
-GQA_LONG_QUERIES = (256, 1024, 4096)
+GQA_LONG_QUERIES = (256, 512, 1024, 2048, 4096)
 GQA_RATIOS = tuple(range(1, 17))
 GQA_DIMS = (128, 256)
 GQA_KV_HEAD_SCALES = (1, 4)
@@ -209,20 +209,21 @@ def _regression_cases() -> list[dict]:
             for sequence in LONG_SEQUENCES:
                 if query > sequence:
                     continue
-                for fp8 in DTYPES:
-                    cases.append(
-                        _case(
-                            "regression",
-                            family,
-                            [query],
-                            [sequence - query],
-                            heads,
-                            kv_heads,
-                            256,
-                            fp8,
-                            f"q{query}-s{sequence}",
+                for dim in GQA_DIMS:
+                    for fp8 in DTYPES:
+                        cases.append(
+                            _case(
+                                "regression",
+                                family,
+                                [query],
+                                [sequence - query],
+                                heads,
+                                kv_heads,
+                                dim,
+                                fp8,
+                                f"q{query}-s{sequence}",
+                            )
                         )
-                    )
     return cases
 
 
@@ -255,20 +256,21 @@ def _gqa_long_cases() -> list[dict]:
     for dim in GQA_DIMS:
         for gqa in GQA_RATIOS:
             for query in GQA_LONG_QUERIES:
-                for fp8 in DTYPES:
-                    cases.append(
-                        _case(
-                            "gqa_long",
-                            f"hk1-gqa{gqa}",
-                            [query],
-                            [131072 - query],
-                            gqa,
-                            1,
-                            dim,
-                            fp8,
-                            f"q{query}-s131072",
+                for sequence in LONG_SEQUENCES:
+                    for fp8 in DTYPES:
+                        cases.append(
+                            _case(
+                                "gqa_long",
+                                f"hk1-gqa{gqa}",
+                                [query],
+                                [sequence - query],
+                                gqa,
+                                1,
+                                dim,
+                                fp8,
+                                f"q{query}-s{sequence}",
+                            )
                         )
-                    )
     return cases
 
 
@@ -276,6 +278,8 @@ def _gqa_batch_cases() -> list[dict]:
     patterns = (
         ("b4-q1024-dense", [1024] * 4, [0] * 4),
         ("b4-q1024-prefix", [1024] * 4, [7168] * 4),
+        ("b4-q1024-prefix32k", [1024] * 4, [31744] * 4),
+        ("b4-q1024-prefix131k", [1024] * 4, [130048] * 4),
         ("ragged-dense", [2048, 1024, 512, 256], [0] * 4),
     )
     cases = []
@@ -348,9 +352,24 @@ def _relative_l2(left: torch.Tensor, right: torch.Tensor) -> float:
 
 
 @torch.inference_mode()
-def _probe(case: dict, samples: int, rounds: int, config_overrides: dict) -> dict:
+def _probe(
+    case: dict,
+    samples: int,
+    rounds: int,
+    config_overrides: dict,
+    qk_amplitude: float = 1.0,
+) -> dict:
     data = make_inputs(**case["inputs"], legacy_layout=False)
     inputs = case["inputs"]
+    if qk_amplitude != 1.0:
+        # Scale both paged and current K. For FP8, adjusting the dequant scale
+        # leaves the cache bytes fixed and avoids another quantization round.
+        data["q"].mul_(qk_amplitude)
+        data["k"].mul_(qk_amplitude)
+        if inputs["fp8"]:
+            data["ks"].mul_(qk_amplitude)
+        else:
+            data["kn"].mul_(qk_amplitude)
     config = dict(
         segmented_prefill.select_segmented_config(
             len(inputs["queries"]),
@@ -437,10 +456,11 @@ def main() -> None:
     parser.add_argument("--shard-index", type=int, default=0)
     parser.add_argument("--memory-budget-gib", type=int, default=28)
     parser.add_argument("--segmented-config", type=json.loads, default={})
+    parser.add_argument("--qk-amplitude", type=float, default=1.0)
     parser.add_argument("--case", action="append", default=[])
     parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
-    if args.samples < 1 or args.rounds < 1:
+    if args.samples < 1 or args.rounds < 1 or args.qk_amplitude <= 0:
         raise ValueError("Samples and rounds must be positive")
     if args.num_shards < 1 or not 0 <= args.shard_index < args.num_shards:
         raise ValueError("Invalid shard selection")
@@ -472,6 +492,7 @@ def main() -> None:
             "experimental_query_limit": EXPERIMENTAL_QUERY_LIMIT,
             "memory_budget_gib": args.memory_budget_gib,
             "segmented_config": args.segmented_config,
+            "qk_amplitude": args.qk_amplitude,
             "kernel_sha256": _sha256(
                 root / "vllm/v1/attention/ops/segmented_prefill.py"
             ),
@@ -505,7 +526,13 @@ def main() -> None:
         if case["name"] in done:
             continue
         try:
-            row = _probe(case, args.samples, args.rounds, args.segmented_config)
+            row = _probe(
+                case,
+                args.samples,
+                args.rounds,
+                args.segmented_config,
+                args.qk_amplitude,
+            )
         except Exception as error:
             row = {**case, "error": repr(error)}
             result["failures"].append(row)

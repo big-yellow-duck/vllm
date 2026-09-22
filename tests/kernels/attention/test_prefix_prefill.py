@@ -1513,6 +1513,7 @@ def test_segmented_tuning_candidates_preserve_workspace_bound():
         (1, 1, 128, 8, 8, 128, True),
         (32, 1, 262144, 16, 1, 128, True),
         (4, 1024, 8192, 16, 4, 256, False),
+        (1, 1024, 131072, 6, 1, 256, True),
     ):
         default = segmented.select_segmented_config(
             batch, query_len, seq_len, heads, kv_heads, dim, fp8
@@ -1525,6 +1526,269 @@ def test_segmented_tuning_candidates_preserve_workspace_bound():
         )
         assert all(config["splits"] <= default["splits"] for config in candidates)
         assert all(dim % config["bk"] == 0 for config in candidates)
+
+
+def test_segmented_fp8_d256_long_extend_config():
+    from vllm.v1.attention.ops import segmented_prefill_tuning as tuning
+    from vllm.v1.attention.ops.segmented_prefill import select_segmented_config
+
+    for query_len, seq_len, splits in (
+        (256, 8192, 4),
+        (1024, 131072, 8),
+        (4096, 262144, 2),
+    ):
+        config = select_segmented_config(1, query_len, seq_len, 6, 1, 256, True)
+        assert config == {
+            "bm": 64,
+            "bn": 128,
+            "bk": 64,
+            "splits": splits,
+            "warps": 8,
+            "stages": 1,
+            "waves_per_eu": 6,
+        }
+    candidates = tuning._candidate_configs(config, 1, query_len, 6, 256)
+    assert any(candidate["waves_per_eu"] == 2 for candidate in candidates)
+
+    assert "waves_per_eu" not in select_segmented_config(
+        1, 128, 131072, 6, 1, 256, True
+    )
+    assert "waves_per_eu" not in select_segmented_config(1, 256, 4096, 6, 1, 256, True)
+
+
+def test_segmented_fp8_d128_long_extend_config():
+    from vllm.v1.attention.ops.segmented_prefill import select_segmented_config
+
+    for query_len, seq_len, heads, splits in (
+        (256, 8192, 6, 4),
+        (512, 32768, 1, 16),
+        (1024, 131072, 6, 8),
+        (4096, 262144, 16, 1),
+        (256, 131072, 1, 32),
+    ):
+        config = select_segmented_config(1, query_len, seq_len, heads, 1, 128, True)
+        assert config == {
+            "bm": 64,
+            "bn": 128,
+            "bk": 64,
+            "splits": splits,
+            "warps": 8,
+            "stages": 3,
+            "waves_per_eu": 6,
+            "prefix_fast": True,
+            **({"qk_pipeline": 3} if query_len >= 512 or seq_len >= 32768 else {}),
+        }
+
+    for query_len, seq_len, heads in (
+        (256, 8192, 1),
+        (256, 32768, 1),
+        (512, 8192, 1),
+        (1024, 8192, 2),
+        (256, 4096, 6),
+    ):
+        config = select_segmented_config(1, query_len, seq_len, heads, 1, 128, True)
+        assert "waves_per_eu" not in config
+        assert "prefix_fast" not in config
+        assert "qk_pipeline" not in config
+
+
+@pytest.mark.parametrize("dim", (128, 256))
+def test_segmented_fp8_long_extend_split_workspace_bound(dim):
+    from vllm.v1.attention.ops.segmented_prefill import (
+        MAX_LONG_EXTEND_WORKSPACE_BYTES,
+        segmented_query_capacity,
+        select_segmented_config,
+    )
+
+    for batch, query_len, seq_len, heads, expected_splits in (
+        (1, 256, 8192, 6, 4),
+        (1, 256, 32768, 6, 16),
+        (1, 256, 131072, 6, 32),
+        (1, 1024, 32768, 1, 16),
+        (1, 1024, 131072, 1, 32),
+        (1, 1024, 131072, 6, 8),
+        (1, 4096, 131072, 1, 8),
+        (4, 1024, 131072, 6, 2),
+        (5, 257, 131072, 6, 4),
+        (21, 256, 131072, 6, 2),
+    ):
+        config = select_segmented_config(batch, query_len, seq_len, heads, 1, dim, True)
+        assert config["splits"] == expected_splits
+        if seq_len >= 32768:
+            scratch = (
+                batch
+                * segmented_query_capacity(query_len)
+                * heads
+                * config["splits"]
+                * (dim + 1)
+                * 4
+            )
+            assert scratch <= MAX_LONG_EXTEND_WORKSPACE_BYTES * dim // 128
+
+    for batch in (1, 4, 16):
+        for query_len in (257, 1025, 4095):
+            for ratio in (1, 6, 16):
+                for kv_heads in (1, 4):
+                    for seq_len in (32768, 131072):
+                        heads = ratio * kv_heads
+                        config = select_segmented_config(
+                            batch, query_len, seq_len, heads, kv_heads, dim, True
+                        )
+                        if (
+                            config.get("waves_per_eu") != 6
+                            or config["bm"] != 64
+                            or config["splits"] == 1
+                        ):
+                            continue
+                        scratch = (
+                            batch
+                            * segmented_query_capacity(query_len)
+                            * heads
+                            * config["splits"]
+                            * (dim + 1)
+                            * 4
+                        )
+                        assert scratch <= MAX_LONG_EXTEND_WORKSPACE_BYTES * dim // 128
+
+
+def test_segmented_bf16_d256_long_extend_config():
+    from vllm.v1.attention.ops.segmented_prefill import select_segmented_config
+
+    for query_len, seq_len in ((1024, 8192), (4096, 262144)):
+        config = select_segmented_config(1, query_len, seq_len, 6, 1, 256, False)
+        assert config == {
+            "bm": 64,
+            "bn": 64,
+            "bk": 64,
+            "splits": 1,
+            "warps": 8,
+            "stages": 3,
+            "waves_per_eu": 6,
+            "pv_split": True,
+            "qk_pipeline": 3,
+        }
+
+    assert "waves_per_eu" not in select_segmented_config(
+        1, 256, 262144, 6, 1, 256, False
+    )
+    assert "waves_per_eu" not in select_segmented_config(
+        1, 1024, 4096, 6, 1, 256, False
+    )
+
+
+@torch.inference_mode()
+def test_segmented_bf16_d256_long_extend_matches_dense_reference():
+    from vllm.v1.attention.ops.segmented_prefill import segmented_prefill_attention
+
+    case = _make_unified_paged_case(
+        [1024],
+        [7168],
+        num_heads=6,
+        num_kv_heads=1,
+        head_size=256,
+        block_size=1568,
+        fp8=False,
+    )
+    output = torch.empty_like(case["query"])
+    segmented_prefill_attention(
+        case["query"],
+        output,
+        case["key_cache"],
+        case["value_cache"],
+        case["block_table"],
+        case["starts"],
+        case["seq_lens"],
+        1024,
+        case["max_seq_len"],
+        case["k_scale"],
+        case["v_scale"],
+        256**-0.5,
+        skip_decode=False,
+    )
+    relative = (output.float() - case["reference"]).norm(dim=-1) / case[
+        "reference"
+    ].norm(dim=-1).clamp_min(1e-6)
+    assert torch.isfinite(output).all() and relative.max().item() < 0.01
+
+
+@pytest.mark.parametrize(
+    "query_len,heads,qk_amplitude,dim",
+    [
+        (256, 1, 1, 256),
+        (256, 6, 1, 256),
+        (512, 6, 1, 256),
+        (256, 6, 4, 256),
+        (256, 6, 16, 256),
+        (256, 6, 1, 128),
+        (512, 6, 4, 128),
+        (256, 6, 16, 128),
+    ],
+)
+@torch.inference_mode()
+def test_segmented_fp8_long_extend_matches_dense_reference(
+    query_len, heads, qk_amplitude, dim
+):
+    from vllm.platforms.rocm import on_gfx12x
+    from vllm.v1.attention.ops.segmented_prefill import segmented_prefill_attention
+
+    if not current_platform.is_rocm() or not on_gfx12x():
+        pytest.skip("FP8 KV requires gfx12")
+    case = _make_unified_paged_case(
+        [query_len],
+        [8192 - query_len],
+        num_heads=heads,
+        num_kv_heads=1,
+        head_size=dim,
+        block_size=1568,
+        fp8=True,
+    )
+    if qk_amplitude != 1:
+        # Check peaked logits too: one-term FP8 Q quantization passed only the
+        # nearly uniform fixture and deviated by 4-70% at these amplitudes.
+        case["query"].mul_(qk_amplitude)
+        case["k_scale"].mul_(qk_amplitude)
+        full_key = (
+            case["key_cache"][case["block_table"][0].long()]
+            .flatten(0, 1)[:8192]
+            .float()
+            * case["k_scale"]
+        ).repeat_interleave(heads, dim=1)
+        full_value = (
+            case["value_cache"][case["block_table"][0].long()]
+            .flatten(0, 1)[:8192]
+            .float()
+            * case["v_scale"]
+        ).repeat_interleave(heads, dim=1)
+        scores = torch.einsum(
+            "qhd,khd->hqk", case["query"].float(), full_key
+        ) / math.sqrt(dim)
+        future = torch.arange(8192, device=case["query"].device)[None, :] > (
+            8192
+            - query_len
+            + torch.arange(query_len, device=case["query"].device)[:, None]
+        )
+        scores.masked_fill_(future[None], -float("inf"))
+        case["reference"] = torch.einsum("hqk,khd->qhd", scores.softmax(-1), full_value)
+    output = torch.empty_like(case["query"])
+    segmented_prefill_attention(
+        case["query"],
+        output,
+        case["key_cache"],
+        case["value_cache"],
+        case["block_table"],
+        case["starts"],
+        case["seq_lens"],
+        query_len,
+        case["max_seq_len"],
+        case["k_scale"],
+        case["v_scale"],
+        dim**-0.5,
+        skip_decode=False,
+    )
+    relative = (output.float() - case["reference"]).norm(dim=-1) / case[
+        "reference"
+    ].norm(dim=-1).clamp_min(1e-6)
+    assert torch.isfinite(output).all() and relative.max().item() < 0.01
 
 
 def test_segmented_tuning_protects_static_incumbent():
@@ -1660,6 +1924,7 @@ def test_segmented_tuning_persists_without_retuning(tmp_path, monkeypatch):
     from vllm.v1.attention.ops import segmented_prefill as segmented
     from vllm.v1.attention.ops import segmented_prefill_tuning as tuning
 
+    monkeypatch.setenv("VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE", "1")
     monkeypatch.setenv("VLLM_CACHE_ROOT", str(tmp_path))
     monkeypatch.setattr(
         torch.cuda,
@@ -1750,6 +2015,23 @@ def test_segmented_tuning_persists_without_retuning(tmp_path, monkeypatch):
             8,
         )
         == expected
+    )
+    monkeypatch.setenv("VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE", "0")
+    assert (
+        tuning.get_segmented_config(
+            torch.device("cuda:0"),
+            torch.bfloat16,
+            torch.bfloat16,
+            4,
+            2,
+            128,
+            16,
+            128**-0.5,
+            1,
+            1,
+            8,
+        )
+        is None
     )
 
 

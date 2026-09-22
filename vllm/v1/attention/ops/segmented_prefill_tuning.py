@@ -963,6 +963,8 @@ def get_segmented_config(
     seq_len,
 ):
     """Return a warmed ceiling bucket, or None for the static fallback."""
+    if not envs.VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE:
+        return None
     data = _TABLES.get(_key(device, dtype, kv_dtype, heads, kv_heads, dim, page, scale))
     if data is None:
         return None

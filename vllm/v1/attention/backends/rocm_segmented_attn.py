@@ -203,7 +203,7 @@ class RocmSegmentedAttentionImpl(RocmAttentionImpl):
 
     def _warmup_context_attention(self, layer, device, dtype, **limits) -> None:
         if (
-            envs.VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE
+            envs.VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE
             and not self._context_attention_warmed_up
             and self.alibi_slopes is None
             and self.sliding_window == (-1, -1)

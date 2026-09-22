@@ -460,6 +460,21 @@ def get_context_attention_config(
 def warmup_rocm_context_attention(config, device):
     """Tune outside model memory profiling so temporary KV cannot inflate peaks."""
     from vllm.v1.attention.backends.rocm_attn import RocmAttentionImpl
+
+    layers = config.compilation_config.static_forward_context.values()
+    if not envs.VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE:
+        if not envs.VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE:
+            return
+        from vllm.v1.attention.backends.rocm_segmented_attn import (
+            RocmSegmentedAttentionImpl,
+        )
+
+        if not any(
+            isinstance(getattr(layer, "impl", None), RocmSegmentedAttentionImpl)
+            for layer in layers
+        ):
+            return
+
     from vllm.v1.kv_cache_interface import FullAttentionSpec
     from vllm.v1.worker.gpu.attn_utils import get_kv_cache_spec
 
@@ -471,7 +486,7 @@ def warmup_rocm_context_attention(config, device):
         for spec in specs.values()
     )
     budget = _memory_budget(device)
-    for layer in config.compilation_config.static_forward_context.values():
+    for layer in layers:
         impl = getattr(layer, "impl", None)
         if isinstance(impl, RocmAttentionImpl):
             impl._warmup_context_attention(

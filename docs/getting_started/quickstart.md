@@ -336,14 +336,16 @@ explicitly when serving:
 vllm serve MODEL --attention-backend ROCM_SEGMENTED_ATTN
 ```
 
-On ROCm, set `VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE=1` to tune eligible
-`ROCM_ATTN` and `ROCM_SEGMENTED_ATTN` launch configurations during engine
-startup. Winners are persisted under `VLLM_CACHE_ROOT`; unsupported or untuned
-shapes continue to use their built-in static configurations. The segmented
-backend balances cold tuning across compatible tensor-parallel ranks and merges
-their results into one persistent table. It precompiles the bounded candidate
-set before timing, screens every valid candidate, and only replaces the built-in
-configuration when repeated finalist measurements show at least a 2% speedup.
+`ROCM_SEGMENTED_ATTN` tunes eligible launch configurations during engine startup
+by default. Set `VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE=0` to skip tuning and use its
+built-in static configurations. The existing `ROCM_ATTN` backend remains opt-in
+for tuning via `VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE=1`. Tuned winners are
+persisted under `VLLM_CACHE_ROOT`; unsupported or untuned shapes continue to use
+their built-in static configurations. The segmented backend balances cold tuning
+across compatible tensor-parallel ranks and merges their results into one
+persistent table. It precompiles the bounded candidate set before timing,
+screens every valid candidate, and only replaces the built-in configuration
+when repeated finalist measurements show at least a 2% speedup.
 
 !!! warning
     There are no pre-built vllm wheels containing Flash Infer, so you must install it in your environment first. Refer to the [Flash Infer official docs](https://docs.flashinfer.ai/) or see [docker/Dockerfile](../../docker/Dockerfile) for instructions on how to install it.

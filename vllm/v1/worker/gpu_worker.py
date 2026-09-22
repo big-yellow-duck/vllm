@@ -541,7 +541,10 @@ class Worker(WorkerBase):
         """
         maybe_apply_startup_plan(self)
 
-        if envs.VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE and current_platform.is_rocm():
+        if current_platform.is_rocm() and (
+            envs.VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE
+            or envs.VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE
+        ):
             from vllm.v1.attention.ops.prefix_prefill_tuning import (
                 warmup_rocm_context_attention,
             )
