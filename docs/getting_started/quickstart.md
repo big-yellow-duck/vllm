@@ -326,8 +326,31 @@ python script.py --attention-backend FLASHINFER
 Some of the available backend options include:
 
 - On NVIDIA CUDA: `FLASH_ATTN` or `FLASHINFER`.
-- On AMD ROCm: `TRITON_ATTN`, `ROCM_ATTN`, `ROCM_AITER_FA`, `ROCM_AITER_UNIFIED_ATTN`, `TRITON_MLA`, `ROCM_AITER_MLA` or `ROCM_AITER_TRITON_MLA`.
+- On AMD ROCm: `TRITON_ATTN`, `ROCM_ATTN`, `ROCM_SEGMENTED_ATTN`, `ROCM_AITER_FA`, `ROCM_AITER_UNIFIED_ATTN`, `TRITON_MLA`, `ROCM_AITER_MLA` or `ROCM_AITER_TRITON_MLA`.
 - On Intel XPU: `FLASH_ATTN`, `TRITON_ATTN`, `TRITON_MLA`, `XPU_MLA_SPARSE`, `TORCH_SDPA` or `TURBOQUANT`.
+
+`ROCM_SEGMENTED_ATTN` is opt-in and is not selected automatically. Enable it
+explicitly when serving:
+
+```bash
+vllm serve MODEL --attention-backend ROCM_SEGMENTED_ATTN
+```
+
+On RDNA4, the FlyDSL all-reduce and FP8 block-scale linear kernels also require
+FlyDSL to be installed. This fork was validated with
+[FlyDSL `ef6255c`](https://github.com/big-yellow-duck/FlyDSL/commit/ef6255c)
+(`feat/rocdl-cvt-f32-fp8`); both kernels are selected automatically when their
+hardware and dependency checks pass. Attention remains opt-in as shown above.
+
+`ROCM_SEGMENTED_ATTN` tunes eligible launch configurations during engine startup
+by default. Set `VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE=0` to skip tuning and use its
+built-in static configurations. Tuned winners are persisted under
+`VLLM_CACHE_ROOT`; unsupported or untuned shapes continue to use their built-in
+static configurations. The segmented backend balances cold tuning across
+compatible tensor-parallel ranks and merges their results into one persistent
+table. It precompiles the bounded candidate set before timing, screens every
+valid candidate, and only replaces the built-in configuration when repeated
+finalist measurements show at least a 2% speedup.
 
 !!! warning
     There are no pre-built vllm wheels containing Flash Infer, so you must install it in your environment first. Refer to the [Flash Infer official docs](https://docs.flashinfer.ai/) or see [docker/Dockerfile](../../docker/Dockerfile) for instructions on how to install it.

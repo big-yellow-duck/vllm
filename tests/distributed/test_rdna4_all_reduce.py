@@ -65,6 +65,20 @@ def _bf16_tensor(nbytes):
     return torch.empty(nbytes // torch.bfloat16.itemsize, dtype=torch.bfloat16)
 
 
+@pytest.mark.parametrize(
+    ("arch", "rdna4", "expected"),
+    [("gfx1201", True, True), ("gfx942", False, True), ("gfx1100", False, False)],
+)
+def test_rocm_platform_enables_custom_all_reduce_on_rdna4(
+    monkeypatch, arch, rdna4, expected
+):
+    from vllm.platforms import rocm
+
+    monkeypatch.setattr(rocm, "_GCN_ARCH", arch)
+    monkeypatch.setattr(rocm, "_ON_RDNA4", rdna4)
+    assert rocm.RocmPlatform.use_custom_allreduce() is expected
+
+
 def test_transport_priority_is_tp2_mapped_then_mapped_then_p2p():
     tensor = _bf16_tensor(64)
     communicator = _bare_communicator(2)

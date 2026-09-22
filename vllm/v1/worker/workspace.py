@@ -203,17 +203,38 @@ class WorkspaceManager:
             for i in range(len(shapes_and_dtypes))
         ]
 
-    def _ensure_workspace_size(self, required_bytes: int) -> torch.Tensor:
+    def _reserve_simultaneous(
+        self, *shapes_and_dtypes: tuple[tuple[int, ...], torch.dtype]
+    ) -> None:
+        """Pre-size the current lane for every DBO ubatch before execution."""
+        if self._locked:
+            raise RuntimeError("Workspace reservation is initialization-only.")
+        required_bytes = sum(
+            round_up(_compute_bytes(shape, dtype), 256)
+            for shape, dtype in shapes_and_dtypes
+        )
+        lane = self._get_workspace_id() % self._num_lanes
+        for ubatch_id in range(self._num_ubatches):
+            self._ensure_workspace_size(
+                required_bytes, workspace_id=ubatch_id * self._num_lanes + lane
+            )
+
+    def _ensure_workspace_size(
+        self, required_bytes: int, workspace_id: int | None = None
+    ) -> torch.Tensor:
         """Ensure workspace is allocated and large enough, return current workspace.
 
         Args:
             required_bytes: The number of bytes required.
+            workspace_id: Slot to reserve; defaults to the active ubatch and lane.
 
         Returns:
             The current workspace tensor.
 
         """
-        workspace_id = self._get_workspace_id()
+        workspace_id = (
+            self._get_workspace_id() if workspace_id is None else workspace_id
+        )
         current_workspace = self._current_workspaces[workspace_id]
         current_size = self._workspace_size_bytes(current_workspace)
 
