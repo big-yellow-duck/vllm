@@ -1163,347 +1163,6 @@ def test_qwen3_nonstandard_block_size(
     )
 
 
-@pytest.mark.parametrize(
-    "dim,page,query_len,context_len",
-    [
-        (64, 32, 2, 35),
-        (128, 16, 3, 65),
-        (256, 784, 9, 1601),
-        (64, 32, 33, 35),
-        (128, 16, 129, 65),
-        (256, 1568, 65, 1601),
-    ],
-)
-@torch.inference_mode()
-@pytest.mark.parametrize("kv_dtype", [torch.bfloat16, torch.float8_e4m3fn])
-def test_rocm_context_tuning_candidates_match_sdpa(
-    dim, page, query_len, context_len, kv_dtype
-):
-    """Launch tuning must preserve attention at ragged tile/page boundaries."""
-    if not current_platform.is_rocm():
-        pytest.skip("ROCm context launch configurations")
-    from vllm.v1.attention.ops.prefix_prefill_tuning import _CONFIGS, _make_inputs
-
-    device = torch.device("cuda:0")
-    q, k, v, kc, vc, table, starts, lengths, one = _make_inputs(
-        device, 4, 2, dim, page, 2, query_len, query_len + context_len, kv_dtype
-    )
-    output = torch.empty_like(q)
-    references = []
-    v_scale = one * 2 if kv_dtype == torch.float8_e4m3fn else one
-    for b in range(2):
-        context_k = (
-            kc.float()[table[b].long()]
-            .permute(0, 3, 1, 2, 4)
-            .reshape(-1, 2, dim)[:context_len]
-            * one
-        )
-        context_v = (
-            vc.float()[table[b].long()]
-            .permute(0, 3, 1, 2)
-            .reshape(-1, 2, dim)[:context_len]
-            * v_scale
-        )
-        full_k = torch.cat(
-            (context_k, k[b * query_len : (b + 1) * query_len])
-        ).repeat_interleave(2, dim=1)
-        full_v = torch.cat(
-            (context_v, v[b * query_len : (b + 1) * query_len])
-        ).repeat_interleave(2, dim=1)
-        mask = torch.arange(query_len + context_len, device=device)[None, :] <= (
-            torch.arange(query_len, device=device)[:, None] + context_len
-        )
-        references.append(
-            F.scaled_dot_product_attention(
-                q[b * query_len : (b + 1) * query_len].float().transpose(0, 1),
-                full_k.transpose(0, 1),
-                full_v.transpose(0, 1),
-                attn_mask=mask,
-            ).transpose(0, 1)
-        )
-    reference = torch.cat(references)
-    for config in _CONFIGS:
-        try:
-            context_attention_fwd(
-                q,
-                k,
-                v,
-                output,
-                "auto" if kv_dtype == torch.bfloat16 else "fp8",
-                kc,
-                vc,
-                table,
-                starts,
-                lengths,
-                query_len + context_len,
-                query_len,
-                one,
-                v_scale,
-                skip_decode=True,
-                _launch_config=config,
-            )
-        except triton.OutOfResources:
-            continue
-        torch.testing.assert_close(output.float(), reference, atol=0.01, rtol=0.01)
-
-
-@pytest.mark.parametrize("kv_dtype", [torch.bfloat16, torch.float8_e4m3fn])
-def test_rocm_context_tuning_persists_without_retuning(tmp_path, monkeypatch, kv_dtype):
-    """A fresh table must reuse disk winners without invoking the benchmark."""
-    from types import SimpleNamespace
-
-    from vllm.v1.attention.ops import prefix_prefill_tuning as tuning
-
-    monkeypatch.setenv("VLLM_CACHE_ROOT", str(tmp_path))
-    monkeypatch.setattr(
-        torch.cuda,
-        "get_device_properties",
-        lambda _: SimpleNamespace(
-            name="test", gcnArchName="gfx1201", multi_processor_count=64
-        ),
-    )
-    monkeypatch.setattr(tuning, "_TABLES", {})
-    monkeypatch.setattr(tuning, "_memory_budget", lambda _: 2**50)
-
-    def tune(*args):
-        return {"workload": list(args[-1]), "best": tuning._DEFAULT, "results": []}
-
-    monkeypatch.setattr(tuning, "_tune_workload", tune)
-    args = (torch.device("cuda:0"), torch.bfloat16, 4, 2, 64, 32, 0.125, 32, 64, 1)
-    tuning.warmup_context_attention(*args, kv_dtype=kv_dtype)
-    cache = next(tmp_path.rglob("*.json"))
-    saved = cache.read_bytes(), cache.stat().st_mtime_ns
-    tuning._TABLES.clear()
-
-    def forbidden(*args):
-        pytest.fail("Cached engine startup attempted to tune")
-
-    monkeypatch.setattr(tuning, "_tune_workload", forbidden)
-    tuning.warmup_context_attention(*args, kv_dtype=kv_dtype)
-    assert (cache.read_bytes(), cache.stat().st_mtime_ns) == saved
-    assert (
-        tuning.get_context_attention_config(
-            torch.device("cuda:0"),
-            4,
-            2,
-            64,
-            32,
-            1,
-            31,
-            63,
-            0.125,
-            kv_dtype=kv_dtype,
-        )
-        == tuning._DEFAULT
-    )
-    assert (
-        tuning.get_context_attention_config(
-            torch.device("cuda:0"),
-            4,
-            2,
-            64,
-            32,
-            1,
-            128,
-            128,
-            0.125,
-            kv_dtype=kv_dtype,
-        )
-        is None
-    )
-    other_dtype = torch.float8_e4m3fn if kv_dtype == torch.bfloat16 else torch.bfloat16
-    assert (
-        tuning.get_context_attention_config(
-            torch.device("cuda:0"),
-            4,
-            2,
-            64,
-            32,
-            1,
-            31,
-            63,
-            0.125,
-            kv_dtype=other_dtype,
-        )
-        is None
-    )
-
-
-def test_rocm_context_tuning_recovers_corrupt_cache(tmp_path, monkeypatch):
-    """A truncated cache must be replaced rather than accepted as a winner."""
-    from types import SimpleNamespace
-
-    from vllm.v1.attention.ops import prefix_prefill_tuning as tuning
-
-    monkeypatch.setenv("VLLM_CACHE_ROOT", str(tmp_path))
-    monkeypatch.setattr(
-        torch.cuda,
-        "get_device_properties",
-        lambda _: SimpleNamespace(
-            name="test", gcnArchName="gfx1201", multi_processor_count=64
-        ),
-    )
-    monkeypatch.setattr(tuning, "_TABLES", {})
-    monkeypatch.setattr(tuning, "_memory_budget", lambda _: 2**50)
-    calls = []
-
-    def tune(*args):
-        calls.append(args[-1])
-        return {"workload": list(args[-1]), "best": tuning._DEFAULT, "results": []}
-
-    monkeypatch.setattr(tuning, "_tune_workload", tune)
-    args = (torch.device("cuda:0"), torch.bfloat16, 4, 2, 64, 32, 0.125, 32, 64, 1)
-    tuning.warmup_context_attention(*args)
-    original_workloads = calls.copy()
-    cache = next(tmp_path.rglob("*.json"))
-    cache.write_text('{"identity":')
-    tuning._TABLES.clear()
-    calls.clear()
-    tuning.warmup_context_attention(*args)
-    assert calls == original_workloads
-    import json
-
-    assert [r["workload"] for r in json.loads(cache.read_text())["records"]] == [
-        list(workload) for workload in original_workloads
-    ]
-
-
-def test_rocm_context_tuning_extends_buckets_and_reuses_saved_limits(
-    tmp_path, monkeypatch
-):
-    """Reuse saved ceiling buckets and tune only missing shapes after limit changes."""
-    from types import SimpleNamespace
-
-    from vllm.v1.attention.ops import prefix_prefill_tuning as tuning
-
-    monkeypatch.setenv("VLLM_CACHE_ROOT", str(tmp_path))
-    monkeypatch.setattr(
-        torch.cuda,
-        "get_device_properties",
-        lambda _: SimpleNamespace(
-            name="test", gcnArchName="gfx1201", multi_processor_count=64
-        ),
-    )
-    monkeypatch.setattr(tuning, "_TABLES", {})
-    monkeypatch.setattr(tuning, "_memory_budget", lambda _: 2**50)
-    calls = []
-
-    def tune(*args):
-        workload = args[-1]
-        calls.append(workload)
-        best = tuning._CONFIGS[0] if workload[1] == 8192 else tuning._DEFAULT
-        if workload[1] == 4:
-            best = tuning._CONFIGS[1]
-        return {"workload": list(workload), "best": best, "results": []}
-
-    monkeypatch.setattr(tuning, "_tune_workload", tune)
-    args = (
-        torch.device("cuda:0"),
-        torch.bfloat16,
-        4,
-        2,
-        64,
-        32,
-        0.125,
-        65536,
-        65536,
-        1,
-    )
-    tuning.warmup_context_attention(*args)
-    assert len(calls) == 120
-    assert {q for _, q, _ in calls} == {2**exponent for exponent in range(1, 17)}
-    assert (
-        tuning.get_context_attention_config(
-            torch.device("cuda:0"), 4, 2, 64, 32, 1, 3, 4099, 0.125
-        )
-        == tuning._CONFIGS[1]
-    )
-    assert (
-        tuning.get_context_attention_config(
-            torch.device("cuda:0"), 4, 2, 64, 32, 1, 5155, 5155, 0.125
-        )
-        == tuning._CONFIGS[0]
-    )
-    assert (
-        tuning.get_context_attention_config(
-            torch.device("cuda:0"), 4, 2, 64, 32, 1, 65536, 65536, 0.125
-        )
-        is not None
-    )
-    assert (
-        tuning.get_context_attention_config(
-            torch.device("cuda:0"), 4, 2, 64, 32, 1, 65537, 65537, 0.125
-        )
-        is None
-    )
-    calls.clear()
-    short = (*args[:-3], 2048, 2048, 1)
-    tuning.warmup_context_attention(*short)
-    assert set(calls) == {(1, q, 2048) for q in (2, 4, 8, 16, 32, 64, 128, 256, 512)}
-    cache = next(tmp_path.rglob("*.json"))
-    saved = cache.read_bytes(), cache.stat().st_mtime_ns
-    tuning._TABLES.clear()
-
-    def forbidden(*args):
-        pytest.fail("Saved long/short engine startup attempted to tune")
-
-    monkeypatch.setattr(tuning, "_tune_workload", forbidden)
-    tuning.warmup_context_attention(*args)
-    tuning.warmup_context_attention(*short)
-    assert (cache.read_bytes(), cache.stat().st_mtime_ns) == saved
-
-
-def test_rocm_context_tuning_prunes_tokens_and_paged_kv_memory():
-    """Long-prefix coverage must not allocate impossible independent KV batches."""
-    from vllm.v1.attention.ops import prefix_prefill_tuning as tuning
-
-    limits = (8192, 524288, 64)
-    raw = set(tuning._workloads(*limits))
-    assert {b for b, _, _ in raw} == {1, 2, 4, 8, 16, 32}
-    assert (1, 2, 262146) in raw
-    assert all(
-        sum(tuning._query_lengths(b, q, 8192)) <= 8192 and s <= 524288
-        for b, q, s in raw
-    )
-    assert (4, 8192, 9216) in raw
-    assert tuning._query_lengths(4, 8192, 8192) == [8189, 1, 1, 1]
-    for token_limit in (17, 32, 8192):
-        bounded = set(tuning._workloads(token_limit, 9216, 32))
-        query_buckets = sorted({q for _, q, _ in bounded})
-        for b, q, _ in bounded:
-            actual = max(tuning._query_lengths(b, q, token_limit))
-            assert next(bucket for bucket in query_buckets if bucket >= actual) == q
-
-    scratch = set(tuning._workloads(*limits, memory_budget_bytes=4 * 2**30))
-    assert (1, 2, 262146) in scratch
-    assert (32, 2, 262146) not in scratch
-    assert all(
-        tuning._scratch_bytes(12, 2, 256, 784, *w, max_tokens=8192) <= 4 * 2**30
-        for w in scratch
-    )
-
-    layouts = ((784, 784 * 2048 * 12), (0, 8 * 2**20))
-    model = set(
-        tuning._workloads(
-            *limits,
-            memory_budget_bytes=4 * 2**30,
-            cache_layouts=layouts,
-            cache_budget_bytes=2**30,
-        )
-    )
-    assert model < scratch
-    assert (1, 2, 262146) not in model
-    assert (32, 2, 2) in model
-    assert all(
-        b
-        * sum(
-            ((s + page - 1) // page) * size if page else size for page, size in layouts
-        )
-        <= 2**30
-        for b, _, s in model
-    )
-
-
 def test_segmented_tuning_candidates_preserve_workspace_bound():
     """Startup candidates may reduce but never enlarge reserved split scratch."""
     from vllm.v1.attention.ops import segmented_prefill as segmented
@@ -2053,65 +1712,44 @@ def test_segmented_prefill_ragged_unified_graph_replay(
 ):
     """Unified-cache segmented prefill follows metadata on graph replay."""
     from vllm.platforms.rocm import on_gfx1x, on_gfx12x
-    from vllm.v1.attention.ops.prefix_prefill_tuning import _make_inputs
+    from vllm.v1.attention.ops import segmented_attention as dispatcher
 
     if not current_platform.is_rocm() or not (
         on_gfx12x() if kv_dtype.itemsize == 1 else on_gfx1x()
     ):
         pytest.skip("gfx1x segmented prefill (FP8 requires gfx12)")
     if force_splits is not None:
-        from vllm.v1.attention.ops import segmented_prefill as segmented
-
-        original = segmented.select_segmented_config
+        original = dispatcher.select_segmented_config
         monkeypatch.setattr(
-            segmented,
+            dispatcher,
             "select_segmented_config",
             lambda *args: dict(original(*args), splits=force_splits),
         )
     query_lengths = [0, 1, 2, 7, 33, 129]
     contexts = [0, 67, 0, page - 1, page + 1, 33]
     device = torch.device("cuda:0")
-    q, k, v, kc, vc, table, starts, lengths, _ = _make_inputs(
-        device,
-        hq,
-        hk,
-        dim,
-        page,
-        len(contexts),
-        max(query_lengths),
-        max(query_lengths) + max(contexts),
-        kv_dtype,
-        query_lengths=query_lengths,
-    )
     total = sum(query_lengths)
-    tensors = []
-    for source, heads in ((q, hq), (k, hk), (v, hk)):
-        target = torch.empty((total, heads + 1, dim), device=device, dtype=dtype)
-        target = target[:, :heads]
-        target.copy_(source[:total])
-        tensors.append(target)
-    q, k, v = tensors
-    # Recover token-major cache data from the legacy fixture, then place K/V in
-    # the interleaved allocation used by ROCM_SEGMENTED_ATTN.
-    dense_k = kc.permute(0, 3, 1, 2, 4).reshape(kc.shape[0], page, hk, dim)
-    dense_v = vc.permute(0, 3, 1, 2)
-    if kv_dtype in (torch.float16, torch.bfloat16):
-        dense_k, dense_v = dense_k.to(dtype), dense_v.to(dtype)
-    page_elements = dense_k[0].numel()
-    backing = torch.empty(
-        dense_k.shape[0] * 2 * page_elements,
-        device=device,
-        dtype=kv_dtype,
-    )
+    q = torch.randn(total, hq + 1, dim, device=device, dtype=dtype)[:, :hq]
+    k = torch.randn(total, hk + 1, dim, device=device, dtype=dtype)[:, :hk]
+    v = torch.randn_like(k)
+    blocks_per_seq = triton.cdiv(max(map(sum, zip(query_lengths, contexts))), page)
+    num_blocks = len(contexts) * blocks_per_seq
+    page_elements = page * hk * dim
+    backing = torch.empty(num_blocks * 2 * page_elements, device=device, dtype=kv_dtype)
+    cache_shape = (num_blocks, page, hk, dim)
     strides = (2 * page_elements, hk * dim, dim, 1)
-    kc = torch.as_strided(backing, dense_k.shape, strides)
-    vc = torch.as_strided(backing, dense_v.shape, strides, page_elements)
-    kc.copy_(dense_k)
-    vc.copy_(dense_v)
-    table.copy_(torch.randperm(table.numel(), device=device).reshape_as(table))
-    host_table = table.cpu().tolist()
+    kc = torch.as_strided(backing, cache_shape, strides)
+    vc = torch.as_strided(backing, cache_shape, strides, page_elements)
     ks = torch.tensor(0.13 if kv_dtype.itemsize == 1 else 1.0, device=device)
     vs = torch.tensor(0.27 if kv_dtype.itemsize == 1 else 1.0, device=device)
+    kc.copy_((torch.randn(cache_shape, device=device).float() * 0.25 / ks).to(kv_dtype))
+    vc.copy_((torch.randn(cache_shape, device=device).float() * 0.25 / vs).to(kv_dtype))
+    table = torch.randperm(num_blocks, device=device, dtype=torch.int32).view(
+        len(contexts), blocks_per_seq
+    )
+    host_table = table.cpu().tolist()
+    starts = torch.empty(len(contexts) + 1, device=device, dtype=torch.int32)
+    lengths = torch.empty(len(contexts), device=device, dtype=torch.int32)
     output = torch.full((total, hq + 1, dim), 17.0, device=device, dtype=dtype)[:, :hq]
 
     def metadata(qlens):
@@ -2140,7 +1778,7 @@ def test_segmented_prefill_ragged_unified_graph_replay(
             first += nq
 
     def run():
-        chunked_prefill_paged_decode(
+        dispatcher.segmented_attention(
             query=q,
             key=k,
             value=v,
@@ -2155,6 +1793,7 @@ def test_segmented_prefill_ragged_unified_graph_replay(
             max_query_len=129,
             k_scale=ks,
             v_scale=vs,
+            sm_scale=dim**-0.5,
         )
 
     def check(qlens):
@@ -2187,7 +1826,7 @@ def test_segmented_prefill_ragged_unified_graph_replay(
 
     metadata(query_lengths)
     run()
-    torch.cuda.synchronize()
+    torch.accelerator.synchronize()
     check(query_lengths)
     graph = torch.cuda.CUDAGraph()
     with torch.cuda.graph(graph):
@@ -2199,7 +1838,7 @@ def test_segmented_prefill_ragged_unified_graph_replay(
     metadata(replay_lengths)
     output.fill_(17.0)
     graph.replay()
-    torch.cuda.synchronize()
+    torch.accelerator.synchronize()
     check(replay_lengths)
 
 
@@ -2208,12 +1847,12 @@ def test_segmented_prefill_ragged_unified_graph_replay(
     [(False, None), (True, None), (False, 4), (True, 4)],
 )
 @torch.inference_mode()
-def test_chunked_prefill_routes_unified_cache_to_segmented(
+def test_segmented_backend_routes_unified_cache_to_segmented(
     monkeypatch, fp8, force_splits
 ):
     from vllm.platforms.rocm import on_gfx1x, on_gfx12x
+    from vllm.v1.attention.ops import segmented_attention as dispatcher
     from vllm.v1.attention.ops import segmented_prefill as segmented
-    from vllm.v1.attention.ops import segmented_prefill_tuning as tuning
 
     if not current_platform.is_rocm() or not (on_gfx12x() if fp8 else on_gfx1x()):
         pytest.skip("gfx1x segmented prefill (FP8 requires gfx12)")
@@ -2243,14 +1882,14 @@ def test_chunked_prefill_routes_unified_cache_to_segmented(
             )
             return dict(config, splits=force_splits)
 
-        monkeypatch.setattr(tuning, "get_segmented_config", tuned_config)
+        monkeypatch.setattr(dispatcher, "get_segmented_config", tuned_config)
 
     def segmented_spy(*args, **kwargs):
         routed.append(True)
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(segmented, "segmented_prefill_attention", segmented_spy)
-    chunked_prefill_paged_decode(
+    monkeypatch.setattr(dispatcher, "segmented_prefill_attention", segmented_spy)
+    dispatcher.segmented_attention(
         query=case["query"],
         key=case["key"],
         value=case["value"],
@@ -2265,6 +1904,7 @@ def test_chunked_prefill_routes_unified_cache_to_segmented(
         max_query_len=129,
         k_scale=case["k_scale"],
         v_scale=case["v_scale"],
+        sm_scale=256**-0.5,
     )
 
     assert routed == [True]
@@ -2368,18 +2008,11 @@ def test_rocm_segmented_attn_arch_gate(
     [([129, 1], [31, 64], 4097, True), ([33, 1], [31, 64], 33, False)],
 )
 @torch.inference_mode()
-def test_chunked_prefill_unified_cache_routes_unsupported_segmented_patterns(
+def test_segmented_backend_routes_unsupported_patterns_to_unified(
     monkeypatch, query_lens, context_lens, max_query_len, causal
 ):
-    import importlib
-
     from vllm.platforms.rocm import on_gfx1x
-    from vllm.v1.attention.ops import segmented_prefill as segmented
-    from vllm.v1.attention.ops import triton_unified_attention as unified
-
-    chunked = importlib.import_module(
-        "vllm.v1.attention.ops.chunked_prefill_paged_decode"
-    )
+    from vllm.v1.attention.ops import segmented_attention as dispatcher
 
     if not current_platform.is_rocm() or not on_gfx1x():
         pytest.skip("gfx1x unified prefill fallback")
@@ -2395,27 +2028,21 @@ def test_chunked_prefill_unified_cache_routes_unsupported_segmented_patterns(
     )
     output = torch.empty_like(case["query"])
     routed = []
-    original_unified = unified.unified_attention
-    original_context = chunked.context_attention_fwd
+    original_unified = dispatcher.unified_attention
 
     def unified_spy(*args, **kwargs):
         routed.append("unified")
         return original_unified(*args, **kwargs)
 
-    def context_spy(*args, **kwargs):
-        routed.append("context")
-        return original_context(*args, **kwargs)
-
-    monkeypatch.setattr(unified, "unified_attention", unified_spy)
-    monkeypatch.setattr(chunked, "context_attention_fwd", context_spy)
+    monkeypatch.setattr(dispatcher, "unified_attention", unified_spy)
     monkeypatch.setattr(
-        segmented,
+        dispatcher,
         "segmented_prefill_attention",
         lambda *args, **kwargs: pytest.fail(
             "unsupported pattern routed to segmented prefill"
         ),
     )
-    chunked_prefill_paged_decode(
+    dispatcher.segmented_attention(
         query=case["query"],
         key=case["key"],
         value=case["value"],
@@ -2430,10 +2057,11 @@ def test_chunked_prefill_unified_cache_routes_unsupported_segmented_patterns(
         max_query_len=max_query_len,
         k_scale=case["k_scale"],
         v_scale=case["v_scale"],
+        sm_scale=128**-0.5,
         causal=causal,
     )
 
-    assert routed == ["context" if causal else "unified"]
+    assert routed == ["unified"]
     relative = (output.float() - case["reference"]).norm(dim=-1) / case[
         "reference"
     ].norm(dim=-1).clamp_min(1e-6)
@@ -2452,12 +2080,9 @@ def test_chunked_prefill_unified_cache_routes_unsupported_segmented_patterns(
     ],
 )
 @torch.inference_mode()
-def test_chunked_prefill_unified_feature_fallback_accuracy(monkeypatch, feature):
-    import importlib
-
+def test_segmented_backend_unified_feature_fallback_accuracy(monkeypatch, feature):
     from vllm.platforms.rocm import on_gfx1x
-    from vllm.v1.attention.ops import segmented_prefill as segmented
-    from vllm.v1.attention.ops import triton_unified_attention as unified
+    from vllm.v1.attention.ops import segmented_attention as dispatcher
 
     if not current_platform.is_rocm() or not on_gfx1x():
         pytest.skip("gfx1x unified attention feature fallback")
@@ -2490,28 +2115,27 @@ def test_chunked_prefill_unified_feature_fallback_accuracy(monkeypatch, feature)
 
     routed = []
     log_messages = []
-    original_unified = unified.unified_attention
-    chunked = importlib.import_module(
-        "vllm.v1.attention.ops.chunked_prefill_paged_decode"
-    )
+    original_unified = dispatcher.unified_attention
 
     def unified_spy(*args, **kwargs):
         routed.append("unified")
         return original_unified(*args, **kwargs)
 
-    monkeypatch.setattr(unified, "unified_attention", unified_spy)
+    monkeypatch.setattr(dispatcher, "unified_attention", unified_spy)
     monkeypatch.setattr(
-        segmented,
+        dispatcher,
         "segmented_prefill_attention",
         lambda *args, **kwargs: pytest.fail(
             "feature fallback routed to segmented prefill"
         ),
     )
     monkeypatch.setattr(
-        chunked.logger, "info_once", lambda message, *args: log_messages.append(message)
+        dispatcher.logger,
+        "info_once",
+        lambda message, *args: log_messages.append(message),
     )
 
-    chunked_prefill_paged_decode(
+    dispatcher.segmented_attention(
         query=case["query"],
         key=case["key"],
         value=case["value"],
@@ -2526,6 +2150,7 @@ def test_chunked_prefill_unified_feature_fallback_accuracy(monkeypatch, feature)
         max_query_len=7,
         k_scale=case["k_scale"],
         v_scale=case["v_scale"],
+        sm_scale=128**-0.5,
         sliding_window=sliding_window,
         softcap=softcap,
         output_scale=output_scale,
@@ -2553,34 +2178,6 @@ def test_chunked_prefill_unified_feature_fallback_accuracy(monkeypatch, feature)
         assert torch.isfinite(output).all() and relative.max().item() < 0.01
 
 
-def test_chunked_prefill_legacy_cache_rejects_softcap():
-    query = torch.empty(1, 1, 128)
-    key_cache = torch.empty(1, 1, 16, 16, 8)
-    value_cache = torch.empty(1, 1, 128, 16)
-
-    with pytest.raises(
-        NotImplementedError,
-        match="soft cap requires the unified KV cache layout",
-    ):
-        chunked_prefill_paged_decode(
-            query=query,
-            key=query,
-            value=query,
-            output=torch.empty_like(query),
-            kv_cache_dtype="auto",
-            key_cache=key_cache,
-            value_cache=value_cache,
-            block_table=torch.zeros(1, 1, dtype=torch.int32),
-            query_start_loc=torch.tensor([0, 1], dtype=torch.int32),
-            seq_lens=torch.ones(1, dtype=torch.int32),
-            max_seq_len=1,
-            max_query_len=1,
-            k_scale=torch.tensor(1.0),
-            v_scale=torch.tensor(1.0),
-            softcap=50.0,
-        )
-
-
 @torch.inference_mode()
 def test_segmented_prefill_cache_offsets_cross_int32_boundary():
     """A small logical prefix can live beyond 2**31 elements in a strided cache."""
@@ -2589,8 +2186,8 @@ def test_segmented_prefill_cache_offsets_cross_int32_boundary():
 
     if not current_platform.is_rocm() or not on_gfx1x():
         pytest.skip("gfx1x segmented prefill")
-    torch.cuda.empty_cache()
-    free, _ = torch.cuda.mem_get_info()
+    torch.accelerator.empty_cache()
+    free, _ = torch.accelerator.get_memory_info()
     if free < 10 * 2**30:
         pytest.skip("The address-boundary fixture needs 10 GiB free VRAM")
     device = torch.device("cuda:0")

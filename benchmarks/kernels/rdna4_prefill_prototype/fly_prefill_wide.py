@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+# ruff: noqa: B008, B023 -- FlyDSL traces nested functions and stream defaults.
 """Experimental 32-row four-wave BF16 prefill stage, adapted from RDNA4 SplitKV."""
 
 import functools
@@ -9,13 +10,13 @@ import flydsl.expr as fx
 import torch
 from flydsl.expr import gpu, range_constexpr
 from flydsl.expr import math as fmath
-
-from vllm.v1.attention.ops.flydsl_kernels.rdna4_splitkv_common import (
+from rdna4_prefill_prototype.fly_common import (
     LOG2E,
     _flat_view,
     _wave_reduce,
 )
-from vllm.v1.attention.ops.flydsl_kernels.runtime import run_compiled
+from rdna4_prefill_prototype.fly_runtime import run_compiled
+
 from vllm.v1.attention.ops.segmented_prefill import _segmented_prefill_reduce
 
 

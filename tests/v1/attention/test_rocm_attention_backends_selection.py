@@ -139,13 +139,13 @@ def test_segmented_attention_autotune_is_default_on_and_opt_out(monkeypatch):
     assert envs.VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE
 
     impl = RocmSegmentedAttentionImpl(8, 128, 128**-0.5, 2, None, None, "auto")
-    impl._context_attention_warmed_up = False
+    impl._segmented_attention_warmed_up = False
     config = MagicMock()
     config.scheduler_config.max_num_batched_tokens = 1024
     config.scheduler_config.max_num_seqs = 4
     config.model_config.max_model_len = 8192
     config.model_config.dtype = torch.bfloat16
-    impl._context_attention_config = config
+    impl._segmented_attention_config = config
     layer = MagicMock()
     layer.impl = impl
     layer.get_kv_cache_spec.return_value.block_size = 16
@@ -155,8 +155,8 @@ def test_segmented_attention_autotune_is_default_on_and_opt_out(monkeypatch):
     with patch(
         "vllm.v1.attention.ops.segmented_prefill_tuning.warmup_segmented_attention"
     ) as warmup:
-        from vllm.v1.attention.ops.prefix_prefill_tuning import (
-            warmup_rocm_context_attention,
+        from vllm.v1.attention.ops.segmented_prefill_tuning import (
+            warmup_rocm_segmented_attention,
         )
 
         with (
@@ -165,20 +165,57 @@ def test_segmented_attention_autotune_is_default_on_and_opt_out(monkeypatch):
                 return_value={},
             ),
             patch(
-                "vllm.v1.attention.ops.prefix_prefill_tuning._memory_budget",
+                "vllm.v1.attention.ops.segmented_prefill_tuning._memory_budget",
                 return_value=1024,
             ),
         ):
-            warmup_rocm_context_attention(config, torch.device("cuda:0"))
+            warmup_rocm_segmented_attention(config, torch.device("cuda:0"))
         warmup.assert_called_once()
-        assert impl._context_attention_warmed_up
+        assert impl._segmented_attention_warmed_up
 
         monkeypatch.setenv("VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE", "0")
         assert not envs.VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE
-        impl._context_attention_warmed_up = False
+        impl._segmented_attention_warmed_up = False
         warmup.reset_mock()
-        impl._warmup_context_attention(layer, torch.device("cuda:0"), torch.bfloat16)
+        impl._warmup_segmented_attention(layer, torch.device("cuda:0"), torch.bfloat16)
         warmup.assert_not_called()
+
+
+def test_segmented_attention_forward_uses_dedicated_dispatch(monkeypatch):
+    from types import SimpleNamespace
+
+    from vllm.platforms import rocm
+    from vllm.v1.attention.backends.rocm_segmented_attn import (
+        RocmSegmentedAttentionImpl,
+    )
+
+    monkeypatch.setattr(rocm, "on_gfx1x", lambda: True)
+    impl = RocmSegmentedAttentionImpl(8, 128, 128**-0.5, 2, None, None, "auto")
+    query = torch.empty(3, 8, 128, dtype=torch.bfloat16)
+    key = torch.empty(3, 2, 128, dtype=torch.bfloat16)
+    value = torch.empty_like(key)
+    output = torch.empty_like(query)
+    kv_cache = torch.empty(2, 2, 16, 256, dtype=torch.bfloat16)
+    metadata = SimpleNamespace(
+        use_cascade=False,
+        num_actual_tokens=3,
+        block_table=torch.zeros(1, 1, dtype=torch.int32),
+        query_start_loc=torch.tensor([0, 3], dtype=torch.int32),
+        seq_lens=torch.tensor([3], dtype=torch.int32),
+        max_seq_len=3,
+        max_query_len=3,
+        causal=True,
+    )
+    layer = SimpleNamespace(_k_scale=torch.ones(()), _v_scale=torch.ones(()))
+
+    with patch(
+        "vllm.v1.attention.backends.rocm_segmented_attn.segmented_attention"
+    ) as dispatch:
+        result = impl.forward(layer, query, key, value, kv_cache, metadata, output)
+
+    assert result is output
+    dispatch.assert_called_once()
+    assert dispatch.call_args.kwargs["key_cache"].shape == (2, 16, 2, 128)
 
 
 def test_aiter_unified_attention_capture_preserves_query_start_locations():

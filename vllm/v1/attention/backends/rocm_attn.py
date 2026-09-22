@@ -7,7 +7,6 @@ from typing import ClassVar
 
 import torch
 
-import vllm.envs as envs
 from vllm._aiter_ops import rocm_aiter_ops
 from vllm.config import VllmConfig
 from vllm.config.cache import CacheDType
@@ -28,45 +27,17 @@ from vllm.v1.attention.backend import (
     CommonAttentionMetadata,
     MultipleOf,
 )
-from vllm.v1.attention.backends.utils import get_num_attention_heads_from_layers
 from vllm.v1.attention.ops.chunked_prefill_paged_decode import (
     chunked_prefill_paged_decode,
     has_native_kv_cache_layout,
-    reserve_splitkv_workspace,
 )
 from vllm.v1.attention.ops.paged_attn import PagedAttention
 from vllm.v1.attention.ops.triton_reshape_and_cache_flash import (
     triton_reshape_and_cache_flash,
 )
-from vllm.v1.kv_cache_interface import AttentionSpec, KVCacheLayout, KVQuantMode
+from vllm.v1.kv_cache_interface import AttentionSpec, KVCacheLayout
 
 logger = init_logger(__name__)
-
-
-def _kv_cache_workspace_support(
-    kv_cache_spec: AttentionSpec,
-    model_dtype: torch.dtype,
-    *,
-    is_e4m3_kv_cache: bool,
-    is_gfx1x: bool,
-    is_gfx12x: bool,
-) -> tuple[bool, bool]:
-    """Return ``(supported, is_fp8)`` for ROCm attention workspaces.
-
-    FP8 cache specs use byte storage, so the caller supplies the concrete
-    encoding retained by the cache configuration.
-    """
-    native_kv_supported = (
-        kv_cache_spec.kv_quant_mode == KVQuantMode.NONE
-        and kv_cache_spec.dtype == model_dtype
-    )
-    fp8_kv_supported = (
-        kv_cache_spec.kv_quant_mode == KVQuantMode.FP8_PER_TENSOR
-        and kv_cache_spec.dtype.itemsize == 1
-        and is_e4m3_kv_cache
-        and is_gfx12x
-    )
-    return is_gfx1x and (native_kv_supported or fp8_kv_supported), fp8_kv_supported
 
 
 @dataclass
@@ -117,49 +88,11 @@ class RocmAttentionMetadataBuilder(AttentionMetadataBuilder[RocmAttentionMetadat
         self.block_size = kv_cache_spec.block_size
 
         model_config = vllm_config.model_config
-        self.num_heads_q = get_num_attention_heads_from_layers(
-            vllm_config, layer_names
-        ) or model_config.get_num_attention_heads(vllm_config.parallel_config)
-        self.num_heads_kv = kv_cache_spec.num_kv_heads
-        self.headdim = kv_cache_spec.head_size
-
-        self._reserve_workspace(kv_cache_spec, vllm_config)
-
-    def _reserve_workspace(
-        self,
-        kv_cache_spec: AttentionSpec,
-        vllm_config: VllmConfig,
-    ) -> None:
-        """Reserve workspace for the legacy ROCM_ATTN decode kernels."""
-        model_config = vllm_config.model_config
-
-        from vllm.platforms.rocm import on_gfx1x, on_gfx12x
-
-        splitkv_supported, fp8_kv_supported = _kv_cache_workspace_support(
-            kv_cache_spec,
-            model_config.dtype,
-            is_e4m3_kv_cache=vllm_config.cache_config.cache_dtype
-            in ("fp8", "fp8_e4m3"),
-            is_gfx1x=on_gfx1x(),
-            is_gfx12x=on_gfx12x(),
+        self.num_heads_q = model_config.get_num_attention_heads(
+            vllm_config.parallel_config
         )
-
-        if (
-            splitkv_supported
-            and self.headdim in (128, 256)
-            and self.num_heads_kv > 0
-            and self.num_heads_q % self.num_heads_kv == 0
-            and self.num_heads_q // self.num_heads_kv <= 16
-        ):
-            reserve_splitkv_workspace(
-                vllm_config.scheduler_config.max_num_seqs,
-                self.num_heads_q,
-                self.num_heads_kv,
-                self.headdim,
-                self.block_size,
-                model_config.max_model_len,
-                allow_short_context=fp8_kv_supported,
-            )
+        self.num_heads_kv = model_config.get_num_kv_heads(vllm_config.parallel_config)
+        self.headdim = model_config.get_head_size()
 
     def build_for_cudagraph_capture(
         self, common_attn_metadata: CommonAttentionMetadata
@@ -310,7 +243,8 @@ class RocmAttentionBackend(AttentionBackend):
 
     @classmethod
     def customize_spec(cls, spec: AttentionSpec) -> AttentionSpec:
-        """Keep K and V in separate contiguous groups for native HIP kernels."""
+        """K and V as two head groups so the native HIP kernels address each side
+        as one contiguous region (x-packed interior applied in split_kv_cache)."""
         if spec.state_content_bytes is not None:
             return spec
         assert spec.head_size == spec.head_size_v, (
@@ -385,30 +319,12 @@ class RocmAttentionImpl(AttentionImpl):
         self.fp8_dtype = current_platform.fp8_dtype()
 
         self.sinks = sinks
-        self._context_attention_warmed_up = False
-        self._context_attention_config: VllmConfig | None = None
-        if envs.VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE:
-            from vllm.config import get_current_vllm_config
-
-            self._context_attention_config = get_current_vllm_config()
         if sinks is not None:
             assert sinks.shape[0] == num_heads, (
                 "Sinks must have the same number of heads as the number of "
                 f"heads in the layer. Sinks shape: {sinks.shape}, "
                 f"num_heads: {num_heads}."
             )
-
-    def _split_kv_cache(
-        self,
-        kv_cache: torch.Tensor,
-        num_kv_heads: int | None = None,
-        head_size: int | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        num_kv_heads = num_kv_heads or self.num_kv_heads
-        head_size = head_size or self.head_size
-        return PagedAttention.split_kv_cache(
-            kv_cache.transpose(0, 1), num_kv_heads, head_size
-        )
 
     def _forward_encoder_attention(
         self,
@@ -459,40 +375,6 @@ class RocmAttentionImpl(AttentionImpl):
             sinks=self.sinks,
         )
         return output
-
-    def _warmup_context_attention(self, layer, device, dtype, **limits):
-        if (
-            envs.VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE
-            and not self._context_attention_warmed_up
-            and self.attn_type == AttentionType.DECODER
-            and self.kv_cache_dtype in ("auto", "bfloat16", "fp8", "fp8_e4m3")
-            and self.alibi_slopes is None
-            and self.sliding_window == (-1, -1)
-            and self.sinks is None
-        ):
-            from vllm.v1.attention.ops.prefix_prefill_tuning import (
-                warmup_context_attention,
-            )
-
-            config = self._context_attention_config
-            assert config is not None
-            spec = layer.get_kv_cache_spec(config)
-            assert spec is not None
-            warmup_context_attention(
-                device,
-                dtype,
-                self.num_heads,
-                self.num_kv_heads,
-                self.head_size,
-                spec.block_size,
-                self.scale,
-                config.scheduler_config.max_num_batched_tokens,
-                config.model_config.max_model_len,
-                config.scheduler_config.max_num_seqs,
-                kv_dtype=spec.dtype if spec.dtype != torch.uint8 else self.fp8_dtype,
-                **limits,
-            )
-            self._context_attention_warmed_up = True
 
     def forward(
         self,
@@ -558,7 +440,11 @@ class RocmAttentionImpl(AttentionImpl):
                 layer,
             )
 
-        key_cache, value_cache = self._split_kv_cache(kv_cache)
+        # The bound view is logical [B, 2, N, H*hs]; split_kv_cache expects
+        # the K/V groups first.
+        key_cache, value_cache = PagedAttention.split_kv_cache(
+            kv_cache.transpose(0, 1), self.num_kv_heads, self.head_size
+        )
 
         if is_quantized_kv_cache(self.kv_cache_dtype):
             key_cache = key_cache.view(self.fp8_dtype)
@@ -596,7 +482,6 @@ class RocmAttentionImpl(AttentionImpl):
             alibi_slopes=self.alibi_slopes,
             sliding_window=self.sliding_window[0],
             sm_scale=self.scale,
-            softcap=self.logits_soft_cap,
             output_scale=output_scale,
             sinks=self.sinks,
             causal=attn_metadata.causal,
@@ -614,7 +499,9 @@ class RocmAttentionImpl(AttentionImpl):
     ):
         if self.attn_type in (AttentionType.ENCODER_ONLY, AttentionType.ENCODER):
             return
-        key_cache, value_cache = self._split_kv_cache(kv_cache)
+        key_cache, value_cache = PagedAttention.split_kv_cache(
+            kv_cache.transpose(0, 1), self.num_kv_heads, self.head_size
+        )
 
         # Reshape the input keys and values and store them in the cache.
         # Get the actual block_size from value_cache
@@ -667,11 +554,13 @@ class RocmAttentionImpl(AttentionImpl):
     ):
         if self.attn_type in (AttentionType.ENCODER_ONLY, AttentionType.ENCODER):
             return
-        key_cache, value_cache = self._split_kv_cache(
-            kv_cache,
+        key_cache, value_cache = PagedAttention.split_kv_cache(
+            kv_cache.transpose(0, 1),
             layer.num_kv_heads,  # type: ignore[attr-defined]
             layer.head_size,  # type: ignore[attr-defined]
         )
+        flash_layout = False
+
         is_fp8_kv_cache = is_quantized_kv_cache(self.kv_cache_dtype)
         if is_fp8_kv_cache:
             key_cache = key_cache.view(self.fp8_dtype)
@@ -689,6 +578,6 @@ class RocmAttentionImpl(AttentionImpl):
             layer_slot_mapping,
             layer._k_scale,
             layer._v_scale,
-            False,
+            flash_layout,
             is_fp8_kv_cache,
         )

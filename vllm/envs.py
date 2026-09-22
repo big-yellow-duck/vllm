@@ -133,9 +133,7 @@ if TYPE_CHECKING:
     VLLM_USE_OINK_OPS: bool = False
     VLLM_MXFP8_EMULATION_DEQUANT_AT_LOAD: bool = True
     VLLM_ROCM_USE_AITER: bool = False
-    VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE: bool = False
     VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE: bool = True
-    VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL: bool = False
     VLLM_ROCM_USE_AITER_CUSTOM_AR: bool = True
     VLLM_ROCM_USE_AITER_LINEAR: bool = True
     VLLM_ROCM_USE_AITER_LINEAR_HIPBMM: bool = False
@@ -1233,22 +1231,12 @@ environment_variables: dict[str, Callable[[], Any]] = {
         os.getenv("VLLM_MXFP8_EMULATION_DEQUANT_AT_LOAD", "True").lower()
         in ("true", "1")
     ),
-    # Tune eligible ROCm context and segmented-attention kernels before
-    # KV-cache allocation and persist the winners under VLLM_CACHE_ROOT.
-    "VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE": lambda: bool(
-        int(os.getenv("VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE", "0"))
-    ),
     # ROCM_SEGMENTED_ATTN is opt-in; tune it by default unless explicitly disabled.
     "VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE": lambda: bool(
         int(os.getenv("VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE", "1"))
     ),
     "VLLM_ROCM_USE_AITER": lambda: (
         os.getenv("VLLM_ROCM_USE_AITER", "False").lower() in ("true", "1")
-    ),
-    # Enable the vLLM-owned RDNA4 FlyDSL SplitKV paged-attention backend.
-    "VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL": lambda: (
-        os.getenv("VLLM_ROCM_USE_RDNA4_SPLITKV_FLYDSL", "False").lower()
-        in ("true", "1")
     ),
     # Use AITER's CustomAllreduce as the custom-allreduce backend inside vLLM's
     # CudaCommunicator on ROCm. Also enables AITER AG/RS for DP communication.

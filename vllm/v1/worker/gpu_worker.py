@@ -541,15 +541,12 @@ class Worker(WorkerBase):
         """
         maybe_apply_startup_plan(self)
 
-        if current_platform.is_rocm() and (
-            envs.VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE
-            or envs.VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE
-        ):
-            from vllm.v1.attention.ops.prefix_prefill_tuning import (
-                warmup_rocm_context_attention,
+        if current_platform.is_rocm() and envs.VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE:
+            from vllm.v1.attention.ops.segmented_prefill_tuning import (
+                warmup_rocm_segmented_attention,
             )
 
-            warmup_rocm_context_attention(self.vllm_config, self.device)
+            warmup_rocm_segmented_attention(self.vllm_config, self.device)
 
         if kv_cache_memory_bytes := self.cache_config.kv_cache_memory_bytes:
             # still need a profile run which compiles the model for

@@ -68,12 +68,12 @@ def _cases() -> list[dict]:
 
 def _capture(run):
     run()
-    torch.cuda.synchronize()
+    torch.accelerator.synchronize()
     graph = torch.cuda.CUDAGraph()
     with torch.cuda.graph(graph):
         run()
     graph.replay()
-    torch.cuda.synchronize()
+    torch.accelerator.synchronize()
     return graph
 
 
@@ -107,7 +107,7 @@ def _probe(case: dict, samples: int, rounds: int) -> dict:
     query = case["queries"][0]
     sequence = case["sequence_length"]
     inputs = {key: value for key, value in case.items() if key != "sequence_length"}
-    data = make_inputs(**inputs, legacy_layout=False)
+    data = make_inputs(**inputs, legacy_layout=True)
 
     calls = {}
     outputs = {}
@@ -125,8 +125,8 @@ def _probe(case: dict, samples: int, rounds: int) -> dict:
             v=data["v"],
             o=outputs["context"],
             kv_cache_dtype="fp8" if case["fp8"] else "auto",
-            k_cache=data["kn"],
-            v_cache=data["vn"],
+            k_cache=data["kc"],
+            v_cache=data["vc"],
             b_loc=data["table"],
             b_start_loc=data["starts"],
             b_seq_len=data["lens"],
@@ -142,7 +142,7 @@ def _probe(case: dict, samples: int, rounds: int) -> dict:
     selected["context"] = {"kind": "context_attention_fwd_2d"}
     for run in calls.values():
         run()
-    torch.cuda.synchronize()
+    torch.accelerator.synchronize()
     errors = {
         name: _relative_l2(output, outputs["aiter"])
         for name, output in outputs.items()

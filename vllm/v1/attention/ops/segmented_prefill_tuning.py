@@ -72,7 +72,7 @@ def _normalized_config(config, batch, query_len, heads, dim):
 def _candidate_configs(default, batch, query_len, heads, dim):
     """Return a small search neighborhood that cannot grow the workspace."""
     base = _normalized_config(default, batch, query_len, heads, dim)
-    candidates = []
+    candidates: list[dict] = []
     seen = set()
 
     def add(**updates):
@@ -341,7 +341,7 @@ def _rotated(configs, offset):
 def _measure_configs(configs, run, device, eviction, rounds):
     """Interleave candidates so clock and thermal drift affect them evenly."""
     stream = torch.cuda.current_stream(device)
-    samples = {_config_key(config): [] for config in configs}
+    samples: dict[tuple, list[float]] = {_config_key(config): [] for config in configs}
     for round_index in range(rounds):
         events = []
         order = _rotated(configs, round_index)
@@ -614,7 +614,7 @@ def _save(path, data):
 
 def _load_records(path, identity, heads, kv_heads, dim, fp8):
     """Load a canonical table and any crash-recovery TP shards."""
-    records = {}
+    records: dict[tuple, dict] = {}
     merged_shards = []
     sources = [path, *sorted(path.parent.glob(f"{path.name}.tp*.part"))]
     for source in sources:
@@ -674,9 +674,9 @@ def _workload_weight(workload, max_tokens, heads, kv_heads, dim, fp8):
 
 def _shard_workloads(workloads, world_size, max_tokens, heads, kv_heads, dim, fp8):
     """Balance compile-affine ``(batch, query)`` groups across TP ranks."""
-    assignments = [[] for _ in range(world_size)]
+    assignments: list[list[tuple[int, tuple]]] = [[] for _ in range(world_size)]
     loads = [0] * world_size
-    groups = {}
+    groups: dict[tuple, dict] = {}
     for index, workload in enumerate(workloads):
         compile_group = groups.setdefault(workload[:2], {"weight": 0, "items": []})
         compile_group["weight"] += _workload_weight(
@@ -987,3 +987,43 @@ def get_segmented_config(
         ),
     )
     return dict(winner["best"])
+
+
+def warmup_rocm_segmented_attention(config, device):
+    """Tune the selected backend before KV-cache memory profiling."""
+    if not envs.VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE:
+        return
+
+    from vllm.v1.attention.backends.rocm_segmented_attn import (
+        RocmSegmentedAttentionImpl,
+    )
+    from vllm.v1.kv_cache_interface import FullAttentionSpec
+    from vllm.v1.worker.gpu.attn_utils import get_kv_cache_spec
+
+    layers = [
+        layer
+        for layer in config.compilation_config.static_forward_context.values()
+        if isinstance(getattr(layer, "impl", None), RocmSegmentedAttentionImpl)
+    ]
+    if not layers:
+        return
+
+    specs = get_kv_cache_spec(config)
+    layouts = tuple(
+        (spec.block_size, spec.page_size_bytes)
+        if isinstance(spec, FullAttentionSpec)
+        else (0, spec.max_memory_usage_bytes(config))
+        for spec in specs.values()
+    )
+    budget = _memory_budget(device)
+    for layer in layers:
+        impl = layer.impl
+        impl._segmented_attention_config = config
+        impl._warmup_segmented_attention(
+            layer,
+            device,
+            config.model_config.dtype,
+            memory_budget_bytes=budget,
+            cache_layouts=layouts,
+            cache_budget_bytes=budget,
+        )

@@ -4,7 +4,6 @@
 """Held-out correctness and repeated matched timing for the selected prototypes."""
 
 import argparse
-import hashlib
 import json
 import statistics
 from pathlib import Path
@@ -59,7 +58,7 @@ def correctness(nq, context, config):
                 data["vc"][physical, :, :, start:].fill_(float("nan"))
                 break
         graph.replay()
-        torch.cuda.synchronize()
+        torch.accelerator.synchronize()
         ref = reference(data)
         e = error(out, ref)
         assert torch.isfinite(out).all() and e < 0.01, (case, e)
@@ -68,7 +67,7 @@ def correctness(nq, context, config):
         data["q"].mul_(0.875)
         data["vd"].add_(3.0)
         graph.replay()
-        torch.cuda.synchronize()
+        torch.accelerator.synchronize()
         e2 = error(out, reference(data))
         assert torch.isfinite(out).all() and e2 < 0.01, (case, e2)
         assert not torch.equal(initial, out), "Graph did not consume changed inputs"
@@ -89,8 +88,6 @@ def correctness(nq, context, config):
 def baseline(data, nq, context, backend):
     from aiter.ops.triton.attention import unified_attention as aiter
 
-    from vllm import envs
-    from vllm.v1.attention.ops import prefix_prefill_tuning as tuning
     from vllm.v1.attention.ops.prefix_prefill import context_attention_fwd
 
     out = torch.empty_like(data["q"])
@@ -135,49 +132,8 @@ def baseline(data, nq, context, backend):
         else:
             run = invoke
     else:
-        identity = tuning._identity(
-            torch.device("cuda:0"), 12, 2, 256, 784, 0.0625, data["kc"].dtype
-        )
-        digest = hashlib.sha256(
-            json.dumps(identity, sort_keys=True).encode()
-        ).hexdigest()
-        cache = (
-            Path(envs.VLLM_CACHE_ROOT) / "rocm_context_attention" / (digest + ".json")
-        )
-        if cache.exists():
-            saved = json.loads(cache.read_text())
-            assert saved["identity"] == identity
-            tuning._TABLES[
-                tuning._key(
-                    torch.device("cuda:0"), 12, 2, 256, 784, 0.0625, data["kc"].dtype
-                )
-            ] = saved
-        config = tuning.get_context_attention_config(
-            torch.device("cuda:0"),
-            12,
-            2,
-            256,
-            784,
-            1,
-            nq,
-            context + nq,
-            0.0625,
-            data["kc"].dtype,
-        )
-        selected = dict(
-            config=config, cache_file=str(cache), cache_hit=config is not None
-        )
-
-        if backend == "rocm_attn_tuned":
-            config = dict(
-                BLOCK_M=16,
-                BLOCK_N=64,
-                num_unroll_cache=1,
-                num_unroll_request=1,
-                num_warps=4,
-                num_stages=1,
-            )
-            selected.update(config=config, isolated_launch_override=True)
+        if backend != "rocm_attn":
+            raise ValueError(f"Unsupported baseline {backend}")
 
         def run():
             context_attention_fwd(
@@ -197,7 +153,6 @@ def baseline(data, nq, context, backend):
                 data["vs"],
                 sm_scale=0.0625,
                 skip_decode=True,
-                _launch_config=config or tuning._DEFAULT,
             )
 
     return run, out, selected
@@ -214,7 +169,7 @@ def compare(nq, context, config, rounds, samples):
     keepers = []
     backends = ("prototype", "aiter", "rocm_attn")
     if nq == 2:
-        backends += ("aiter_32", "rocm_attn_tuned")
+        backends += ("aiter_32",)
     for name in backends:
         if name == "prototype":
             run, out = make_call(data, config, context)
@@ -222,7 +177,7 @@ def compare(nq, context, config, rounds, samples):
         else:
             run, out, selected = baseline(data, nq, context, name)
         run()
-        torch.cuda.synchronize()
+        torch.accelerator.synchronize()
         e = error(out, ref)
         assert e < 0.01 and torch.isfinite(out).all(), (name, e)
         for _ in range(20):
@@ -252,7 +207,7 @@ def compare(nq, context, config, rounds, samples):
                 reuse_us=measure(graph, read, False, samples),
             )
             graph.replay()
-            torch.cuda.synchronize()
+            torch.accelerator.synchronize()
             row["post_timing_error"] = error(keepers[ix][1], ref)
             assert (
                 row["post_timing_error"] < 0.01 and torch.isfinite(keepers[ix][1]).all()

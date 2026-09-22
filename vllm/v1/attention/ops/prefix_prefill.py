@@ -8,7 +8,6 @@ from typing import Any
 
 import torch
 
-import vllm.envs as envs
 from vllm.platforms import current_platform
 from vllm.triton_utils import tl, triton
 
@@ -21,6 +20,21 @@ IS_TURING = current_platform.get_device_capability() == (7, 5)
 float8_info = torch.finfo(current_platform.fp8_dtype())
 
 
+# Here's an example autotuner config for this kernel. This config does provide
+# a performance improvement, but dramatically increases first call latency in
+# triton 3.2. Because of this tradeoff, it's currently commented out.
+# @triton.autotune(
+#     configs=[
+#         triton.Config({'BLOCK_M': 128, 'BLOCK_N': 64, \
+#                         "num_unroll_cache": 4, \
+#                         "num_unroll_request": 1 } | \
+#                         ({"kpack": 2, "waves_per_eu": 2} \
+#                             if current_platform.is_rocm() else {}), \
+#                         num_warps=4, \
+#                         num_stages=1)
+#     ],
+#     key=["BLOCK_SIZE", "MAX_Q_LEN", "MAX_CTX_LEN"]
+# )
 @triton.jit
 def _paged_kv_cache_offsets(
     B_Loc,
@@ -153,7 +167,6 @@ def _fwd_kernel(
     # paged KV cache. This supports layers that re-attend an already-cached
     # sequence with query only (e.g. IQuest LoopCoder's `attn(q, None, None)`).
     KV_FROM_CACHE: tl.constexpr = False,
-    SKIP_SHORT_PREFILL: tl.constexpr = 0,
 ):
     cur_batch = tl.program_id(0)
     cur_head = tl.program_id(1)
@@ -168,8 +181,6 @@ def _fwd_kernel(
     cur_batch_ctx_len = cur_batch_seq_len - cur_batch_query_len
 
     if SKIP_DECODE and cur_batch_query_len == 1:
-        return
-    if SKIP_SHORT_PREFILL > 0 and cur_batch_query_len <= SKIP_SHORT_PREFILL:
         return
 
     # start position inside of the query
@@ -786,11 +797,7 @@ def context_attention_fwd(
     sinks=None,
     is_block_table_ptr: bool = False,
     causal: bool = True,
-    _launch_config: dict[str, int] | None = None,
 ):
-    unified_layout = (
-        k_cache.ndim == 4 and v_cache.ndim == 4 and k_cache.shape == v_cache.shape
-    )
     q_dtype_is_f32 = q.dtype is torch.float32
 
     # Turing does have tensor core for float32 multiplication
@@ -835,9 +842,8 @@ def context_attention_fwd(
                 "context_attention_fwd with cached K/V (key=None) is not "
                 "supported together with ALiBi slopes."
             )
-        # Legacy cache: [blocks, heads, dim // x, page, x]. Unified cache:
-        # [blocks, page, heads, dim].
-        num_kv_heads = k_cache.shape[2] if unified_layout else k_cache.shape[1]
+        # k_cache: [num_blocks, num_kv_heads, head_size // x, block_size, x]
+        num_kv_heads = k_cache.shape[1]
         Lq = Lk = Lv = q.shape[-1]
         # q is a never-dereferenced placeholder for the dense K/V pointer args.
         k = q
@@ -876,8 +882,6 @@ def context_attention_fwd(
         processed_b_loc = b_loc.to(torch.int32)
 
     if alibi_slopes is not None:
-        if unified_layout:
-            raise NotImplementedError("Unified KV layout is not supported with ALiBi")
         assert causal, "Non-causal prefix attention is not supported with alibi"
         assert sinks is None, "Sinks arg is not supported with alibi"
         assert fp8_out_scale is None, "FP8 output not supported with alibi"
@@ -943,72 +947,12 @@ def context_attention_fwd(
     if current_platform.is_rocm():
         extra_kargs = {}
 
-    if unified_layout:
-        real_block_size = v_cache.shape[1]
-        cache_x = 1
-        stride_k_cache_h = k_cache.stride(2)
-        stride_k_cache_d = k_cache.stride(3)
-        stride_k_cache_bl = k_cache.stride(1)
-        stride_k_cache_x = 1
-        stride_v_cache_h = v_cache.stride(2)
-        stride_v_cache_d = v_cache.stride(3)
-        stride_v_cache_bl = v_cache.stride(1)
-    else:
-        real_block_size = v_cache.shape[3]
-        cache_x = k_cache.shape[4]
-        stride_k_cache_h = k_cache.stride(1)
-        stride_k_cache_d = k_cache.stride(2)
-        stride_k_cache_bl = k_cache.stride(3)
-        stride_k_cache_x = k_cache.stride(4)
-        stride_v_cache_h = v_cache.stride(1)
-        stride_v_cache_d = v_cache.stride(2)
-        stride_v_cache_bl = v_cache.stride(3)
-    skip_short_prefill = 0
-
+    real_block_size = v_cache.shape[3]
     # _paged_kv_cache_offsets resolves context tokens against PHYSICAL_BLOCK_SIZE
     # individually, so tiles need not divide the page size.
     BLOCK_M = 128
     BLOCK_N = 64
     TRITON_BLOCK_SIZE = 32
-    launch_config = {
-        "BLOCK_M": BLOCK_M,
-        "BLOCK_N": BLOCK_N,
-        "num_unroll_cache": 4,
-        "num_unroll_request": 1,
-        "num_warps": 4,
-        "num_stages": 1,
-    }
-    if _launch_config is not None:
-        launch_config = _launch_config
-    elif (
-        envs.VLLM_ROCM_CONTEXT_ATTENTION_AUTOTUNE
-        and current_platform.is_rocm()
-        and q.dtype == torch.bfloat16
-        and k_cache.dtype == v_cache.dtype
-        and k_cache.dtype in (torch.bfloat16, torch.float8_e4m3fn)
-        and causal
-        and not sliding_window
-        and sinks is None
-        and fp8_out_scale is None
-        and not kv_from_cache
-        and not unified_layout
-    ):
-        from .prefix_prefill_tuning import get_context_attention_config
-
-        tuned_config = get_context_attention_config(
-            q.device,
-            head,
-            num_kv_heads,
-            Lk,
-            real_block_size,
-            batch,
-            max_input_len,
-            max_seq_len,
-            sm_scale,
-            kv_dtype=k_cache.dtype,
-        )
-        if tuned_config is not None:
-            launch_config = tuned_config
 
     grid_fn = lambda META: (batch, head, triton.cdiv(max_input_len, META["BLOCK_M"]))
     _fwd_kernel[grid_fn](
@@ -1025,7 +969,7 @@ def context_attention_fwd(
         1.0 / fp8_out_scale if fp8_out_scale is not None else 1.0,
         b_start_loc,
         b_seq_len,
-        cache_x,
+        k_cache.shape[4],
         o,
         processed_b_loc.stride(0),
         processed_b_loc.stride(1),
@@ -1042,14 +986,14 @@ def context_attention_fwd(
         o.stride(1),
         o.stride(2),
         stride_k_cache_bs=k_cache.stride(0),
-        stride_k_cache_h=stride_k_cache_h,
-        stride_k_cache_d=stride_k_cache_d,
-        stride_k_cache_bl=stride_k_cache_bl,
-        stride_k_cache_x=stride_k_cache_x,
+        stride_k_cache_h=k_cache.stride(1),
+        stride_k_cache_d=k_cache.stride(2),
+        stride_k_cache_bl=k_cache.stride(3),
+        stride_k_cache_x=k_cache.stride(4),
         stride_v_cache_bs=v_cache.stride(0),
-        stride_v_cache_h=stride_v_cache_h,
-        stride_v_cache_d=stride_v_cache_d,
-        stride_v_cache_bl=stride_v_cache_bl,
+        stride_v_cache_h=v_cache.stride(1),
+        stride_v_cache_d=v_cache.stride(2),
+        stride_v_cache_bl=v_cache.stride(3),
         BLOCK_SIZE=TRITON_BLOCK_SIZE,
         PHYSICAL_BLOCK_SIZE=real_block_size,
         num_queries_per_kv=num_queries_per_kv,
@@ -1059,11 +1003,15 @@ def context_attention_fwd(
         SLIDING_WINDOW=sliding_window,
         SKIP_DECODE=skip_decode,
         USE_FP8=fp8_out_scale is not None,
+        BLOCK_M=BLOCK_M,
+        BLOCK_N=BLOCK_N,
+        num_unroll_cache=4,
+        num_unroll_request=1,
+        num_warps=4,
+        num_stages=1,
         USE_SINKS=sinks is not None,
         CAUSAL=causal,
         KV_FROM_CACHE=kv_from_cache,
-        SKIP_SHORT_PREFILL=skip_short_prefill,
-        **launch_config,
         **extra_kargs,
     )
     return

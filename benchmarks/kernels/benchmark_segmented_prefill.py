@@ -13,10 +13,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import torch
-from benchmark_rocm_splitkv_paged_decode import _padded_cache_views
 from rdna4_prefill_prototype.eviction import ReadEviction
 
-from vllm import envs
 from vllm.v1.attention.ops.prefix_prefill import context_attention_fwd
 from vllm.v1.attention.ops.segmented_prefill import (
     MAX_QUERY_LEN,
@@ -25,6 +23,30 @@ from vllm.v1.attention.ops.segmented_prefill import (
     segmented_workspace_shapes,
     select_segmented_config,
 )
+
+
+def _padded_cache_views(
+    key_cache: torch.Tensor, value_cache: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    num_blocks = key_cache.shape[0]
+    page_elements = key_cache[0].numel()
+    backing = torch.empty(
+        num_blocks * 2 * page_elements,
+        dtype=key_cache.dtype,
+        device=key_cache.device,
+    )
+    padded_key = torch.as_strided(
+        backing, key_cache.shape, (2 * page_elements, *key_cache.stride()[1:])
+    )
+    padded_value = torch.as_strided(
+        backing,
+        value_cache.shape,
+        (2 * page_elements, *value_cache.stride()[1:]),
+        page_elements,
+    )
+    padded_key.copy_(key_cache)
+    padded_value.copy_(value_cache)
+    return padded_key, padded_value
 
 
 def measure(graph, flush, cold, samples=15):
@@ -236,37 +258,63 @@ def make_call(data, backend, config=None):
     elif backend.startswith("aiter"):
         from aiter.ops.triton.attention import unified_attention as aiter
 
-        original3d = aiter.select_3d_config
-        original2d = aiter.select_2d_config
         qs = torch.tensor(0.125, device=q.device) if backend == "aiter_fp8q" else None
         aq = (q.float() / qs).to(torch.float8_e4m3fn) if qs is not None else q
 
-        def choose3d(*args, **kw):
-            attn, reduce = original3d(*args, **kw)
-            attn, reduce = dict(attn), dict(reduce)
-            if config:
-                for target in (attn, reduce):
-                    if "splits" in config:
-                        target["NUM_SEGMENTS_PER_SEQ"] = config["splits"]
-                for key in ("TILE_SIZE", "num_warps", "num_stages"):
-                    if key in config:
-                        attn[key] = config[key]
-            selected.update(kind="3d", attention=attn, reduce=reduce)
-            return attn, reduce
-
-        def choose2d(*args, **kw):
-            result = dict(original2d(*args, **kw))
-            if config:
-                for key in ("TILE_SIZE", "num_warps", "num_stages"):
-                    if key in config:
-                        result[key] = config[key]
-            selected.update(kind="2d", attention=result)
-            return result
-
         def run():
             with ExitStack() as stack:
-                stack.enter_context(patch.object(aiter, "select_3d_config", choose3d))
-                stack.enter_context(patch.object(aiter, "select_2d_config", choose2d))
+                if hasattr(aiter, "get_unified_attention_config"):
+                    original = aiter.get_unified_attention_config
+
+                    def choose_config(op, *args, **kw):
+                        result = dict(original(op, *args, **kw))
+                        if config:
+                            if op == "kv_split" and "splits" in config:
+                                result["NUM_SEGMENTS"] = config["splits"]
+                            if op in ("attn_2d", "attn_3d"):
+                                for key in ("TILE_SIZE", "num_warps", "num_stages"):
+                                    if key in config:
+                                        result[key] = config[key]
+                        selected[op] = result
+                        return result
+
+                    stack.enter_context(
+                        patch.object(
+                            aiter, "get_unified_attention_config", choose_config
+                        )
+                    )
+                else:
+                    original3d = aiter.select_3d_config
+                    original2d = aiter.select_2d_config
+
+                    def choose3d(*args, **kw):
+                        attn, reduce = original3d(*args, **kw)
+                        attn, reduce = dict(attn), dict(reduce)
+                        if config:
+                            for target in (attn, reduce):
+                                if "splits" in config:
+                                    target["NUM_SEGMENTS_PER_SEQ"] = config["splits"]
+                            for key in ("TILE_SIZE", "num_warps", "num_stages"):
+                                if key in config:
+                                    attn[key] = config[key]
+                        selected.update(kind="3d", attention=attn, reduce=reduce)
+                        return attn, reduce
+
+                    def choose2d(*args, **kw):
+                        result = dict(original2d(*args, **kw))
+                        if config:
+                            for key in ("TILE_SIZE", "num_warps", "num_stages"):
+                                if key in config:
+                                    result[key] = config[key]
+                        selected.update(kind="2d", attention=result)
+                        return result
+
+                    stack.enter_context(
+                        patch.object(aiter, "select_3d_config", choose3d)
+                    )
+                    stack.enter_context(
+                        patch.object(aiter, "select_2d_config", choose2d)
+                    )
                 if config and "force3d" in config:
                     stack.enter_context(
                         patch.object(
@@ -294,70 +342,8 @@ def make_call(data, backend, config=None):
                     data["vs"],
                 )
     else:
-        if backend == "context" and config is None:
-            from vllm.v1.attention.ops import prefix_prefill_tuning as tuning
-
-            cache_dir = Path(envs.VLLM_CACHE_ROOT) / "rocm_context_attention"
-            expected_sha = None
-            if data.get("context_source"):
-                expected_sha = hashlib.sha256(
-                    (
-                        Path(data["context_source"])
-                        / "vllm/v1/attention/ops/prefix_prefill.py"
-                    ).read_bytes()
-                ).hexdigest()
-            for cache in sorted(cache_dir.glob("*.json")):
-                saved = json.loads(cache.read_text())
-                identity = saved["identity"]
-                if expected_sha and identity["kernel_sha256"] != expected_sha:
-                    continue
-                if all(
-                    identity[key] == value
-                    for key, value in {
-                        "heads": hq,
-                        "kv_heads": hk,
-                        "dim": dim,
-                        "page": data["kc"].shape[3],
-                        "kv_dtype": str(data["kc"].dtype),
-                    }.items()
-                ):
-                    tuning._TABLES[
-                        tuning._key(
-                            q.device,
-                            hq,
-                            hk,
-                            dim,
-                            data["kc"].shape[3],
-                            scale,
-                            data["kc"].dtype,
-                        )
-                    ] = saved
-                    config = tuning.get_context_attention_config(
-                        q.device,
-                        hq,
-                        hk,
-                        dim,
-                        data["kc"].shape[3],
-                        batch,
-                        maxq,
-                        maxs,
-                        scale,
-                        data["kc"].dtype,
-                    )
-                    selected.update(
-                        cache_file=str(cache), cache_identity=identity, launch=config
-                    )
-                    break
-            if config is None:
-                config = {
-                    "BLOCK_M": 128,
-                    "BLOCK_N": 64,
-                    "num_unroll_cache": 4,
-                    "num_unroll_request": 1,
-                    "num_warps": 4,
-                    "num_stages": 1,
-                }
-                selected.update(launch=config)
+        if backend != "context" or config is not None:
+            raise ValueError("Only the upstream static context launch is supported")
 
         def run():
             context_attention_fwd(
@@ -377,15 +363,13 @@ def make_call(data, backend, config=None):
                 data["vs"],
                 sm_scale=scale,
                 skip_decode=False,
-                _launch_config=config,
             )
 
     return run, out, selected
 
 
-def run_case(case, backends, samples=15, configs=None, context_source=None):
+def run_case(case, backends, samples=15, configs=None):
     data = make_inputs(**case)
-    data["context_source"] = context_source
     ref = reference(data)
     read = ReadEviction()
     write = torch.empty(256 * 1024**2, device="cuda", dtype=torch.int8)
@@ -401,7 +385,7 @@ def run_case(case, backends, samples=15, configs=None, context_source=None):
             try:
                 run, out, selected = make_call(data, backend, cfg)
                 run()
-                torch.cuda.synchronize()
+                torch.accelerator.synchronize()
                 err = (
                     (
                         (out.float() - ref).norm(dim=-1)
@@ -445,7 +429,6 @@ def main():
     p.add_argument("--configs", type=Path)
     p.add_argument("--backends", default="segmented,aiter")
     p.add_argument("--samples", type=int, default=15)
-    p.add_argument("--context-source", type=str)
     args = p.parse_args()
     cases = (
         json.loads(args.cases.read_text())
@@ -466,7 +449,6 @@ def main():
                 args.backends.split(","),
                 args.samples,
                 configs,
-                args.context_source,
             )
         )
         args.output.write_text(json.dumps(records, indent=2) + "\n")
