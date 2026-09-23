@@ -542,7 +542,7 @@ class Worker(WorkerBase):
         maybe_apply_startup_plan(self)
 
         if current_platform.is_rocm() and envs.VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE:
-            from vllm.v1.attention.ops.segmented_prefill_tuning import (
+            from vllm.v1.attention.ops.segmented_attention_tuning import (
                 warmup_rocm_segmented_attention,
             )
 
