@@ -1164,9 +1164,9 @@ def test_qwen3_nonstandard_block_size(
 
 
 def test_segmented_tuning_candidates_preserve_workspace_bound():
-    """Startup candidates may reduce but never enlarge reserved split scratch."""
-    from vllm.v1.attention.ops import segmented_prefill as segmented
-    from vllm.v1.attention.ops import segmented_prefill_tuning as tuning
+    """D128/D256 candidates retain their existing split scratch bound."""
+    from vllm.v1.attention.ops import segmented_attention as segmented
+    from vllm.v1.attention.ops import segmented_attention_tuning as tuning
 
     for batch, query_len, seq_len, heads, kv_heads, dim, fp8 in (
         (1, 1, 128, 8, 8, 128, True),
@@ -1178,7 +1178,7 @@ def test_segmented_tuning_candidates_preserve_workspace_bound():
             batch, query_len, seq_len, heads, kv_heads, dim, fp8
         )
         candidates = tuning._candidate_configs(default, batch, query_len, heads, dim)
-        assert 1 <= len(candidates) <= tuning._MAX_CANDIDATES
+        assert candidates
         assert (
             tuning._normalized_config(default, batch, query_len, heads, dim)
             in candidates
@@ -1187,9 +1187,36 @@ def test_segmented_tuning_candidates_preserve_workspace_bound():
         assert all(dim % config["bk"] == 0 for config in candidates)
 
 
+def test_segmented_d64_tuning_expands_tiles_and_sink_table_key():
+    from vllm.v1.attention.ops import segmented_attention_tuning as tuning
+    from vllm.v1.attention.ops.segmented_attention import select_segmented_config
+
+    default = select_segmented_config(1, 8, 8192, 16, 2, 64, True)
+    candidates = tuning._candidate_configs(default, 1, 8, 16, 64, seq_len=8192)
+    assert len(candidates) > 32
+    assert candidates[0] == tuning._normalized_config(default, 1, 8, 16, 64)
+    assert max(config["splits"] for config in candidates) > default["splits"]
+    assert {config["bm"] for config in candidates} >= {16, 32, 64}
+    assert {config["bn"] for config in candidates} >= {16, 32, 64}
+    common = ("cuda:0", torch.bfloat16, torch.float8_e4m3fn, 16, 2, 64, 64, 0.125)
+    assert tuning._key(*common, has_sinks=True) != tuning._key(*common, has_sinks=False)
+
+
+def test_segmented_d64_long_decode_keeps_one_warp_search():
+    from vllm.v1.attention.ops import segmented_attention_tuning as tuning
+    from vllm.v1.attention.ops.segmented_attention import select_segmented_config
+
+    for fp8 in (False, True):
+        default = select_segmented_config(1, 1, 131072, 16, 2, 64, fp8)
+        assert (default["splits"], default["warps"], default["bn"]) == (256, 1, 32)
+        candidates = tuning._candidate_configs(default, 1, 1, 16, 64, seq_len=131072)
+        assert candidates[0] == tuning._normalized_config(default, 1, 1, 16, 64)
+        assert {config["splits"] for config in candidates} >= {128, 256, 512}
+
+
 def test_segmented_fp8_d256_long_extend_config():
-    from vllm.v1.attention.ops import segmented_prefill_tuning as tuning
-    from vllm.v1.attention.ops.segmented_prefill import select_segmented_config
+    from vllm.v1.attention.ops import segmented_attention_tuning as tuning
+    from vllm.v1.attention.ops.segmented_attention import select_segmented_config
 
     for query_len, seq_len, splits in (
         (256, 8192, 4),
@@ -1216,7 +1243,7 @@ def test_segmented_fp8_d256_long_extend_config():
 
 
 def test_segmented_fp8_d128_long_extend_config():
-    from vllm.v1.attention.ops.segmented_prefill import select_segmented_config
+    from vllm.v1.attention.ops.segmented_attention import select_segmented_config
 
     for query_len, seq_len, heads, splits in (
         (256, 8192, 6, 4),
@@ -1253,7 +1280,7 @@ def test_segmented_fp8_d128_long_extend_config():
 
 @pytest.mark.parametrize("dim", (128, 256))
 def test_segmented_fp8_long_extend_split_workspace_bound(dim):
-    from vllm.v1.attention.ops.segmented_prefill import (
+    from vllm.v1.attention.ops.segmented_attention import (
         MAX_LONG_EXTEND_WORKSPACE_BYTES,
         segmented_query_capacity,
         select_segmented_config,
@@ -1311,7 +1338,7 @@ def test_segmented_fp8_long_extend_split_workspace_bound(dim):
 
 
 def test_segmented_bf16_d256_long_extend_config():
-    from vllm.v1.attention.ops.segmented_prefill import select_segmented_config
+    from vllm.v1.attention.ops.segmented_attention import select_segmented_config
 
     for query_len, seq_len in ((1024, 8192), (4096, 262144)):
         config = select_segmented_config(1, query_len, seq_len, 6, 1, 256, False)
@@ -1337,7 +1364,7 @@ def test_segmented_bf16_d256_long_extend_config():
 
 @torch.inference_mode()
 def test_segmented_bf16_d256_long_extend_matches_dense_reference():
-    from vllm.v1.attention.ops.segmented_prefill import segmented_prefill_attention
+    from vllm.v1.attention.ops.segmented_attention import run_segmented_attention
 
     case = _make_unified_paged_case(
         [1024],
@@ -1349,7 +1376,7 @@ def test_segmented_bf16_d256_long_extend_matches_dense_reference():
         fp8=False,
     )
     output = torch.empty_like(case["query"])
-    segmented_prefill_attention(
+    run_segmented_attention(
         case["query"],
         output,
         case["key_cache"],
@@ -1362,7 +1389,6 @@ def test_segmented_bf16_d256_long_extend_matches_dense_reference():
         case["k_scale"],
         case["v_scale"],
         256**-0.5,
-        skip_decode=False,
     )
     relative = (output.float() - case["reference"]).norm(dim=-1) / case[
         "reference"
@@ -1388,7 +1414,7 @@ def test_segmented_fp8_long_extend_matches_dense_reference(
     query_len, heads, qk_amplitude, dim
 ):
     from vllm.platforms.rocm import on_gfx12x
-    from vllm.v1.attention.ops.segmented_prefill import segmented_prefill_attention
+    from vllm.v1.attention.ops.segmented_attention import run_segmented_attention
 
     if not current_platform.is_rocm() or not on_gfx12x():
         pytest.skip("FP8 KV requires gfx12")
@@ -1429,7 +1455,7 @@ def test_segmented_fp8_long_extend_matches_dense_reference(
         scores.masked_fill_(future[None], -float("inf"))
         case["reference"] = torch.einsum("hqk,khd->qhd", scores.softmax(-1), full_value)
     output = torch.empty_like(case["query"])
-    segmented_prefill_attention(
+    run_segmented_attention(
         case["query"],
         output,
         case["key_cache"],
@@ -1442,7 +1468,6 @@ def test_segmented_fp8_long_extend_matches_dense_reference(
         case["k_scale"],
         case["v_scale"],
         dim**-0.5,
-        skip_decode=False,
     )
     relative = (output.float() - case["reference"]).norm(dim=-1) / case[
         "reference"
@@ -1452,7 +1477,7 @@ def test_segmented_fp8_long_extend_matches_dense_reference(
 
 def test_segmented_tuning_protects_static_incumbent():
     """Noise-sized gains must not replace the static configuration."""
-    from vllm.v1.attention.ops import segmented_prefill_tuning as tuning
+    from vllm.v1.attention.ops import segmented_attention_tuning as tuning
 
     incumbent = {"bm": 16}
     challenger = {"bm": 32}
@@ -1469,7 +1494,7 @@ def test_segmented_tuning_protects_static_incumbent():
 
 def test_segmented_tuning_promotes_verified_challenger():
     """A finalist with a stable material gain should replace the incumbent."""
-    from vllm.v1.attention.ops import segmented_prefill_tuning as tuning
+    from vllm.v1.attention.ops import segmented_attention_tuning as tuning
 
     incumbent = {"bm": 16}
     challenger = {"bm": 32}
@@ -1484,7 +1509,7 @@ def test_segmented_tuning_promotes_verified_challenger():
 
 def test_segmented_tuning_balances_tp_workloads_without_overlap():
     """Every missing bucket belongs to exactly one reasonably balanced rank."""
-    from vllm.v1.attention.ops import segmented_prefill_tuning as tuning
+    from vllm.v1.attention.ops import segmented_attention_tuning as tuning
 
     workloads = list(tuning._workloads(8192, 262144, 32))
     shards = tuning._shard_workloads(
@@ -1528,7 +1553,7 @@ def test_segmented_tuning_balances_tp_workloads_without_overlap():
 
 def test_segmented_tuning_prunes_scheduler_and_kv_limits():
     """Generated buckets must be reachable under scheduler and cache limits."""
-    from vllm.v1.attention.ops import segmented_prefill_tuning as tuning
+    from vllm.v1.attention.ops import segmented_attention_tuning as tuning
 
     limits = (8192, 262144, 32)
     raw = set(
@@ -1580,8 +1605,8 @@ def test_segmented_tuning_persists_without_retuning(tmp_path, monkeypatch):
     """A fresh process table must reuse persistent segmented winners."""
     from types import SimpleNamespace
 
-    from vllm.v1.attention.ops import segmented_prefill as segmented
-    from vllm.v1.attention.ops import segmented_prefill_tuning as tuning
+    from vllm.v1.attention.ops import segmented_attention as segmented
+    from vllm.v1.attention.ops import segmented_attention_tuning as tuning
 
     monkeypatch.setenv("VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE", "1")
     monkeypatch.setenv("VLLM_CACHE_ROOT", str(tmp_path))
@@ -1596,14 +1621,14 @@ def test_segmented_tuning_persists_without_retuning(tmp_path, monkeypatch):
     monkeypatch.setattr(tuning, "_memory_budget", lambda _: 2**50)
     calls = []
 
-    def tune(*args):
+    def tune(*args, **kwargs):
         heads, kv_heads, dim = args[3:6]
         batch, query_len, seq_len = args[-1]
         default = segmented.select_segmented_config(
             batch, query_len, seq_len, heads, kv_heads, dim, False
         )
         best = tuning._candidate_configs(default, batch, query_len, heads, dim)[0]
-        calls.append(args[-1])
+        calls.append((args[-1], kwargs))
         return {
             "workload": list(args[-1]),
             "query_lengths": tuning._query_lengths(batch, query_len, args[-2]),
@@ -1651,9 +1676,47 @@ def test_segmented_tuning_persists_without_retuning(tmp_path, monkeypatch):
     assert len(calls) > first_call_count
     assert len(list(tmp_path.rglob("*.json"))) == 2
 
+    # SWA and non-causal kernels need their own measured configuration. The
+    # full-attention cache must not silently supply either one.
+    tuning.warmup_segmented_attention(
+        *args, sliding_window=7, causal=False, max_query_len=2
+    )
+    assert len(list(tmp_path.rglob("*.json"))) == 3
+    assert any(
+        kwargs
+        == {
+            "sliding_window": 7,
+            "causal": False,
+            "has_sinks": False,
+            "physical_seq_len": None,
+        }
+        for _, kwargs in calls
+    )
+    swa_args = (
+        torch.device("cuda:0"),
+        torch.bfloat16,
+        torch.bfloat16,
+        4,
+        2,
+        128,
+        16,
+        128**-0.5,
+        1,
+        1,
+        8,
+    )
+    assert tuning.get_segmented_config(*swa_args, sliding_window=7, causal=False)
+    assert tuning.get_segmented_config(*swa_args, sliding_window=7, causal=True) is None
+    assert tuning.get_segmented_config(*swa_args, causal=False) is None
+
+    tuning.warmup_segmented_attention(*args, has_sinks=True)
+    assert len(list(tmp_path.rglob("*.json"))) == 4
+    assert tuning.get_segmented_config(*swa_args, has_sinks=True) is not None
+    assert any(kwargs["has_sinks"] for _, kwargs in calls)
+
     tuning._TABLES.clear()
 
-    def forbidden(*args):
+    def forbidden(*args, **kwargs):
         pytest.fail("Persistent segmented startup cache attempted to retune")
 
     monkeypatch.setattr(tuning, "_tune_workload", forbidden)
@@ -1707,7 +1770,7 @@ def test_segmented_tuning_persists_without_retuning(tmp_path, monkeypatch):
     ],
 )
 @torch.inference_mode()
-def test_segmented_prefill_ragged_unified_graph_replay(
+def test_segmented_attention_ragged_unified_graph_replay(
     monkeypatch, dim, page, hq, hk, dtype, kv_dtype, byte_cache, force_splits
 ):
     """Unified-cache segmented prefill follows metadata on graph replay."""
@@ -1852,7 +1915,7 @@ def test_segmented_backend_routes_unified_cache_to_segmented(
 ):
     from vllm.platforms.rocm import on_gfx1x, on_gfx12x
     from vllm.v1.attention.ops import segmented_attention as dispatcher
-    from vllm.v1.attention.ops import segmented_prefill as segmented
+    from vllm.v1.attention.ops import segmented_attention as segmented
 
     if not current_platform.is_rocm() or not (on_gfx12x() if fp8 else on_gfx1x()):
         pytest.skip("gfx1x segmented prefill (FP8 requires gfx12)")
@@ -1867,10 +1930,11 @@ def test_segmented_backend_routes_unified_cache_to_segmented(
     )
     output = torch.empty_like(case["query"])
     routed = []
-    original = segmented.segmented_prefill_attention
+    original = segmented.run_segmented_attention
     if force_splits is not None:
 
-        def tuned_config(*args):
+        def tuned_config(*args, **kwargs):
+            assert kwargs["has_sinks"] is False
             config = segmented.select_segmented_config(
                 args[8],
                 args[9],
@@ -1888,7 +1952,7 @@ def test_segmented_backend_routes_unified_cache_to_segmented(
         routed.append(True)
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(dispatcher, "segmented_prefill_attention", segmented_spy)
+    monkeypatch.setattr(dispatcher, "run_segmented_attention", segmented_spy)
     dispatcher.segmented_attention(
         query=case["query"],
         key=case["key"],
@@ -2005,7 +2069,7 @@ def test_rocm_segmented_attn_arch_gate(
 
 @pytest.mark.parametrize(
     "query_lens,context_lens,max_query_len,causal",
-    [([129, 1], [31, 64], 4097, True), ([33, 1], [31, 64], 33, False)],
+    [([129, 1], [31, 64], 4097, True)],
 )
 @torch.inference_mode()
 def test_segmented_backend_routes_unsupported_patterns_to_unified(
@@ -2037,7 +2101,7 @@ def test_segmented_backend_routes_unsupported_patterns_to_unified(
     monkeypatch.setattr(dispatcher, "unified_attention", unified_spy)
     monkeypatch.setattr(
         dispatcher,
-        "segmented_prefill_attention",
+        "run_segmented_attention",
         lambda *args, **kwargs: pytest.fail(
             "unsupported pattern routed to segmented prefill"
         ),
@@ -2068,14 +2132,356 @@ def test_segmented_backend_routes_unsupported_patterns_to_unified(
     assert torch.isfinite(output).all() and relative.max().item() < 0.01
 
 
+@torch.inference_mode()
+def test_segmented_backend_routes_per_request_causal_flags_to_unified(monkeypatch):
+    from vllm.platforms.rocm import on_gfx1x
+    from vllm.v1.attention.ops import segmented_attention as dispatcher
+
+    if not current_platform.is_rocm() or not on_gfx1x():
+        pytest.skip("gfx1x unified attention per-request causal fallback")
+
+    query_lens = [2, 3]
+    context_lens = [5, 6]
+    args = dict(num_heads=8, num_kv_heads=2, head_size=128, block_size=32, fp8=False)
+    case = _make_unified_paged_case(query_lens, context_lens, causal=True, **args)
+    noncausal_case = _make_unified_paged_case(
+        query_lens, context_lens, causal=False, **args
+    )
+    reference = torch.cat(
+        (
+            case["reference"][: query_lens[0]],
+            noncausal_case["reference"][query_lens[0] :],
+        )
+    )
+    causal = torch.tensor([True, False], device=case["query"].device)
+    output = torch.empty_like(case["query"])
+    routed = []
+    original_unified = dispatcher.unified_attention
+
+    def unified_spy(*args, **kwargs):
+        routed.append("unified")
+        assert kwargs["causal"] is causal
+        return original_unified(*args, **kwargs)
+
+    monkeypatch.setattr(dispatcher, "unified_attention", unified_spy)
+    monkeypatch.setattr(
+        dispatcher,
+        "run_segmented_attention",
+        lambda *args, **kwargs: pytest.fail("per-request flags reached segmented"),
+    )
+    dispatcher.segmented_attention(
+        query=case["query"],
+        key=case["key"],
+        value=case["value"],
+        output=output,
+        kv_cache_dtype="auto",
+        key_cache=case["key_cache"],
+        value_cache=case["value_cache"],
+        block_table=case["block_table"],
+        query_start_loc=case["starts"],
+        seq_lens=case["seq_lens"],
+        max_seq_len=case["max_seq_len"],
+        max_query_len=max(query_lens),
+        k_scale=case["k_scale"],
+        v_scale=case["v_scale"],
+        sm_scale=128**-0.5,
+        causal=causal,
+    )
+
+    assert routed == ["unified"]
+    relative = (output.float() - reference).norm(dim=-1) / reference.norm(
+        dim=-1
+    ).clamp_min(1e-6)
+    assert torch.isfinite(output).all() and relative.max().item() < 0.01
+
+
+@pytest.mark.parametrize("fp8", [False, True])
+@pytest.mark.parametrize("causal", [False, True])
+@pytest.mark.parametrize("window_size", [1, 2048])
+@torch.inference_mode()
+def test_segmented_backend_routes_sliding_window_to_segmented(
+    monkeypatch, fp8, causal, window_size
+):
+    from vllm.platforms.rocm import on_gfx1x, on_gfx12x
+    from vllm.v1.attention.ops import segmented_attention as dispatcher
+    from vllm.v1.attention.ops import segmented_attention as segmented
+
+    if not current_platform.is_rocm() or not (on_gfx12x() if fp8 else on_gfx1x()):
+        pytest.skip("gfx1x segmented prefill (FP8 requires gfx12)")
+    case = _make_unified_paged_case(
+        [8],
+        [4096],
+        num_heads=32,
+        num_kv_heads=8,
+        head_size=128,
+        block_size=32,
+        fp8=fp8,
+        causal=causal,
+        sliding_window=window_size,
+    )
+    output = torch.empty_like(case["query"])
+    routed = []
+    original = segmented.run_segmented_attention
+
+    def segmented_spy(*args, **kwargs):
+        routed.append((kwargs["sliding_window"], kwargs["causal"]))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(dispatcher, "run_segmented_attention", segmented_spy)
+    monkeypatch.setattr(
+        dispatcher,
+        "unified_attention",
+        lambda *args, **kwargs: pytest.fail(
+            "supported sliding-window pattern routed to unified attention"
+        ),
+    )
+    dispatcher.segmented_attention(
+        query=case["query"],
+        key=case["key"],
+        value=case["value"],
+        output=output,
+        kv_cache_dtype="fp8" if fp8 else "auto",
+        key_cache=case["key_cache"],
+        value_cache=case["value_cache"],
+        block_table=case["block_table"],
+        query_start_loc=case["starts"],
+        seq_lens=case["seq_lens"],
+        max_seq_len=case["max_seq_len"],
+        max_query_len=8,
+        k_scale=case["k_scale"],
+        v_scale=case["v_scale"],
+        sm_scale=128**-0.5,
+        sliding_window=window_size - 1,
+        causal=causal,
+    )
+
+    assert routed == [(window_size - 1, causal)]
+    relative = (output.float() - case["reference"]).norm(dim=-1) / case[
+        "reference"
+    ].norm(dim=-1).clamp_min(1e-6)
+    assert torch.isfinite(output).all() and relative.max().item() < 0.01
+
+
+@pytest.mark.parametrize("fp8", [False, True])
+@pytest.mark.parametrize("window_size", [0, 128])
+@pytest.mark.parametrize("head_size", [64, 128])
+@torch.inference_mode()
+def test_segmented_backend_routes_sinks_to_segmented(
+    monkeypatch, fp8, window_size, head_size
+):
+    from vllm.platforms.rocm import on_gfx1x, on_gfx12x
+    from vllm.v1.attention.ops import segmented_attention as dispatcher
+
+    if not current_platform.is_rocm() or not (on_gfx12x() if fp8 else on_gfx1x()):
+        pytest.skip("gfx1x segmented prefill (FP8 requires gfx12)")
+    sinks = torch.linspace(
+        -1.0,
+        8.0,
+        16,
+        device="cuda:0",
+        dtype=torch.bfloat16 if head_size == 64 else torch.float32,
+    )
+    case = _make_unified_paged_case(
+        [1, 7],
+        [127, 130],
+        num_heads=16,
+        num_kv_heads=2,
+        head_size=head_size,
+        block_size=32,
+        fp8=fp8,
+        sliding_window=window_size,
+        sinks=sinks,
+    )
+    output = torch.empty_like(case["query"])
+    original = dispatcher.run_segmented_attention
+    routed = []
+
+    def segmented_spy(*args, **kwargs):
+        routed.append(kwargs["sinks"])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(dispatcher, "run_segmented_attention", segmented_spy)
+    monkeypatch.setattr(
+        dispatcher,
+        "unified_attention",
+        lambda *args, **kwargs: pytest.fail("sink attention used unified fallback"),
+    )
+    dispatcher.segmented_attention(
+        query=case["query"],
+        key=case["key"],
+        value=case["value"],
+        output=output,
+        kv_cache_dtype="fp8" if fp8 else "auto",
+        key_cache=case["key_cache"],
+        value_cache=case["value_cache"],
+        block_table=case["block_table"],
+        query_start_loc=case["starts"],
+        seq_lens=case["seq_lens"],
+        max_seq_len=case["max_seq_len"],
+        max_query_len=7,
+        k_scale=case["k_scale"],
+        v_scale=case["v_scale"],
+        sm_scale=head_size**-0.5,
+        sliding_window=window_size - 1 if window_size else -1,
+        sinks=sinks,
+    )
+    assert len(routed) == 1 and routed[0] is sinks
+    relative = (output.float() - case["reference"]).norm(dim=-1) / case[
+        "reference"
+    ].norm(dim=-1).clamp_min(1e-6)
+    assert torch.isfinite(output).all() and relative.max().item() < 0.01
+
+
+@pytest.mark.parametrize("fp8", [False, True])
+@pytest.mark.parametrize("window_size", [0, 128])
+@pytest.mark.parametrize("query_len", [1, 8])
+@torch.inference_mode()
+def test_segmented_sink_split_reduce_matches_reference(fp8, window_size, query_len):
+    from vllm.platforms.rocm import on_gfx1x, on_gfx12x
+    from vllm.v1.attention.ops.segmented_attention import (
+        run_segmented_attention,
+        select_segmented_config,
+    )
+
+    if not current_platform.is_rocm() or not (on_gfx12x() if fp8 else on_gfx1x()):
+        pytest.skip("gfx1x segmented prefill (FP8 requires gfx12)")
+    sinks = torch.linspace(-1.0, 8.0, 16, device="cuda:0")
+    case = _make_unified_paged_case(
+        [query_len],
+        [8192 - query_len],
+        num_heads=16,
+        num_kv_heads=2,
+        head_size=64,
+        block_size=64,
+        fp8=fp8,
+        sliding_window=window_size,
+        sinks=sinks,
+    )
+    attention_span = min(8192, window_size + query_len) if window_size else 8192
+    config = dict(
+        select_segmented_config(1, query_len, attention_span, 16, 2, 64, fp8),
+        splits=4,
+    )
+    output = torch.empty_like(case["query"])
+    run_segmented_attention(
+        case["query"],
+        output,
+        case["key_cache"],
+        case["value_cache"],
+        case["block_table"],
+        case["starts"],
+        case["seq_lens"],
+        query_len,
+        8192,
+        case["k_scale"],
+        case["v_scale"],
+        64**-0.5,
+        sliding_window=window_size - 1 if window_size else -1,
+        sinks=sinks,
+        config=config,
+    )
+    relative = (output.float() - case["reference"]).norm(dim=-1) / case[
+        "reference"
+    ].norm(dim=-1).clamp_min(1e-6)
+    assert torch.isfinite(output).all() and relative.max().item() < 0.01
+
+
+def test_segmented_gpt_oss_head_size_and_short_window_config():
+    from vllm.platforms.rocm import on_gfx1x
+    from vllm.v1.attention.backend import AttentionType
+    from vllm.v1.attention.backends.rocm_segmented_attn import (
+        RocmSegmentedAttentionBackend,
+        RocmSegmentedAttentionImpl,
+    )
+    from vllm.v1.attention.ops.segmented_attention import select_segmented_config
+
+    if not current_platform.is_rocm() or not on_gfx1x():
+        pytest.skip("gfx1x segmented attention")
+    sinks = torch.ones(16, device="cuda:0", dtype=torch.bfloat16)
+    assert 64 in RocmSegmentedAttentionBackend.get_supported_head_sizes()
+    impl = RocmSegmentedAttentionImpl(
+        16,
+        64,
+        64**-0.5,
+        2,
+        None,
+        128,
+        "auto",
+        attn_type=AttentionType.DECODER,
+        sinks=sinks,
+    )
+    assert impl.sinks is sinks
+    for fp8 in (False, True):
+        assert select_segmented_config(1, 1, 128, 16, 2, 64, fp8) == {
+            "bm": 16,
+            "bn": 32 if fp8 else 64,
+            "bk": 64,
+            "splits": 1,
+            "warps": 4,
+            "stages": 1,
+        }
+
+
+@pytest.mark.parametrize("query_len,context_len", [(1, 8191), (8, 32760), (1, 131071)])
+@torch.inference_mode()
+def test_segmented_gpt_oss_full_fp8_decode_stays_segmented(
+    monkeypatch, query_len, context_len
+):
+    from vllm.platforms.rocm import on_gfx12x
+    from vllm.v1.attention.ops import segmented_attention as dispatcher
+
+    if not current_platform.is_rocm() or not on_gfx12x():
+        pytest.skip("FP8 KV requires gfx12")
+    sinks = torch.linspace(-1.0, 1.0, 16, device="cuda:0", dtype=torch.bfloat16)
+    case = _make_unified_paged_case(
+        [query_len],
+        [context_len],
+        num_heads=16,
+        num_kv_heads=2,
+        head_size=64,
+        block_size=64,
+        fp8=True,
+        sinks=sinks,
+    )
+    output = torch.empty_like(case["query"])
+    routed = []
+    original = dispatcher.run_segmented_attention
+
+    def segmented_spy(*args, **kwargs):
+        routed.append(True)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(dispatcher, "run_segmented_attention", segmented_spy)
+    dispatcher.segmented_attention(
+        query=case["query"],
+        key=case["key"],
+        value=case["value"],
+        output=output,
+        kv_cache_dtype="fp8",
+        key_cache=case["key_cache"],
+        value_cache=case["value_cache"],
+        block_table=case["block_table"],
+        query_start_loc=case["starts"],
+        seq_lens=case["seq_lens"],
+        max_seq_len=case["max_seq_len"],
+        max_query_len=query_len,
+        k_scale=case["k_scale"],
+        v_scale=case["v_scale"],
+        sm_scale=64**-0.5,
+        sinks=sinks,
+    )
+    assert routed == [True]
+    relative = (output.float() - case["reference"]).norm(dim=-1) / case[
+        "reference"
+    ].norm(dim=-1).clamp_min(1e-6)
+    assert torch.isfinite(output).all() and relative.max().item() < 0.01
+
+
 @pytest.mark.parametrize(
     "feature",
     [
-        "sliding_window",
-        "sinks",
         "softcap",
         "sliding_softcap",
-        "sliding_sinks",
         "output_scale",
     ],
 )
@@ -2089,11 +2495,8 @@ def test_segmented_backend_unified_feature_fallback_accuracy(monkeypatch, featur
 
     num_heads = 8
     configured_sliding_window = 16 if feature.startswith("sliding") else 0
-    sliding_window = configured_sliding_window - 1 if configured_sliding_window else 0
+    sliding_window = configured_sliding_window - 1 if configured_sliding_window else -1
     softcap = 5.0 if "softcap" in feature else 0.0
-    sinks = None
-    if "sinks" in feature:
-        sinks = torch.linspace(-0.5, 0.5, num_heads, device="cuda:0")
     case = _make_unified_paged_case(
         [7, 2],
         [40, 35],
@@ -2104,7 +2507,7 @@ def test_segmented_backend_unified_feature_fallback_accuracy(monkeypatch, featur
         fp8=False,
         sliding_window=configured_sliding_window,
         softcap=softcap,
-        sinks=sinks,
+        sinks=None,
     )
     output_scale = None
     if feature == "output_scale":
@@ -2114,7 +2517,6 @@ def test_segmented_backend_unified_feature_fallback_accuracy(monkeypatch, featur
         output = torch.empty_like(case["query"])
 
     routed = []
-    log_messages = []
     original_unified = dispatcher.unified_attention
 
     def unified_spy(*args, **kwargs):
@@ -2124,17 +2526,11 @@ def test_segmented_backend_unified_feature_fallback_accuracy(monkeypatch, featur
     monkeypatch.setattr(dispatcher, "unified_attention", unified_spy)
     monkeypatch.setattr(
         dispatcher,
-        "segmented_prefill_attention",
+        "run_segmented_attention",
         lambda *args, **kwargs: pytest.fail(
             "feature fallback routed to segmented prefill"
         ),
     )
-    monkeypatch.setattr(
-        dispatcher.logger,
-        "info_once",
-        lambda message, *args: log_messages.append(message),
-    )
-
     dispatcher.segmented_attention(
         query=case["query"],
         key=case["key"],
@@ -2154,18 +2550,10 @@ def test_segmented_backend_unified_feature_fallback_accuracy(monkeypatch, featur
         sliding_window=sliding_window,
         softcap=softcap,
         output_scale=output_scale,
-        sinks=sinks,
+        sinks=None,
     )
 
     assert routed == ["unified"]
-    if configured_sliding_window:
-        expected_log = (
-            "ROCM_SEGMENTED_ATTN is routing sliding-window attention to the "
-            "unified Triton attention fallback."
-        )
-        assert log_messages == [expected_log]
-    else:
-        assert not log_messages
 
     actual = output.float()
     if output_scale is not None:
@@ -2179,10 +2567,10 @@ def test_segmented_backend_unified_feature_fallback_accuracy(monkeypatch, featur
 
 
 @torch.inference_mode()
-def test_segmented_prefill_cache_offsets_cross_int32_boundary():
+def test_segmented_attention_cache_offsets_cross_int32_boundary():
     """A small logical prefix can live beyond 2**31 elements in a strided cache."""
     from vllm.platforms.rocm import on_gfx1x
-    from vllm.v1.attention.ops.segmented_prefill import segmented_prefill_attention
+    from vllm.v1.attention.ops.segmented_attention import run_segmented_attention
 
     if not current_platform.is_rocm() or not on_gfx1x():
         pytest.skip("gfx1x segmented prefill")
@@ -2215,7 +2603,7 @@ def test_segmented_prefill_cache_offsets_cross_int32_boundary():
     starts = torch.tensor([0, 2], device=device, dtype=torch.int32)
     lengths = torch.tensor([35], device=device, dtype=torch.int32)
     one = torch.ones((), device=device)
-    segmented_prefill_attention(
+    run_segmented_attention(
         q, out, kc, vc, table, starts, lengths, 2, 35, one, one, 128**-0.5
     )
     full_k = dense_k.flatten(0, 1)[:35].float().repeat_interleave(4, 1)

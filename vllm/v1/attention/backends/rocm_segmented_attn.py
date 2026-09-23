@@ -20,9 +20,10 @@ from vllm.v1.attention.backends.rocm_attn import (
     RocmAttentionMetadataBuilder,
 )
 from vllm.v1.attention.backends.utils import get_num_attention_heads_from_layers
-from vllm.v1.attention.ops.segmented_attention import segmented_attention
-from vllm.v1.attention.ops.segmented_prefill import (
-    reserve_segmented_prefill_workspace,
+from vllm.v1.attention.ops.segmented_attention import (
+    MAX_QUERY_LEN,
+    reserve_segmented_attention_workspace,
+    segmented_attention,
 )
 from vllm.v1.attention.ops.triton_reshape_and_cache_flash import (
     triton_reshape_and_cache_flash,
@@ -74,12 +75,12 @@ class RocmSegmentedAttentionMetadataBuilder(RocmAttentionMetadataBuilder):
         if (
             on_gfx1x()
             and (native_kv_supported or fp8_kv_supported)
-            and self.headdim in (128, 256)
+            and self.headdim in (64, 128, 256)
             and self.num_heads_kv > 0
             and self.num_heads_q % self.num_heads_kv == 0
             and 1 <= self.num_heads_q // self.num_heads_kv <= 16
         ):
-            reserve_segmented_prefill_workspace(
+            reserve_segmented_attention_workspace(
                 vllm_config.scheduler_config.max_num_seqs,
                 self.num_heads_q,
                 self.num_heads_kv,
@@ -119,7 +120,7 @@ class RocmSegmentedAttentionBackend(RocmAttentionBackend):
 
     @classmethod
     def get_supported_head_sizes(cls) -> list[int]:
-        return [128, 256]
+        return [64, 128, 256]
 
     @classmethod
     def supports_attn_type(cls, attn_type: str) -> bool:
@@ -127,7 +128,7 @@ class RocmSegmentedAttentionBackend(RocmAttentionBackend):
 
     @classmethod
     def supports_non_causal(cls) -> bool:
-        return False
+        return True
 
     @classmethod
     def supports_sliding_window(cls) -> bool:
@@ -136,6 +137,10 @@ class RocmSegmentedAttentionBackend(RocmAttentionBackend):
     @classmethod
     def supports_sink(cls) -> bool:
         return True
+
+    @classmethod
+    def supports_mm_prefix(cls) -> bool:
+        return False
 
     @classmethod
     def supports_combination(
@@ -210,14 +215,14 @@ class RocmSegmentedAttentionImpl(RocmAttentionImpl):
         if not (
             arch_supported
             and attn_type == AttentionType.DECODER
-            and head_size in (128, 256)
+            and head_size in (64, 128, 256)
             and gqa_ratio_supported
             and kv_cache_dtype in ("auto", "float16", "bfloat16", "fp8", "fp8_e4m3")
             and alibi_slopes is None
         ):
             raise ValueError(
-                "ROCM_SEGMENTED_ATTN requires causal decoder attention on gfx1x "
-                "(gfx12 for FP8), head size 128 or 256, GQA ratio 1-16, and "
+                "ROCM_SEGMENTED_ATTN requires decoder attention on gfx1x "
+                "(gfx12 for FP8), head size 64, 128 or 256, GQA ratio 1-16, and "
                 "does not support ALiBi."
             )
         logger.info_once("Using token-major ROCm segmented Triton attention")
@@ -229,11 +234,9 @@ class RocmSegmentedAttentionImpl(RocmAttentionImpl):
             envs.VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE
             and not self._segmented_attention_warmed_up
             and self.alibi_slopes is None
-            and self.sliding_window == (-1, -1)
-            and self.sinks is None
             and not self.logits_soft_cap
         ):
-            from vllm.v1.attention.ops.segmented_prefill_tuning import (
+            from vllm.v1.attention.ops.segmented_attention_tuning import (
                 warmup_segmented_attention,
             )
 
@@ -241,6 +244,16 @@ class RocmSegmentedAttentionImpl(RocmAttentionImpl):
             assert config is not None
             spec = layer.get_kv_cache_spec(config)
             assert spec is not None
+            sliding_window = self.sliding_window[0]
+            query_limit = getattr(layer, "segmented_query_limit", None)
+            if not isinstance(query_limit, int):
+                query_limit = MAX_QUERY_LEN
+            causal = getattr(layer, "segmented_causal", True)
+            if not isinstance(causal, bool):
+                causal = True
+            tuning_max_len = config.model_config.max_model_len
+            if sliding_window >= 0:
+                tuning_max_len = min(tuning_max_len, sliding_window + query_limit)
             warmup_segmented_attention(
                 device,
                 dtype,
@@ -250,9 +263,14 @@ class RocmSegmentedAttentionImpl(RocmAttentionImpl):
                 spec.block_size,
                 self.scale,
                 config.scheduler_config.max_num_batched_tokens,
-                config.model_config.max_model_len,
+                tuning_max_len,
                 config.scheduler_config.max_num_seqs,
                 kv_dtype=spec.dtype if spec.dtype != torch.uint8 else self.fp8_dtype,
+                sliding_window=sliding_window,
+                causal=causal,
+                has_sinks=self.sinks is not None,
+                physical_max_len=config.model_config.max_model_len,
+                max_query_len=query_limit,
                 **limits,
             )
             self._segmented_attention_warmed_up = True

@@ -223,17 +223,17 @@ def test_persistent_tensor_preserves_contents_and_rejects_changes() -> None:
 
 @pytest.mark.parametrize("dim,hq,hk", [(128, 16, 1), (256, 12, 2)])
 @pytest.mark.parametrize("fp8", [False, True])
-def test_segmented_prefill_reservation_covers_ragged_query_caps(
+def test_segmented_attention_reservation_covers_ragged_query_caps(
     monkeypatch, dim, hq, hk, fp8
 ):
     """Every supported query bucket fits the startup buffer after locking."""
-    from vllm.v1.attention.ops import segmented_prefill as segmented
+    from vllm.v1.attention.ops import segmented_attention as segmented
 
     monkeypatch.setattr(workspace, "dbo_current_ubatch_id", lambda: 0)
     manager = workspace.WorkspaceManager(torch.device("cpu"), num_lanes=1)
     monkeypatch.setattr(segmented, "is_workspace_manager_initialized", lambda: True)
     monkeypatch.setattr(segmented, "current_workspace_manager", lambda: manager)
-    segmented.reserve_segmented_prefill_workspace(
+    segmented.reserve_segmented_attention_workspace(
         32,
         hq,
         hk,
@@ -266,11 +266,11 @@ def test_segmented_prefill_reservation_covers_ragged_query_caps(
     assert len(pointers) == 1
 
 
-def test_segmented_prefill_reservation_respects_scheduler_token_limit(
+def test_segmented_attention_reservation_respects_scheduler_token_limit(
     monkeypatch,
 ) -> None:
     """Workspace planning excludes batch/query pairs the scheduler cannot form."""
-    from vllm.v1.attention.ops import segmented_prefill as segmented
+    from vllm.v1.attention.ops import segmented_attention as segmented
 
     calls = []
 
@@ -280,7 +280,7 @@ def test_segmented_prefill_reservation_respects_scheduler_token_limit(
 
     monkeypatch.setattr(segmented, "is_workspace_manager_initialized", lambda: True)
     monkeypatch.setattr(segmented, "select_segmented_config", record_config)
-    segmented.reserve_segmented_prefill_workspace(
+    segmented.reserve_segmented_attention_workspace(
         32,
         16,
         2,
@@ -295,8 +295,8 @@ def test_segmented_prefill_reservation_respects_scheduler_token_limit(
     assert (1, 8) in calls
 
 
-def test_segmented_prefill_query_capacity_buckets() -> None:
-    from vllm.v1.attention.ops.segmented_prefill import (
+def test_segmented_attention_query_capacity_buckets() -> None:
+    from vllm.v1.attention.ops.segmented_attention import (
         MAX_QUERY_LEN,
         segmented_query_capacity,
     )

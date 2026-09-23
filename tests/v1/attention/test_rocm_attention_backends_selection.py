@@ -64,8 +64,10 @@ def test_segmented_attention_uses_dedicated_backend_components():
     )
     assert RocmSegmentedAttentionBackend.get_impl_cls() is RocmSegmentedAttentionImpl
     assert RocmSegmentedAttentionBackend.get_name() == "ROCM_SEGMENTED_ATTN"
+    assert RocmSegmentedAttentionBackend.supports_non_causal()
     assert RocmSegmentedAttentionBackend.supports_sliding_window()
     assert RocmSegmentedAttentionBackend.supports_sink()
+    assert not RocmSegmentedAttentionBackend.supports_mm_prefix()
 
 
 @pytest.mark.parametrize(
@@ -126,6 +128,26 @@ def test_segmented_attention_is_opt_in(monkeypatch):
     assert path == AttentionBackendEnum.ROCM_SEGMENTED_ATTN.get_path()
 
 
+def test_segmented_attention_rejects_mm_prefix_at_selection(monkeypatch):
+    from vllm.platforms import rocm
+    from vllm.platforms.rocm import RocmPlatform
+
+    monkeypatch.setattr(rocm, "on_gfx1x", lambda: True)
+    config = AttentionSelectorConfig(
+        head_size=128,
+        dtype=torch.bfloat16,
+        kv_cache_dtype="auto",
+        block_size=32,
+        use_mm_prefix=True,
+    )
+
+    with pytest.raises(ValueError, match="multimodal token full attention"):
+        RocmPlatform.get_attn_backend_cls(
+            selected_backend=AttentionBackendEnum.ROCM_SEGMENTED_ATTN,
+            attn_selector_config=config,
+        )
+
+
 def test_segmented_attention_autotune_is_default_on_and_opt_out(monkeypatch):
     import vllm.envs as envs
     from vllm.platforms import rocm
@@ -153,9 +175,9 @@ def test_segmented_attention_autotune_is_default_on_and_opt_out(monkeypatch):
     config.compilation_config.static_forward_context = {"attn": layer}
 
     with patch(
-        "vllm.v1.attention.ops.segmented_prefill_tuning.warmup_segmented_attention"
+        "vllm.v1.attention.ops.segmented_attention_tuning.warmup_segmented_attention"
     ) as warmup:
-        from vllm.v1.attention.ops.segmented_prefill_tuning import (
+        from vllm.v1.attention.ops.segmented_attention_tuning import (
             warmup_rocm_segmented_attention,
         )
 
@@ -165,13 +187,30 @@ def test_segmented_attention_autotune_is_default_on_and_opt_out(monkeypatch):
                 return_value={},
             ),
             patch(
-                "vllm.v1.attention.ops.segmented_prefill_tuning._memory_budget",
+                "vllm.v1.attention.ops.segmented_attention_tuning._memory_budget",
                 return_value=1024,
             ),
         ):
             warmup_rocm_segmented_attention(config, torch.device("cuda:0"))
         warmup.assert_called_once()
         assert impl._segmented_attention_warmed_up
+
+        swa_impl = RocmSegmentedAttentionImpl(8, 128, 128**-0.5, 2, None, 8, "auto")
+        swa_impl._segmented_attention_config = config
+        swa_layer = MagicMock()
+        swa_layer.segmented_causal = False
+        swa_layer.segmented_query_limit = 8
+        swa_layer.get_kv_cache_spec.return_value.block_size = 16
+        swa_layer.get_kv_cache_spec.return_value.dtype = torch.bfloat16
+        warmup.reset_mock()
+        swa_impl._warmup_segmented_attention(
+            swa_layer, torch.device("cuda:0"), torch.bfloat16
+        )
+        warmup.assert_called_once()
+        assert warmup.call_args.args[8] == 15  # left extent 7 + eight queries
+        assert warmup.call_args.kwargs["sliding_window"] == 7
+        assert warmup.call_args.kwargs["causal"] is False
+        assert warmup.call_args.kwargs["max_query_len"] == 8
 
         monkeypatch.setenv("VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE", "0")
         assert not envs.VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE
