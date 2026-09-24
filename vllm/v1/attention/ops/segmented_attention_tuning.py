@@ -35,7 +35,7 @@ from .segmented_attention import (
 logger = init_logger(__name__)
 
 _TABLES: dict[tuple, dict] = {}
-_QUERY_BUCKETS = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096)
+_QUERY_BUCKETS = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192)
 _BATCH_BUCKETS = (1, 2, 4, 8, 16, 32)
 _SEQUENCE_BUCKETS = (128, 512, 2048, 8192, 32768, 131072, 262144)
 _COMPILE_WORKERS = 2
@@ -144,7 +144,7 @@ def _candidate_configs(default, batch, query_len, heads, dim, seq_len=None):
     for splits in split_choices:
         add(splits=splits)
 
-    tile_variants = (
+    tile_variants: tuple[tuple[int, int, int, int, int, int], ...] = (
         (16, 32, dim, 4, 1, 2),
         (16, 64, min(128, dim), 4, 1, 2),
         (32, 32, 64, 4, 2, 2),
@@ -355,6 +355,11 @@ def _workloads(
                 max(query_len, min(max_len, 8192)),
                 max_len,
             }
+            # Keep long-context verification and prefill buckets even when
+            # the model's maximum length is pruned by the KV memory budget.
+            sequences.update(
+                seq for seq in (32768, 131072) if query_len <= seq <= max_len
+            )
         for batch, seq_len in itertools.product(sorted(batches), sorted(sequences)):
             workload = (batch, query_len, seq_len)
             if (
