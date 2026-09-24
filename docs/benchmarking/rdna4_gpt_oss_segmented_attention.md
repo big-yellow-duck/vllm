@@ -115,11 +115,11 @@ cache cleanup. The long FP8 decode route also passed a 128K dense-reference
 test with a per-row relative error below 0.01.
 
 Correctness tests in
-[`test_prefix_prefill.py`](../../tests/kernels/attention/test_prefix_prefill.py)
+[`test_segmented_attention.py`](../../tests/kernels/attention/test_segmented_attention.py)
 compare D64 and D128 sink outputs with a dense reference for BF16 and FP8 KV,
 full and sliding-window attention, and forced multi-split reduction. They also
-check the D64 backend route, sink-aware tuning identity, and FP8 full-attention
-decode routing. The raw output is
+check sink-aware tuning cache isolation and long-context FP8 decode accuracy.
+The raw output is
 `/tmp/rdna4_gptoss_segmented_tuned_suite_final.log` on the profiling host;
 rerun the benchmark with `--suite --autotune --calls 5 --replays 5` to
 regenerate the full suite. Rerun the updated Q=1 row with

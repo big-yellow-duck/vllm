@@ -20,7 +20,7 @@ from vllm.v1.worker.workspace import (
 
 from .triton_unified_attention import unified_attention
 
-MAX_QUERY_LEN = 4096
+MAX_QUERY_LEN = 8192
 MAX_SPLITS = 64
 # D128 scratch cap; wider outputs scale this budget with head dimension.
 MAX_LONG_EXTEND_WORKSPACE_BYTES = 32 * 1024 * 1024

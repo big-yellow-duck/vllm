@@ -241,6 +241,6 @@ def test_segmented_attention_query_capacity_buckets() -> None:
     assert [
         segmented_query_capacity(query_len)
         for query_len in (1, 2, 3, 33, 129, 1025, 2049, MAX_QUERY_LEN)
-    ] == [1, 2, 4, 64, 256, 2048, 4096, 4096]
+    ] == [1, 2, 4, 64, 256, 2048, 4096, 8192]
     with pytest.raises(ValueError, match="Query length"):
         segmented_query_capacity(MAX_QUERY_LEN + 1)
