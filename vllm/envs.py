@@ -133,6 +133,7 @@ if TYPE_CHECKING:
     VLLM_USE_OINK_OPS: bool = False
     VLLM_MXFP8_EMULATION_DEQUANT_AT_LOAD: bool = True
     VLLM_ROCM_USE_AITER: bool = False
+    # Segmented attention autotuning is supported on RDNA GPUs only.
     VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE: bool = True
     VLLM_ROCM_USE_AITER_CUSTOM_AR: bool = True
     VLLM_ROCM_USE_AITER_LINEAR: bool = True
@@ -1240,6 +1241,8 @@ environment_variables: dict[str, Callable[[], Any]] = {
         os.getenv("VLLM_MXFP8_EMULATION_DEQUANT_AT_LOAD", "True").lower()
         in ("true", "1")
     ),
+    # Segmented attention autotuning is supported on RDNA GPUs only.
+    # ROCM_SEGMENTED_ATTN is opt-in; tune it by default unless explicitly disabled.
     "VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE": lambda: bool(
         int(os.getenv("VLLM_ROCM_SEGMENTED_ATTN_AUTOTUNE", "1"))
     ),
