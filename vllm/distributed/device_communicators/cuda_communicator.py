@@ -68,8 +68,11 @@ class CudaCommunicator(DeviceCommunicatorBase):
                 envs.VLLM_ALLREDUCE_USE_FLASHINFER_PCIE_IPC
                 and not envs.VLLM_BATCH_INVARIANT
             )
-            use_aiter_allreduce = use_custom_allreduce and bool(
-                rocm_aiter_ops.is_custom_all_reduce_enabled()
+            # Neither AITER nor QuickReduce all-reduce has a fixed reduction order.
+            use_aiter_allreduce = (
+                use_custom_allreduce
+                and not envs.VLLM_BATCH_INVARIANT
+                and bool(rocm_aiter_ops.is_custom_all_reduce_enabled())
             )
 
         is_rdna4 = False
@@ -200,6 +203,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
             and self.world_size > 1
             and not is_rdna4
             and current_platform.is_rocm()
+            and not envs.VLLM_BATCH_INVARIANT
         ):
             # Initialize a custom quick all-reduce implementation for AMD.
             # Quick reduce is designed as a complement to custom allreduce
