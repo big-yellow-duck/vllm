@@ -428,3 +428,55 @@ def test_scaled_mm_explicit_tiles_without_heuristic(in_dtype):
     )
     expected = torch_scaled_mm(a, b, sa, sb, torch.bfloat16)
     torch.testing.assert_close(actual, expected, rtol=1e-2, atol=1e-2)
+
+
+@pytest.mark.skipif(not current_platform.is_rocm(), reason="Requires gfx1201")
+@pytest.mark.parametrize(
+    "m,n,k", [(256, 3840, 4096), (64, 3840, 7680), (2048, 30720, 3840)]
+)
+def test_triton_fp8_prefill_policies_preserve_mutated_graph_inputs(m, n, k):
+    """Optimized prefill must preserve scaling and fresh compiled graph output."""
+    if torch.cuda.get_device_properties(0).gcnArchName.split(":")[0] != "gfx1201":
+        pytest.skip("Requires gfx1201")
+    importlib.import_module("vllm.model_executor.kernels.linear.scaled_mm.triton")
+    set_random_seed(0)
+    a = (0.2 * torch.randn(m, k, device=device)).to(torch.float8_e4m3fn)
+    b = (0.2 * torch.randn(n, k, device=device)).to(torch.float8_e4m3fn).t()
+    sa = torch.rand(m, 1, device=device) + 0.5
+    sb = torch.rand(n, 1, device=device) + 0.5
+
+    def run():
+        return torch.ops.vllm.w8a8_triton_per_token_scaled_mm_func(
+            a, b, sa, sb, torch.bfloat16, None
+        )
+
+    expected = torch_scaled_mm(a, b, sa, sb, torch.bfloat16)
+    torch.testing.assert_close(run(), expected, rtol=1e-2, atol=1e-2)
+    compiled = torch.compile(run, fullgraph=True)
+    torch.testing.assert_close(compiled(), expected, rtol=1e-2, atol=1e-2)
+    stream = torch.cuda.Stream()
+    stream.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(stream):
+        compiled()
+    stream.synchronize()
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph, stream=stream):
+        captured = compiled()
+    for _ in range(2):
+        a.copy_((0.2 * torch.randn(m, k, device=device)).to(a.dtype))
+        graph.replay()
+        torch.accelerator.synchronize()
+        expected = torch_scaled_mm(a, b, sa, sb, torch.bfloat16)
+        torch.testing.assert_close(captured, expected, rtol=1e-2, atol=1e-2)
+
+    # Unsupported activation/weight strides must retain masked access.
+    padded_a = torch.empty(m, k + 16, device=device, dtype=a.dtype)
+    padded_b = torch.empty(n, k + 16, device=device, dtype=b.dtype)
+    padded_a[:, :k].copy_(a)
+    padded_b[:, :k].copy_(b.t())
+    bias = torch.randn(n, device=device, dtype=torch.bfloat16)
+    actual = fp8_utils_module.w8a8_triton_per_token_scaled_mm(
+        padded_a[:, :k], padded_b[:, :k].t(), sa, sb, torch.bfloat16, bias
+    )
+    expected = torch_scaled_mm(a, b, sa, sb, torch.bfloat16, bias)
+    torch.testing.assert_close(actual, expected, rtol=1e-2, atol=1e-2)

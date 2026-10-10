@@ -9,6 +9,29 @@ from vllm.triton_utils.allocation import set_triton_allocator
 
 _TD_ALLOCATOR_DEVICES: set[torch.device] = set()
 
+_RDNA4_GROUPED_MM_SHAPES = {
+    (3840, 4096): 16,
+    (3840, 8192): 4,
+    (5120, 3840): 16,
+    (8192, 3840): 2,
+    (9216, 3840): 2,
+    (30720, 3840): 16,
+}
+_RDNA4_UNMASKED_MM_SHAPES = {
+    (64, 3840, 7680),
+    (64, 9216, 3840),
+    (128, 3840, 8192),
+    (256, 3840, 2048),
+}
+
+_RDNA4_STRIPED_MM_TILES = {
+    2048: (128, 64, 256, 8, 1),
+    4096: (128, 64, 256, 8, 1),
+    8192: (128, 64, 256, 8, 1),
+    16384: (128, 64, 256, 8, 1),
+    32768: (128, 64, 256, 8, 1),
+}
+
 
 def is_weak_contiguous(x: torch.Tensor):
     strides = x.stride()
@@ -43,13 +66,35 @@ def scaled_mm_kernel(
     BLOCK_SIZE_SCALE_B: tl.constexpr,
     USE_TD: tl.constexpr = False,
     B_T: tl.constexpr = False,
+    GROUP_M: tl.constexpr = 1,
+    N_STRIPE: tl.constexpr = 0,
+    UNMASKED_LOADS: tl.constexpr = False,
 ):
     pid = tl.program_id(axis=0)
 
     num_pid_n = tl.cdiv(N, BLOCK_SIZE_N)
 
-    pid_m = pid // num_pid_n
-    pid_n = pid % num_pid_n
+    if N_STRIPE > 0:
+        num_pid_m = tl.cdiv(M, BLOCK_SIZE_M)
+        stripe_span = num_pid_m * N_STRIPE
+        stripe_id = pid // stripe_span
+        first_n = stripe_id * N_STRIPE
+        stripe_width = tl.minimum(N_STRIPE, num_pid_n - first_n)
+        stripe_pid = pid % stripe_span
+        pid_m = stripe_pid // stripe_width
+        pid_n = first_n + stripe_pid % stripe_width
+    elif GROUP_M > 1:
+        num_pid_m = tl.cdiv(M, BLOCK_SIZE_M)
+        num_pid_in_group = GROUP_M * num_pid_n
+        group_id = pid // num_pid_in_group
+        first_pid_m = group_id * GROUP_M
+        group_size_m = tl.minimum(num_pid_m - first_pid_m, GROUP_M)
+        pid_in_group = pid % num_pid_in_group
+        pid_m = first_pid_m + pid_in_group % group_size_m
+        pid_n = pid_in_group // group_size_m
+    else:
+        pid_m = pid // num_pid_n
+        pid_n = pid % num_pid_n
 
     accumulator_dtype = ACCUMULATOR_DTYPE
     accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=accumulator_dtype)
@@ -124,10 +169,10 @@ def scaled_mm_kernel(
         else:
             masks_k = offsets_k < K
             masks_a = masks_am[:, None] & masks_k[None, :]
-            a = tl.load(a_ptrs, mask=masks_a)
+            a = tl.load(a_ptrs) if UNMASKED_LOADS else tl.load(a_ptrs, mask=masks_a)
 
             masks_b = masks_k[:, None] & masks_bn[None, :]
-            b = tl.load(b_ptrs, mask=masks_b)
+            b = tl.load(b_ptrs) if UNMASKED_LOADS else tl.load(b_ptrs, mask=masks_b)
 
         # Accumulate results.
         accumulator = tl.dot(a, b, accumulator, out_dtype=accumulator_dtype)
@@ -253,6 +298,72 @@ def triton_scaled_mm(
         set_triton_allocator(input.device)
         _TD_ALLOCATOR_DEVICES.add(input.device)
 
+    # Use measured gfx1201 prefill policies; other contracts retain defaults.
+    rdna4_prefill = (
+        not use_heuristic
+        and not use_td
+        and M > 32
+        and input.device.type == "cuda"
+        and torch.version.hip is not None
+        and input.dtype == torch.float8_e4m3fn
+        and out_dtype == torch.bfloat16
+        and scale_a.dtype == torch.float32
+        and input.stride() == (K, 1)
+        and weight.stride() == (1, K)
+        and getattr(
+            torch.cuda.get_device_properties(input.device), "gcnArchName", ""
+        ).split(":")[0]
+        == "gfx1201"
+    )
+    group_m = 1
+    if (
+        rdna4_prefill
+        and M in (256, 512, 1024, 2048, 4096, 8192, 16384, 32768)
+        and scale_a.is_contiguous()
+        and scale_b.is_contiguous()
+        and bias is None
+        and not has_scalar(scale_a)
+        and not has_scalar(scale_b)
+    ):
+        group_m = _RDNA4_GROUPED_MM_SHAPES.get((N, K), 1)
+        if (N, K) == (30720, 3840) and M <= 1024:
+            group_m = 8
+
+    n_stripe = 0
+    if (
+        rdna4_prefill
+        and (N, K) == (30720, 3840)
+        and all(
+            type(value) is int and value > 0
+            for value in (
+                block_size_m,
+                block_size_n,
+                block_size_k,
+                num_warps,
+                num_stages,
+            )
+        )
+        and (block_size_m, block_size_n, block_size_k, num_warps, num_stages)
+        == _RDNA4_STRIPED_MM_TILES.get(M)
+        and triton.cdiv(M, block_size_m) * triton.cdiv(N, block_size_n) <= 2147483647
+    ):
+        n_stripe = 16
+        group_m = 1
+
+    unmasked_loads = (
+        rdna4_prefill
+        and (M, N, K) in _RDNA4_UNMASKED_MM_SHAPES
+        and input.element_size() == 1
+        and weight.element_size() == 1
+        and input.data_ptr() % 16 == 0
+        and weight.data_ptr() % 16 == 0
+        and K % 16 == 0
+        and block_size_k % 16 == 0
+        and M % block_size_m == 0
+        and N % block_size_n == 0
+        and K % block_size_k == 0
+    )
+
     # A = input, B = weight, C = result
     # A = M x K, B = K x N, C = M x N
     launch_options = {} if num_stages is None else {"num_stages": num_stages}
@@ -280,6 +391,9 @@ def triton_scaled_mm(
         BLOCK_SIZE_SCALE_B=block_size_sb,
         USE_TD=use_td,
         B_T=b_t,
+        GROUP_M=group_m,
+        N_STRIPE=n_stripe,
+        UNMASKED_LOADS=unmasked_loads,
         num_warps=num_warps,
         **launch_options,
     )
