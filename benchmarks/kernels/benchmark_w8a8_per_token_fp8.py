@@ -8,6 +8,8 @@ Example: .venv/bin/python benchmarks/kernels/benchmark_w8a8_per_token_fp8.py
 Use --out-dtype float16 to tune FP16 output, --m to select batch sizes,
 --resume to continue an interrupted sweep, or --validate-only to compare
 installed configs against the default heuristic through the runtime custom op.
+Use --group-m and --n-stripe to search scheduling choices, and
+--unmasked-loads to request complete aligned operand loads.
 
 Configs are written to output-dir/configs. Copy them to
 vllm/model_executor/layers/quantization/utils/configs after validation.
@@ -39,12 +41,26 @@ from vllm.triton_utils import triton
 from vllm.utils.platform_utils import get_device_name_as_file_name
 
 
-def candidates():
-    keys = ("BLOCK_SIZE_M", "BLOCK_SIZE_N", "BLOCK_SIZE_K", "num_warps", "num_stages")
+def candidates(group_m, n_stripe, unmasked_loads):
+    keys = (
+        "BLOCK_SIZE_M",
+        "BLOCK_SIZE_N",
+        "BLOCK_SIZE_K",
+        "num_warps",
+        "num_stages",
+        "GROUP_M",
+        "N_STRIPE",
+    )
     return [
-        dict(zip(keys, values))
+        dict(zip(keys, values), UNMASKED_LOADS=unmasked_loads)
         for values in itertools.product(
-            (16, 32, 64, 128), (32, 64, 128), (64, 128, 256), (4, 8), (1, 2, 3)
+            (16, 32, 64, 128),
+            (32, 64, 128),
+            (64, 128, 256),
+            (4, 8),
+            (1, 2, 3),
+            group_m,
+            n_stripe,
         )
     ]
 
@@ -59,6 +75,9 @@ def call(a, b, sa, sb, config=None, out_dtype=torch.bfloat16):
             "block_size_k": config["BLOCK_SIZE_K"],
             "num_warps": config["num_warps"],
             "num_stages": config["num_stages"],
+            "group_m": config.get("GROUP_M", 1),
+            "n_stripe": config.get("N_STRIPE", 0),
+            "unmasked_loads": bool(config.get("UNMASKED_LOADS", False)),
         }
     return triton_scaled_mm(a, b, sa, sb, out_dtype, **kwargs)
 
@@ -94,6 +113,9 @@ def bench(fn, rep_ms):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--shapes", nargs="+", required=True, help="N,K pairs")
+    parser.add_argument("--group-m", type=int, nargs="+", default=[1])
+    parser.add_argument("--n-stripe", type=int, nargs="+", default=[0])
+    parser.add_argument("--unmasked-loads", action="store_true")
     parser.add_argument(
         "--m", "--batch-sizes", type=int, nargs="+", default=[2**i for i in range(16)]
     )
@@ -132,7 +154,13 @@ def main():
     result_path = args.output_dir / "results.jsonl"
     if result_path.exists() and not args.resume:
         raise FileExistsError("Choose a fresh output directory")
-    search = [] if args.validate_only else candidates()
+    if any(group < 1 for group in args.group_m) or any(n < 0 for n in args.n_stripe):
+        parser.error("GROUP_M must be positive and N_STRIPE nonnegative")
+    search = (
+        []
+        if args.validate_only
+        else candidates(args.group_m, args.n_stripe, args.unmasked_loads)
+    )
     if args.validate_only:
         import vllm.model_executor.kernels.linear.scaled_mm.triton  # noqa: F401
     metadata = {

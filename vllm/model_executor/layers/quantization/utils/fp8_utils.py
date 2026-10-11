@@ -961,7 +961,15 @@ def get_w8a8_per_token_fp8_config(
     # Partial decode tuning must not override unmeasured prefill sizes.
     if not configs or not min(configs) <= M <= max(configs):
         return None
-    return configs[min(configs, key=lambda m: abs(m - M))]
+    config = configs[min(configs, key=lambda m: abs(m - M))]
+    if M not in configs:
+        # Scheduling choices were measured only at their exact M, unlike tiles.
+        config = {
+            key: value
+            for key, value in config.items()
+            if key not in ("GROUP_M", "N_STRIPE", "UNMASKED_LOADS")
+        }
+    return config
 
 
 def w8a8_triton_per_token_scaled_mm(
@@ -984,6 +992,20 @@ def w8a8_triton_per_token_scaled_mm(
         )
     if config is None:
         return triton_scaled_mm(A, B, As, Bs, output_dtype, bias)
+
+    # Configs select the device/dtypes; retain the measured scale/bias contract.
+    group_m, n_stripe, unmasked_loads = 1, 0, False
+    if As.dtype == Bs.dtype == torch.float32:
+        n_stripe = config.get("N_STRIPE", 0)
+        unmasked_loads = bool(config.get("UNMASKED_LOADS", False))
+        if (
+            bias is None
+            and As.numel() != 1
+            and Bs.numel() != 1
+            and As.is_contiguous()
+            and Bs.is_contiguous()
+        ):
+            group_m = config.get("GROUP_M", 1)
     return triton_scaled_mm(
         A,
         B,
@@ -997,6 +1019,9 @@ def w8a8_triton_per_token_scaled_mm(
         block_size_k=config["BLOCK_SIZE_K"],
         num_warps=config["num_warps"],
         num_stages=config["num_stages"],
+        group_m=group_m,
+        n_stripe=n_stripe,
+        unmasked_loads=unmasked_loads,
     )
 
 

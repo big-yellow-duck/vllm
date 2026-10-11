@@ -51,6 +51,33 @@ def get_8bit_types():
     return types
 
 
+@pytest.fixture
+def scaled_mm_launches(monkeypatch):
+    launches = []
+    real_kernel = triton_scaled_mm_module.scaled_mm_kernel
+
+    class RecordingKernel:
+        def __getitem__(self, grid):
+            launch = real_kernel[grid]
+
+            def record(*args, **kwargs):
+                launches.append(kwargs)
+                return launch(*args, **kwargs)
+
+            return record
+
+    monkeypatch.setattr(triton_scaled_mm_module, "scaled_mm_kernel", RecordingKernel())
+    return launches
+
+
+@pytest.fixture
+def per_token_fp8_config_dir(monkeypatch, tmp_path):
+    monkeypatch.setattr(fp8_utils_module, "_W8A8_PER_TOKEN_FP8_CONFIG_DIR", tmp_path)
+    fp8_utils_module.get_w8a8_per_token_fp8_configs.cache_clear()
+    yield tmp_path
+    fp8_utils_module.get_w8a8_per_token_fp8_configs.cache_clear()
+
+
 # This test is to check regressions for int8 support on ROCm.
 @pytest.mark.parametrize(
     "model_path",
@@ -230,12 +257,10 @@ def test_triton_fp8_per_token_backend_preserves_linear_shape(out_dtype, use_bias
 @pytest.mark.parametrize("n", [256, 8192])
 @pytest.mark.parametrize("tuned", [False, True])
 def test_triton_fp8_per_token_dynamic_shapes_keep_runtime_tiles(
-    monkeypatch, tmp_path, n, tuned
+    per_token_fp8_config_dir, scaled_mm_launches, n, tuned
 ):
     """Prefill compilation must preserve decode tiles and GPU graph replay."""
     importlib.import_module("vllm.model_executor.kernels.linear.scaled_mm.triton")
-    monkeypatch.setattr(fp8_utils_module, "_W8A8_PER_TOKEN_FP8_CONFIG_DIR", tmp_path)
-    fp8_utils_module.get_w8a8_per_token_fp8_configs.cache_clear()
     tuned_config = {
         "BLOCK_SIZE_M": 32,
         "BLOCK_SIZE_N": 64,
@@ -251,24 +276,11 @@ def test_triton_fp8_per_token_dynamic_shapes_keep_runtime_tiles(
             current_platform.fp8_dtype(),
             torch.bfloat16,
         )
-        (tmp_path / filename).write_text(json.dumps({1: tuned_config, 8: tuned_config}))
+        (per_token_fp8_config_dir / filename).write_text(
+            json.dumps({1: tuned_config, 8: tuned_config})
+        )
     set_random_seed(0)
-    launches = []
-    real_kernel = triton_scaled_mm_module.scaled_mm_kernel
-
-    class RecordingKernel:
-        def __getitem__(self, grid):
-            launch = real_kernel[grid]
-
-            def record(*args, **kwargs):
-                launches.append(
-                    tuple(kwargs[f"BLOCK_SIZE_{dim}"] for dim in ("M", "N", "K"))
-                )
-                return launch(*args, **kwargs)
-
-            return record
-
-    monkeypatch.setattr(triton_scaled_mm_module, "scaled_mm_kernel", RecordingKernel())
+    launches = scaled_mm_launches
     k = 128
     b = (0.2 * torch.randn(n, k, device=device)).to(current_platform.fp8_dtype()).t()
     sb = torch.rand(n, 1, device=device) + 0.5
@@ -295,18 +307,21 @@ def test_triton_fp8_per_token_dynamic_shapes_keep_runtime_tiles(
             expected_tile = (32, 64, 128)
         expected = torch_scaled_mm(a, b, sa, sb, torch.bfloat16)
         actual = compiled(a, sa)
-        assert launches[-1] == expected_tile
+        assert (
+            tuple(launches[-1][f"BLOCK_SIZE_{dim}"] for dim in "MNK") == expected_tile
+        )
         torch.testing.assert_close(actual, expected, rtol=1e-2, atol=1e-2)
         torch.accelerator.synchronize()
         graph = torch.cuda.CUDAGraph()
         with torch.cuda.graph(graph):
             captured = compiled(a, sa)
-        assert launches[-1] == expected_tile
+        assert (
+            tuple(launches[-1][f"BLOCK_SIZE_{dim}"] for dim in "MNK") == expected_tile
+        )
         count = len(launches)
         graph.replay()
         torch.testing.assert_close(captured, expected, rtol=1e-2, atol=1e-2)
         assert len(launches) == count
-    fp8_utils_module.get_w8a8_per_token_fp8_configs.cache_clear()
 
 
 def test_per_token_fp8_config_respects_device_dtype_and_measured_m(
@@ -323,15 +338,18 @@ def test_per_token_fp8_config_respects_device_dtype_and_measured_m(
     )
     configs = {
         1: {"BLOCK_SIZE_M": 16},
-        2: {"BLOCK_SIZE_M": 32},
-        8: {"BLOCK_SIZE_M": 64},
+        2: {"BLOCK_SIZE_M": 32, "GROUP_M": 4},
+        8: {"BLOCK_SIZE_M": 64, "N_STRIPE": 16, "UNMASKED_LOADS": True},
     }
     (tmp_path / filename).write_text(json.dumps(configs))
     get = lambda m, out=torch.bfloat16: module.get_w8a8_per_token_fp8_config(
         m, 256, 128, dtype, out
     )
     assert get(1) == configs[1]
-    assert get(3) == configs[2]
+    assert get(2) == configs[2]
+    assert get(3) == {"BLOCK_SIZE_M": 32}
+    assert get(7) == {"BLOCK_SIZE_M": 64}
+    # Removing scheduling from a nearby M must not mutate the cached exact entry.
     assert get(8) == configs[8]
     assert get(0) is None
     assert get(16) is None
@@ -432,13 +450,36 @@ def test_scaled_mm_explicit_tiles_without_heuristic(in_dtype):
 
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="Requires gfx1201")
 @pytest.mark.parametrize(
-    "m,n,k", [(256, 3840, 4096), (64, 3840, 7680), (2048, 30720, 3840)]
+    "m,n,k,policy",
+    [
+        (256, 3840, 4096, {"GROUP_M": 16}),
+        (64, 3840, 7680, {"UNMASKED_LOADS": True}),
+        (2048, 30720, 3840, {"N_STRIPE": 16}),
+    ],
 )
-def test_triton_fp8_prefill_policies_preserve_mutated_graph_inputs(m, n, k):
-    """Optimized prefill must preserve scaling and fresh compiled graph output."""
+def test_triton_fp8_launch_policies_preserve_mutated_graph_inputs(
+    per_token_fp8_config_dir, scaled_mm_launches, m, n, k, policy
+):
+    """Each configured policy must execute and preserve fresh compiled graph output."""
     if torch.cuda.get_device_properties(0).gcnArchName.split(":")[0] != "gfx1201":
         pytest.skip("Requires gfx1201")
     importlib.import_module("vllm.model_executor.kernels.linear.scaled_mm.triton")
+    config = {
+        "BLOCK_SIZE_M": 64 if m == 64 else 128,
+        "BLOCK_SIZE_N": 64,
+        "BLOCK_SIZE_K": 256,
+        "num_warps": 8,
+        "num_stages": 1,
+        **policy,
+    }
+    filename = fp8_utils_module.get_w8a8_per_token_fp8_config_filename(
+        n,
+        k,
+        fp8_utils_module.get_device_name_as_file_name(),
+        torch.float8_e4m3fn,
+        torch.bfloat16,
+    )
+    (per_token_fp8_config_dir / filename).write_text(json.dumps({m: config}))
     set_random_seed(0)
     a = (0.2 * torch.randn(m, k, device=device)).to(torch.float8_e4m3fn)
     b = (0.2 * torch.randn(n, k, device=device)).to(torch.float8_e4m3fn).t()
@@ -452,6 +493,25 @@ def test_triton_fp8_prefill_policies_preserve_mutated_graph_inputs(m, n, k):
 
     expected = torch_scaled_mm(a, b, sa, sb, torch.bfloat16)
     torch.testing.assert_close(run(), expected, rtol=1e-2, atol=1e-2)
+    requested = tuple(
+        policy.get(key, default)
+        for key, default in (
+            ("GROUP_M", 1),
+            ("N_STRIPE", 0),
+            ("UNMASKED_LOADS", False),
+        )
+    )
+    assert (
+        tuple(
+            scaled_mm_launches[-1][key]
+            for key in (
+                "GROUP_M",
+                "N_STRIPE",
+                "UNMASKED_LOADS",
+            )
+        )
+        == requested
+    )
     compiled = torch.compile(run, fullgraph=True)
     torch.testing.assert_close(compiled(), expected, rtol=1e-2, atol=1e-2)
     stream = torch.cuda.Stream()
@@ -480,3 +540,106 @@ def test_triton_fp8_prefill_policies_preserve_mutated_graph_inputs(m, n, k):
     )
     expected = torch_scaled_mm(a, b, sa, sb, torch.bfloat16, bias)
     torch.testing.assert_close(actual, expected, rtol=1e-2, atol=1e-2)
+    assert tuple(
+        scaled_mm_launches[-1][key]
+        for key in (
+            "GROUP_M",
+            "N_STRIPE",
+            "UNMASKED_LOADS",
+        )
+    ) == (1, 0, False)
+
+
+@pytest.mark.parametrize("in_dtype", get_8bit_types())
+@pytest.mark.parametrize("scale_ndim", [1, 2])
+def test_scaled_mm_noncontiguous_scales_preserve_values(in_dtype, scale_ndim):
+    """Strided scale views must use their logical values, including in the fallback."""
+    set_random_seed(0)
+    m, n, k = 33, 97, 128
+    a = torch.randint(-4, 4, (m, k), device=device).to(in_dtype)
+    b = torch.randint(-4, 4, (n, k), device=device).to(in_dtype).t()
+    sa = torch.rand(2 * m, device=device)[1::2]
+    sb = torch.rand(2 * n, device=device)[1::2]
+    if scale_ndim == 2:
+        sa, sb = sa[:, None], sb[:, None]
+    assert not sa.is_contiguous() and not sb.is_contiguous()
+    expected = torch_scaled_mm(
+        a, b, sa.reshape(-1, 1), sb.reshape(-1, 1), torch.bfloat16
+    )
+    actual = triton_scaled_mm(a, b, sa, sb, torch.bfloat16)
+    torch.testing.assert_close(actual, expected, rtol=1e-2, atol=1e-2)
+
+
+@pytest.mark.skipif(not current_platform.supports_fp8(), reason="Requires FP8")
+@pytest.mark.parametrize(
+    "variant",
+    [
+        "group_tail",
+        "stripe_tail",
+        "aligned",
+        "m_tail",
+        "n_tail",
+        "k_tail",
+        "padded",
+        "unaligned",
+    ],
+)
+def test_scaled_mm_launch_policy_handles_tile_and_layout_boundaries(
+    scaled_mm_launches, variant
+):
+    """Cover partial groups/stripes and mask incomplete operand tiles."""
+    set_random_seed(0)
+    m, n, k = 64, 160, 128
+    group_m, n_stripe, unmasked = 1, 0, True
+    if variant in ("group_tail", "stripe_tail"):
+        m = 129
+        group_m = 3 if variant == "group_tail" else 1
+        n_stripe = 4 if variant == "stripe_tail" else 0
+        unmasked = False
+    elif variant == "m_tail":
+        m += 1
+    elif variant == "n_tail":
+        n += 1
+    elif variant == "k_tail":
+        k += 16
+    dtype = current_platform.fp8_dtype()
+    a = torch.randint(-4, 4, (m, k), device=device).to(dtype)
+    b = torch.randint(-4, 4, (n, k), device=device).to(dtype).t()
+    if variant == "padded":
+        padded_a = torch.empty(m, k + 16, device=device, dtype=dtype)
+        padded_b = torch.empty(n, k + 16, device=device, dtype=dtype)
+        padded_a[:, :k].copy_(a)
+        padded_b[:, :k].copy_(b.t())
+        a, b = padded_a[:, :k], padded_b[:, :k].t()
+    elif variant == "unaligned":
+        offset_a = torch.empty(m * k + 1, device=device, dtype=dtype)[1:].view(m, k)
+        offset_b = torch.empty(n * k + 1, device=device, dtype=dtype)[1:].view(n, k)
+        offset_a.copy_(a)
+        offset_b.copy_(b.t())
+        a, b = offset_a, offset_b.t()
+    sa, sb = torch.rand(m, 1, device=device), torch.rand(n, 1, device=device)
+    actual = triton_scaled_mm(
+        a,
+        b,
+        sa,
+        sb,
+        torch.bfloat16,
+        use_heuristic=False,
+        use_td=False,
+        block_size_m=32,
+        block_size_n=32,
+        block_size_k=64,
+        group_m=group_m,
+        n_stripe=n_stripe,
+        unmasked_loads=unmasked,
+    )
+    expected = torch_scaled_mm(a, b, sa, sb, torch.bfloat16)
+    torch.testing.assert_close(actual, expected, rtol=1e-2, atol=1e-2)
+    assert tuple(
+        scaled_mm_launches[-1][key]
+        for key in (
+            "GROUP_M",
+            "N_STRIPE",
+            "UNMASKED_LOADS",
+        )
+    ) == (group_m, n_stripe, variant == "aligned")
