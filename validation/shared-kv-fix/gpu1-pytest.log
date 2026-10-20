@@ -1,0 +1,9 @@
+✨ Pixi task (segmented-python): bash scripts/run_segmented_gemma.sh -m pytest vllm-segmented-attn-gemma/tests/kernels/attention/test_segmented_attention.py -q -k (cache_only_reader or layout_cache_update) and 512
+..........                                                               [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/torch/jit/_script.py:365: 14 warnings
+  /home/ellm/jeff/rocm_workspaces/10/gfx1201/.venv/lib/python3.12/site-packages/torch/jit/_script.py:365: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+10 passed, 135 deselected, 14 warnings in 11.07s

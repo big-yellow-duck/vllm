@@ -1,0 +1,70 @@
+{
+  "metadata": {
+    "labels": {
+      "workload": "simple-agent-multiturn-prefix-cache"
+    }
+  },
+  "spec": {
+    "backend": {
+      "kind": "openai_http",
+      "target": "http://127.0.0.1:8026",
+      "request_format": "/v1/chat/completions",
+      "stream": true,
+      "model": "RedHatAI/gemma-4-12B-it-FP8-Dynamic",
+      "extras": {
+        "temperature": 0
+      }
+    },
+    "profile": {
+      "kind": "concurrent",
+      "streams": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "rampup_duration": 0,
+      "warmup": {
+        "mode": "requests",
+        "value": 1
+      }
+    },
+    "constraints": [
+      {
+        "kind": "max_requests",
+        "count": [
+          8,
+          16,
+          32,
+          64
+        ]
+      }
+    ],
+    "data": [
+      {
+        "kind": "synthetic_text",
+        "turns": 8,
+        "prompt_tokens": 2048,
+        "output_tokens": 512
+      }
+    ],
+    "seed": {
+      "kind": "static",
+      "value": 20260715
+    },
+    "outputs": [
+      {
+        "kind": "json",
+        "path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/vllm-bench-collection/results/gfx1201/gemma-4-12b-fp8-dynamic/segmented-update-20261016/tp2-segmented-after-full-decode-rep1/agent-multiturn-benchmarks.json"
+      }
+    ],
+    "metrics": {
+      "kind": "generative",
+      "sample_size": 0
+    },
+    "tokenizer": {
+      "kind": "huggingface_auto",
+      "model": "/home/ellm/.cache/huggingface/hub/models--RedHatAI--gemma-4-12B-it-FP8-Dynamic/snapshots/2083adceb2a3df0465e6021e08a7196d21dbbb44"
+    }
+  }
+}

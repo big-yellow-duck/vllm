@@ -1,0 +1,40 @@
+{
+  "id": "chatcmpl-a6056cce398af1e1",
+  "object": "chat.completion",
+  "created": 1792142836,
+  "model": "Qwen/Qwen3.8-27B-FP8",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "The user is asking for a short greeting. This is a simple request. I should respond with a brief, friendly greeting.\n</think>\n\nHello! \ud83d\udc4b",
+        "refusal": null,
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "reasoning": null
+      },
+      "logprobs": null,
+      "finish_reason": "length",
+      "stop_reason": null,
+      "token_ids": null,
+      "routed_experts": null
+    }
+  ],
+  "service_tier": null,
+  "system_fingerprint": "vllm-0.1.dev22962+gd9a543c50-tp2-550bc891",
+  "usage": {
+    "prompt_tokens": 58,
+    "total_tokens": 90,
+    "completion_tokens": 32,
+    "prompt_tokens_details": null,
+    "completion_tokens_details": null
+  },
+  "prompt_logprobs": null,
+  "prompt_token_ids": null,
+  "prompt_text": null,
+  "kv_transfer_params": null,
+  "ec_transfer_params": null,
+  "metrics": null
+}

@@ -1,0 +1,1134 @@
+{
+  "results": [
+    {
+      "model": "/home/ellm/.cache/huggingface/hub/models--RedHatAI--gemma-4-26B-A4B-it-FP8-dynamic/snapshots/ed35d7abe5d940da41b4ff06eb482feb0be8cb44",
+      "tp": 2,
+      "dtype": "torch.bfloat16",
+      "kv_cache_dtype": "fp8",
+      "attention_layers": [
+        {
+          "name": "language_model.model.layers.0.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.1.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.2.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.3.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.4.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.5.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.6.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.7.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.8.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.9.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.10.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.11.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.12.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.13.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.14.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.15.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.16.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.17.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.18.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.19.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.20.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.21.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.22.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.23.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.24.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.25.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.26.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.27.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.28.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.29.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "draft_model.layers.0.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": "language_model.model.layers.28.self_attn.attn",
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "draft_model.layers.1.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": "language_model.model.layers.28.self_attn.attn",
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "draft_model.layers.2.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": "language_model.model.layers.28.self_attn.attn",
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "draft_model.layers.3.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": "language_model.model.layers.29.self_attn.attn",
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        }
+      ],
+      "tuning_tables": [],
+      "segmented_sources": {
+        "ops": {
+          "path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/ops/segmented_attention.py",
+          "sha256": "cef3242c0e76863afc1dffdcf2cae34dc86a0c67711f77cb9c29502e4fc728e8"
+        },
+        "tuner": {
+          "path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/model_executor/warmup/rocm_segmented_attn_autotune_warmup.py",
+          "sha256": "2dfc181e90a5f24ef0d3ad219858cf95c3f8eccae133ae2af6943c68c1454a0b"
+        }
+      },
+      "speculative_method": "mtp",
+      "num_speculative_tokens": 1
+    },
+    {
+      "model": "/home/ellm/.cache/huggingface/hub/models--RedHatAI--gemma-4-26B-A4B-it-FP8-dynamic/snapshots/ed35d7abe5d940da41b4ff06eb482feb0be8cb44",
+      "tp": 2,
+      "dtype": "torch.bfloat16",
+      "kv_cache_dtype": "fp8",
+      "attention_layers": [
+        {
+          "name": "language_model.model.layers.0.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.1.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.2.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.3.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.4.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.5.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.6.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.7.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.8.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.9.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.10.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.11.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.12.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.13.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.14.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.15.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.16.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.17.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.18.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.19.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.20.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.21.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.22.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.23.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.24.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.25.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.26.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.27.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.28.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "language_model.model.layers.29.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "draft_model.layers.0.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": "language_model.model.layers.28.self_attn.attn",
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "draft_model.layers.1.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": "language_model.model.layers.28.self_attn.attn",
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "draft_model.layers.2.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": "language_model.model.layers.28.self_attn.attn",
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        },
+        {
+          "name": "draft_model.layers.3.self_attn.attn",
+          "backend": "TRITON_ATTN",
+          "implementation": "TritonAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": "language_model.model.layers.29.self_attn.attn",
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/backends/triton_attn.py",
+          "source_sha256": "bae8da69fe924739e0633f04b27907d52c4b3007ebae42d4c3b7c446edf65a2c"
+        }
+      ],
+      "tuning_tables": [],
+      "segmented_sources": {
+        "ops": {
+          "path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/v1/attention/ops/segmented_attention.py",
+          "sha256": "cef3242c0e76863afc1dffdcf2cae34dc86a0c67711f77cb9c29502e4fc728e8"
+        },
+        "tuner": {
+          "path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp/vllm/model_executor/warmup/rocm_segmented_attn_autotune_warmup.py",
+          "sha256": "2dfc181e90a5f24ef0d3ad219858cf95c3f8eccae133ae2af6943c68c1454a0b"
+        }
+      },
+      "speculative_method": "mtp",
+      "num_speculative_tokens": 1
+    }
+  ]
+}

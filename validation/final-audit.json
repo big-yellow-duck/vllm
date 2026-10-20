@@ -1,0 +1,1001 @@
+{
+  "completed": "2026-10-16T12:18:29.928089+00:00",
+  "cases": 20,
+  "measured_successful_requests": 2400,
+  "measured_errors": 0,
+  "measured_incomplete": 0,
+  "comparisons": 9,
+  "checked_local_links": 129,
+  "charts_visually_inspected": true,
+  "jit_warning_caveat": "JIT monitor warning_once suppresses repeated kernel warnings. Counts are observed lower bounds; zero warnings does not prove zero compilation.",
+  "entries": [
+    {
+      "case": {
+        "model": "qwen27-fp8",
+        "arm": "segmented-before",
+        "repeat": 1,
+        "workload": "full",
+        "mtp": false
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9999394104032421
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.99944890235098
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.999233615815741
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.997217106081256
+        }
+      ],
+      "source_version": "before",
+      "report_sha256": "7a86053669e00895a5b2649e36b5ce06992917b1a6c0137c89a38f60171f8fa4",
+      "mtp": null,
+      "observed_jit_warnings": 3,
+      "observed_measured_jit_warnings": [
+        "(Worker_TP0 pid=29429) WARNING 10-16 13:36:41 [jit_monitor.py:140] Triton kernel JIT compilation during inference: _segmented_attention_reduce. This causes a latency spike; consider extending warmup to cover this shape/config.",
+        "(Worker_TP0 pid=29429) WARNING 10-16 13:38:31 [jit_monitor.py:140] Triton kernel JIT compilation during inference: fused_sigmoid_gating_delta_rule_update_kernel. This causes a latency spike; consider extending warmup to cover this shape/config."
+      ]
+    },
+    {
+      "case": {
+        "model": "qwen27-fp8",
+        "arm": "segmented-after",
+        "repeat": 1,
+        "workload": "full",
+        "mtp": false
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9999451654658132
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9994659947958648
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.9992365632811855
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.99716650901166
+        }
+      ],
+      "source_version": "after",
+      "report_sha256": "a8ab98d6389c1c40390d27bc120e05bc7ff865b89509b00274c1e7b640ded1a6",
+      "mtp": null,
+      "observed_jit_warnings": 3,
+      "observed_measured_jit_warnings": [
+        "(Worker_TP0 pid=32482) WARNING 10-16 14:13:46 [jit_monitor.py:140] Triton kernel JIT compilation during inference: _segmented_attention_reduce. This causes a latency spike; consider extending warmup to cover this shape/config.",
+        "(Worker_TP0 pid=32482) WARNING 10-16 14:15:35 [jit_monitor.py:140] Triton kernel JIT compilation during inference: fused_sigmoid_gating_delta_rule_update_kernel. This causes a latency spike; consider extending warmup to cover this shape/config."
+      ]
+    },
+    {
+      "case": {
+        "model": "gemma12-fp8",
+        "arm": "segmented-after",
+        "repeat": 1,
+        "workload": "full",
+        "mtp": false
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9999216610947619
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9993907852166541
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.99892067128405
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.996768962607848
+        }
+      ],
+      "source_version": "after",
+      "report_sha256": "b871afabfc573b9de5b1370d5c8333eb74003d303a9ecd8c23e5f1af3bad9b63",
+      "mtp": null,
+      "observed_jit_warnings": 1,
+      "observed_measured_jit_warnings": []
+    },
+    {
+      "case": {
+        "model": "gemma12-fp8",
+        "arm": "default",
+        "repeat": 1,
+        "workload": "full",
+        "mtp": false
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9999427057526696
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9994223520245924
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.9992610767379517
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.99800959792383
+        }
+      ],
+      "source_version": "after",
+      "report_sha256": "50d0c5824e58d7bd7e8de4b7e1eb51d117d161d60b66a337616026ed26a812af",
+      "mtp": null,
+      "observed_jit_warnings": 1,
+      "observed_measured_jit_warnings": []
+    },
+    {
+      "case": {
+        "model": "gemma26-fp8",
+        "arm": "default",
+        "repeat": 1,
+        "workload": "full",
+        "mtp": false
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9999264504797871
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9993870956227664
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.9991249308551424
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.9976011455644125
+        }
+      ],
+      "source_version": "after",
+      "report_sha256": "2ca71a109aaeec5f3df1affaf332d0c1eef5af00e0cbf523efde8fbc5653e670",
+      "mtp": null,
+      "observed_jit_warnings": 2,
+      "observed_measured_jit_warnings": []
+    },
+    {
+      "case": {
+        "model": "gemma26-fp8",
+        "arm": "segmented-after",
+        "repeat": 1,
+        "workload": "full",
+        "mtp": false
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9998582661652519
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9993001197970717
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.9983502594684293
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.996077393246669
+        }
+      ],
+      "source_version": "after",
+      "report_sha256": "5d6772ba30b7e50014601f4cf7bc8b60fc460badd639971934a53acb0e469b33",
+      "mtp": null,
+      "observed_jit_warnings": 2,
+      "observed_measured_jit_warnings": []
+    },
+    {
+      "case": {
+        "model": "qwen27-fp8",
+        "arm": "segmented-after",
+        "repeat": 2,
+        "workload": "full",
+        "mtp": false
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9999083015357986
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9994258038971437
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.999179024591041
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.996994691756861
+        }
+      ],
+      "source_version": "after",
+      "report_sha256": "c9994eab3b51c93d4614b68ac669dd9c0fc303b0496b42be9e82cdbdb9aefe12",
+      "mtp": null,
+      "observed_jit_warnings": 3,
+      "observed_measured_jit_warnings": [
+        "(Worker_TP0 pid=64467) WARNING 10-16 17:15:40 [jit_monitor.py:140] Triton kernel JIT compilation during inference: _segmented_attention_reduce. This causes a latency spike; consider extending warmup to cover this shape/config.",
+        "(Worker_TP0 pid=64467) WARNING 10-16 17:17:06 [jit_monitor.py:140] Triton kernel JIT compilation during inference: fused_sigmoid_gating_delta_rule_update_kernel. This causes a latency spike; consider extending warmup to cover this shape/config."
+      ]
+    },
+    {
+      "case": {
+        "model": "qwen27-fp8",
+        "arm": "segmented-before",
+        "repeat": 2,
+        "workload": "full",
+        "mtp": false
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9999089390253113
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9994479483387437
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.999173484705396
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.997006108415851
+        }
+      ],
+      "source_version": "before",
+      "report_sha256": "b830c41e4836274b87b530c26a22fc87919c3926d93fc2f4f93ec9b098c971c2",
+      "mtp": null,
+      "observed_jit_warnings": 3,
+      "observed_measured_jit_warnings": [
+        "(Worker_TP0 pid=67324) WARNING 10-16 17:28:23 [jit_monitor.py:140] Triton kernel JIT compilation during inference: _segmented_attention_reduce. This causes a latency spike; consider extending warmup to cover this shape/config.",
+        "(Worker_TP0 pid=67324) WARNING 10-16 17:29:49 [jit_monitor.py:140] Triton kernel JIT compilation during inference: fused_sigmoid_gating_delta_rule_update_kernel. This causes a latency spike; consider extending warmup to cover this shape/config."
+      ]
+    },
+    {
+      "case": {
+        "model": "gemma12-fp8",
+        "arm": "default",
+        "repeat": 2,
+        "workload": "full",
+        "mtp": false
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9999394735119961
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9994416288817485
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.9993152156430276
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.997761094754183
+        }
+      ],
+      "source_version": "after",
+      "report_sha256": "91babae77b15049eb195017644eae190b7a031cc695ef0a0b460a9cd319da46b",
+      "mtp": null,
+      "observed_jit_warnings": 1,
+      "observed_measured_jit_warnings": []
+    },
+    {
+      "case": {
+        "model": "gemma12-fp8",
+        "arm": "segmented-after",
+        "repeat": 2,
+        "workload": "full",
+        "mtp": false
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9998937006652919
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9994379500651323
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.9987428347848697
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.996462704239183
+        }
+      ],
+      "source_version": "after",
+      "report_sha256": "104c7041e5bb167ac62bafc91172f9cb071ca542967eb144c27dc5f8c4c06cbe",
+      "mtp": null,
+      "observed_jit_warnings": 1,
+      "observed_measured_jit_warnings": []
+    },
+    {
+      "case": {
+        "model": "gemma26-fp8",
+        "arm": "segmented-after",
+        "repeat": 2,
+        "workload": "full",
+        "mtp": false
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9998289484113992
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9993294189927981
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.9986930382111368
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.996168208723221
+        }
+      ],
+      "source_version": "after",
+      "report_sha256": "94fee002b5773825ab79503de62811db0c1b5d2be30f25b27a560f5e00711064",
+      "mtp": null,
+      "observed_jit_warnings": 2,
+      "observed_measured_jit_warnings": []
+    },
+    {
+      "case": {
+        "model": "gemma26-fp8",
+        "arm": "default",
+        "repeat": 2,
+        "workload": "full",
+        "mtp": false
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9999143167988582
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.999389537738713
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.9991166734389276
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.997691684923925
+        }
+      ],
+      "source_version": "after",
+      "report_sha256": "968d513651fd13f7aead21ba1ef499a0de6538e84f872db516e537f4b6fc07d4",
+      "mtp": null,
+      "observed_jit_warnings": 2,
+      "observed_measured_jit_warnings": []
+    },
+    {
+      "case": {
+        "model": "gemma12-fp8",
+        "arm": "default",
+        "repeat": 1,
+        "workload": "short",
+        "mtp": false
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9998707842920082
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9985067513683499
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.9984046920383185
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.997180115435865
+        }
+      ],
+      "source_version": "after",
+      "report_sha256": "83dfdf14000d7da62b42a3f2c8e14335db8fef61b6f29c31dbd82f5daa9c6284",
+      "mtp": null,
+      "observed_jit_warnings": 1,
+      "observed_measured_jit_warnings": []
+    },
+    {
+      "case": {
+        "model": "gemma12-fp8",
+        "arm": "segmented-after",
+        "repeat": 1,
+        "workload": "short",
+        "mtp": false
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9996257975405408
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9978123925788926
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.99613344826747
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.990142580706635
+        }
+      ],
+      "source_version": "after",
+      "report_sha256": "b69a8f2da8da98da309be0ec6511b2aacee9955aa69dba5b5ec815ed021a10dd",
+      "mtp": null,
+      "observed_jit_warnings": 1,
+      "observed_measured_jit_warnings": []
+    },
+    {
+      "case": {
+        "model": "gemma12-fp8",
+        "arm": "segmented-after",
+        "repeat": 1,
+        "workload": "short",
+        "mtp": true
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9994045890683715
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9947902200421772
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.9920406465253278
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.863844807347423
+        }
+      ],
+      "source_version": "after-mtp",
+      "report_sha256": "86f4d483ea9468894a9af43377bc7431a4d1a195f3500eeb17cd139f13441347",
+      "mtp": {
+        "proposed": 9195.0,
+        "accepted": 6083.0,
+        "acceptance": 0.6615551930396955
+      },
+      "observed_jit_warnings": 4,
+      "observed_measured_jit_warnings": []
+    },
+    {
+      "case": {
+        "model": "gemma12-fp8",
+        "arm": "default",
+        "repeat": 1,
+        "workload": "short",
+        "mtp": true
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9997558899249899
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9942905213095505
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.983598869593534
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.942097163880616
+        }
+      ],
+      "source_version": "after-mtp",
+      "report_sha256": "1d194777c81353f4064f29a2813a0b8e5ff84c3477ef176252753d9bab80d434",
+      "mtp": {
+        "proposed": 9254.0,
+        "accepted": 6031.0,
+        "acceptance": 0.6517181759239248
+      },
+      "observed_jit_warnings": 4,
+      "observed_measured_jit_warnings": []
+    },
+    {
+      "case": {
+        "model": "gemma26-fp8",
+        "arm": "default",
+        "repeat": 1,
+        "workload": "short",
+        "mtp": false
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9997463181179966
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9983592591520234
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.9978775705706253
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.996361561133036
+        }
+      ],
+      "source_version": "after",
+      "report_sha256": "c1d3b29794ed18270eab9291f011e0a859b4024e30367812c3bb06a58eb5f468",
+      "mtp": null,
+      "observed_jit_warnings": 2,
+      "observed_measured_jit_warnings": []
+    },
+    {
+      "case": {
+        "model": "gemma26-fp8",
+        "arm": "segmented-after",
+        "repeat": 1,
+        "workload": "short",
+        "mtp": false
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9993415835598592
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9976901990574492
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.9950996874976514
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.990645062828687
+        }
+      ],
+      "source_version": "after",
+      "report_sha256": "8ab31dab12890f75d9226fdd2893043572ead4b51859d40ad73c87c19e74aa61",
+      "mtp": null,
+      "observed_jit_warnings": 2,
+      "observed_measured_jit_warnings": []
+    },
+    {
+      "case": {
+        "model": "gemma26-fp8",
+        "arm": "segmented-after",
+        "repeat": 1,
+        "workload": "short",
+        "mtp": true
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9989473604449463
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.996637655136614
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.9785439660723907
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.9310747649739515
+        }
+      ],
+      "source_version": "after-mtp",
+      "report_sha256": "68ea4556aa340a427324ad65b26006c767c8428ff1bb829fc9d19b1a3292ed98",
+      "mtp": {
+        "proposed": 9126.0,
+        "accepted": 6157.0,
+        "acceptance": 0.6746657900504054
+      },
+      "observed_jit_warnings": 5,
+      "observed_measured_jit_warnings": []
+    },
+    {
+      "case": {
+        "model": "gemma26-fp8",
+        "arm": "default",
+        "repeat": 1,
+        "workload": "short",
+        "mtp": true
+      },
+      "counts": [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.999682406830793
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9939359407350652
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.9967796778627354
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.983706261176223
+        }
+      ],
+      "source_version": "after-mtp",
+      "report_sha256": "eb94934fc7319a5f3e90e09a45fe3fdad4af2dd29372ebecc3c742456199c301",
+      "mtp": {
+        "proposed": 9111.0,
+        "accepted": 6184.0,
+        "acceptance": 0.6787399846339589
+      },
+      "observed_jit_warnings": 5,
+      "observed_measured_jit_warnings": []
+    }
+  ]
+}

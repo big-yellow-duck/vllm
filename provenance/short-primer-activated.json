@@ -1,0 +1,8 @@
+{
+  "time": "2026-10-16T10:29:09.696046+00:00",
+  "reason": "Lazy Triton compilation was logged during the first Qwen full sweeps. All12 completed full cases remain unchanged and are reported with per-repetition means. All8 upcoming short plain/MTP conditions now receive an identical untimed primer sweep before measured requests, a prefix-cache reset, and a 12-second metrics flush. This separates new assistant/shape compilation from the short comparison.",
+  "old_runner_sha256": "b14d4f26b4c0fc774af5832085ab99342b6fff970a60894980ab9f9d8fcf88ab",
+  "new_runner_sha256": "22c34046e1e15516398be07fe1593eeaba9ced9980cf7646bebe9933a5244b51",
+  "archive": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/protocol-amendments/short-primer",
+  "archived_short_attempts": []
+}

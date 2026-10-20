@@ -1,0 +1,31 @@
+{
+  "baseline_ops_sha256": "20a08f6a9acba6d67528a2e4863cf845d8ac7f476f737f4197326d476c90cf49",
+  "baseline_tuner_sha256": "bf0ff5e131e1fa9f889f179004e63a36dcdb06e1e77bc6329712c7f0e14e3adc",
+  "typed_ops_sha256": "ea356190dad1bf37caa2aa0d17462c9c63a6b58e811af4d672d35e33c1653c50",
+  "typed_selector_sha256": "36c4a675af39f85b5e94cec4837421e9980262cb17d4ef8ba7f668f4144fbe25",
+  "typed_tuner_sha256": "2dfc181e90a5f24ef0d3ad219858cf95c3f8eccae133ae2af6943c68c1454a0b",
+  "selector_comparisons": 460800,
+  "candidate_pool_comparisons": 1284,
+  "jit_kernels": {
+    "_segmented_kv_upcast": {
+      "ast_identical": true,
+      "baseline_cache_key": "1c6efafb64426119cda1e98a3944910ea8981ed5983d5b5a273f396fbb4fc08f",
+      "typed_cache_key": "b235dc9c4d57942aba9bfd8e5aa8bd23e603e336f74fd55bb160cfc151606531",
+      "cache_key_identical": false
+    },
+    "_segmented_attention_stage": {
+      "ast_identical": true,
+      "baseline_cache_key": "063a6b0d5bc2256e4776c01646b084bda72bff4e1d51683b9b5f6b8e5b3afd8c",
+      "typed_cache_key": "8bd2e3dc14276d40cb16f8d11c0577ab6137bd7841818591a1a646ab2f0f56dd",
+      "cache_key_identical": false
+    },
+    "_segmented_attention_reduce": {
+      "ast_identical": true,
+      "baseline_cache_key": "35366e3fd5330c3ac46481783e686c35340b2ac4fdee864f4bdd03118ade42d3",
+      "typed_cache_key": "47caa4b2f7a57a62f9ea5bf58ac3b6cf08d8e8bda2e5ad905a6525fb5d934533",
+      "cache_key_identical": false
+    }
+  },
+  "selection_identical": true,
+  "elapsed_s": 8.377651612041518
+}

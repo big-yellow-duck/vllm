@@ -1,0 +1,28 @@
+{
+  "status": "branch prepared from pushed commit; implementation is next after report review",
+  "base_commit": "b7a87748e35bad93d4c4fb2e47edf711c14dfad4",
+  "branch": "rocm/segmented-attn-gemma4-mm-prefix",
+  "scope": "Gemma4 multimodal prefix attention support in opt-in ROCM_SEGMENTED_ATTN",
+  "observations": [
+    "Segmented backend currently advertises supports_mm_prefix=False. Its ROCm metadata builder does not copy CommonAttentionMetadata.mm_req_doc_ranges.",
+    "Existing Triton builder uses compute_mm_prefix_range_tensor; its metadata provides both CPU ranges and a device tensor. Segmented backend needs equivalent metadata propagation and unified-fallback forwarding.",
+    "Triton attention helpers use inclusive start/end and start<end validity. Query and key must belong to the same range to gain bidirectional visibility.",
+    "Gemma4 sets mm_prefix_clamp_sliding_window for sliding layers: range visibility is intersected with the past bound (query-key)<window. Future keys within the same image range are allowed; do not impose a symmetric future-window bound.",
+    "Segmented stage currently prunes key range_end at the causal query-tile end. Native multimodal masking must also extend traversal to visible future keys; changing only the per-score mask would still omit them.",
+    "Text/decode behavior and no-range specializations should remain unchanged. Preserve supported features, typed config selection, cache semantics and the cache-only MTP path. New kernel fingerprints/caches must remain separate from this frozen serving study."
+  ],
+  "validation_plan": [
+    "Compare native multimodal attention against dense FP32 masks and existing unified Triton across local/global D256/512, GQA2/8, FP8/BF16 KV, variable query lengths, multiple/empty ranges and range/page/tile boundaries.",
+    "Cover chunked prefill and long-query unified fallback, decode, MTP shared target-cache readers, graph capture/replay and KV cache immutability.",
+    "Validate true multimodal Gemma model loading/serving on TP2 with an image prompt after numerical tests pass; these completed benchmarks are language-model-only."
+  ],
+  "reference_files": [
+    "vllm/v1/attention/backends/rocm_segmented_attn.py",
+    "vllm/v1/attention/backends/rocm_attn.py",
+    "vllm/v1/attention/backends/triton_attn.py",
+    "vllm/v1/attention/ops/segmented_attention.py",
+    "vllm/v1/attention/ops/triton_attention_helpers.py",
+    "vllm/v1/attention/ops/triton_unified_attention.py",
+    "vllm/model_executor/models/gemma4.py"
+  ]
+}

@@ -1,0 +1,107 @@
+{
+  "started_utc": "2026-10-16T00:29:09.382648+00:00",
+  "status": "benchmark_and_validation_complete",
+  "design": "Native4 geometry screening, then all conversions for the top eight geometries plus the static incumbent. Keep full conversion search for a geometry whose native4 candidate failed. Single-mode inputs keep their existing search.",
+  "baseline_source_sha256": {
+    "vllm/model_executor/warmup/rocm_segmented_attn_autotune_warmup.py": "85e01766576aafddd0113f44995613c64face45e4f6a356615cb568f6ff35430",
+    "vllm/v1/attention/ops/segmented_attention.py": "20a08f6a9acba6d67528a2e4863cf845d8ac7f476f737f4197326d476c90cf49",
+    "benchmarks/kernels/benchmark_segmented_config_selection.py": "9ee4555db329495a82cdb43596c9203db30a65fe71e871001cabf8fc1a42fbd5",
+    "tests/model_executor/test_rocm_segmented_attn_autotune.py": "d9ad5551f4dfb51066880c581eef5a94d9e596596810e2507c7ba7feab2388fb"
+  },
+  "validation_plan": [
+    "CPU selection/ranking/cache contracts",
+    "GPU smoke across dimensions and Gemma local/global",
+    "Fresh paired full-versus-compressed search and kernel timing across the existing coverage matrix, with independent tuning and comparison inputs",
+    "Remeasure apparent performance losses with frozen configs and fresh inputs"
+  ],
+  "notes": [
+    "Do not change JIT attention arithmetic or static selector.",
+    "Existing normal/native1/native4 implementations and warm/cold promotion criteria are preserved.",
+    "Do not modify the pending FP8-per-token review clone."
+  ],
+  "completed_checks": {
+    "cpu_contracts": 319,
+    "gpu_smoke_cases": 14,
+    "pre_commit": "passed",
+    "offline_profiles": 1284,
+    "offline_full_winners_retained": 1284,
+    "comprehensive_gpu_cases": 1704,
+    "independent_loss_retests": 151,
+    "reproduced_clear_losses": 98,
+    "mtp_gpu_tests": 20,
+    "mtp_cpu_contracts": 319,
+    "mtp_projected_kv_equivalence_cases": 6144,
+    "mtp_compiled_triton_keys_unchanged": 3,
+    "serving_tps_ttft_charts_inspected": 18
+  },
+  "type_safety_work": "Applied after the frozen compression sweep and confirmations; original measured sources remain preserved. Post-type source hashes and checks are in post-types-summary.json.",
+  "type_safety_checks": {
+    "cpu_contracts_staged": 319,
+    "selector_combinations_equivalent": 460800,
+    "candidate_pools_equivalent": 1284,
+    "strict_selector_mypy": "passed",
+    "typed_tuner_and_negative_caller_contracts_mypy": "passed",
+    "jit_asts_identical": true,
+    "apply_status": "applied and validated before all main model serving cases",
+    "jit_recompile": "Triton cache hashes include starting line numbers; moving host selectors shifts kernels. Warm new default specializations on CPU before final GPU smoke.",
+    "full_repository_pre_commit": "passed in isolated typed-checkout, including oldest supported Python 3.11 mypy",
+    "mypy_all_function_bodies": "passed for config, ops, tuner with mypy1.20.2",
+    "cpu_aot_default_specializations": {
+      "count": 1985,
+      "compiled": 1985,
+      "failures": [],
+      "gpu_execution": false
+    }
+  },
+  "preparation_notes": [
+    "CPU AOT full candidate expansion produced over 76000 specializations; terminated it before completing to avoid unnecessary compilation. Use defaults-only prewarming (1985 specializations) instead. Do not repeat the full expansion.",
+    "GuideLLM mock server with --processor invokes abstract PreTrainedTokenizer rather than AutoTokenizer and fails for Gemma; omit --processor for client transport preflight. The regular client AutoTokenizer path works.",
+    "Serving client transport preflight passed all 120 turn records and peak stream levels. Synthetic mock timings are excluded from benchmark results.",
+    "Qwen exact ID is Qwen/Qwen3.8-27B-FP8; both Gemma FP8 targets and matching Google assistant snapshots are cached and pin revisions in logs/segmented-serving-2026-10-16/models.json.",
+    "All 12 full serving cases finished; Qwen first repetitions show measured lazy JIT, so pooled differences need the per-repetition context in reports. Separate complete untimed short primers were activated only after preserving all full results.",
+    "Gemma MTP assistant layers pass paired None projected K/V while reading target-layer cache. Initial segmented MTP startup failed before measured requests. Fix backend slicing and allow paired None in native eligibility; no kernel math or configuration selection change.",
+    "Do not modify old before/after serving snapshots or historical post-types-summary.json. MTP-only source-after-mtp has separate validation.json. 20 GPU checks, 319 CPU contracts, hooks, identical 3 Triton cache keys and 6144 projected-K/V dispatch checks passed.",
+    "Four matching MTP-only tuning table identities were migrated only for the host-only ops file fingerprint. All 176 records/table passed production loader validation; original tables retained. Cache-migration.json records provenance. Do not redo full target autotuning or one-shot cache copy.",
+    "Resume MTP via scripts/run_segmented_serving.py using amended manifest. Old parent after_confirmations_and_serve.py checks historical live source hashes and is not appropriate after the cache-reader fix.",
+    "Six of nine comparisons now have actual TPS/TTFT visual inspection hashes. Gemma12 full + all short MTP comparisons are complete; final reporter regeneration must preserve plot hashes or trigger reinspection. Report bundler is prepared but must run only after all20 successes and final-audit.json.",
+    "Final audit classifies measured JIT-monitor warnings in all4 Qwen runs, not just first repetitions. Reports now state this explicitly; second-repetition near parity is not proof of fully warmed execution. All requests are retained. No measured JIT warnings were observed for Gemma runs; warning_once limits that evidence."
+  ],
+  "updated_utc": "2026-10-16T12:18:27.102622+00:00",
+  "completed_findings": {
+    "eligible_fp8_tuning_seconds_full": 18498.51,
+    "eligible_fp8_tuning_seconds_compressed": 8150.61,
+    "time_reduction_percent": 55.9,
+    "candidate_count_reduction_percent": 43.0,
+    "aggregate_warm_compressed_over_full": 1.001257,
+    "aggregate_cold_compressed_over_full": 1.000445,
+    "limitation": "98 original clear losses reproduced in independent fresh-input frozen-config retests. Aggregate parity does not make the compressed search regression-free."
+  },
+  "next_scope": {
+    "requested": "2026-10-16",
+    "base_commit": "b7a87748e35bad93d4c4fb2e47edf711c14dfad4",
+    "branch": "rocm/segmented-attn-gemma4-mm-prefix",
+    "work": "Gemma4 multimodal prefix attention support",
+    "sequence": "Finish the benchmarks, gather a single report directory for review, then continue separate multimodal work."
+  },
+  "serving_results": {
+    "conditions": 20,
+    "comparisons": 9,
+    "measured_requests": 2400,
+    "errors": 0,
+    "incomplete": 0,
+    "short_primer_requests": 960,
+    "all_tp": 2,
+    "target_weights": "FP8",
+    "activation_dtype": "BF16",
+    "kv_cache_dtype": "FP8",
+    "report_bundle": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/reports/segmented-attention-2026-10-16",
+    "main_gemma12_tps_ratio": "1.68\u20132.83x",
+    "main_gemma26_tps_ratio": "1.60\u20132.50x",
+    "qwen": "near parity; all4 runs logged measured JIT-monitor warnings and both repetitions retained",
+    "segmented_mtp_gain_gemma12_percent": "19.7\u201342.3",
+    "segmented_mtp_gain_gemma26_percent": "15.4\u201329.8",
+    "gemma26_default_mtp_8stream": "TPS+0.3%, meanE2E+5.4%; descriptive1-repetition comparison",
+    "source_checkpoint": "b7a87748e35bad93d4c4fb2e47edf711c14dfad4",
+    "next_branch_prepared": "rocm/segmented-attn-gemma4-mm-prefix"
+  }
+}

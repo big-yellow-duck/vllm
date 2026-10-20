@@ -1,0 +1,13 @@
+✨ Pixi task (segmented-python): bash scripts/run_segmented_gemma.sh logs/segmented-serving-2026-10-16/shared-kv-fix/prepare_mtp_snapshot.py
+Preparing worktree (detached HEAD d9a543c500)
+HEAD is now at d9a543c500 [Bugfix][Frontend] Forward --enable-log-outputs to the Cohere Chat v2 (#61089)
+{
+  "snapshot": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after-mtp",
+  "changed_files": [
+    "vllm/v1/attention/backends/rocm_segmented_attn.py",
+    "vllm/v1/attention/ops/segmented_attention.py"
+  ],
+  "migrated_tables": 4,
+  "preserved_successes": 14,
+  "runner_sha256": "f6b6ec6d557de1ba33e74f5796f5a3359aea4e80340b60c6c52c520b5c12f7a9"
+}

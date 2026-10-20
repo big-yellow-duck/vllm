@@ -1,0 +1,21 @@
+{
+  "sources": {
+    "benchmark_sha256": "5de1a2d1f0cf3a71c2a3662e940784b24451b3322c8c9184ad46635f1878e79a",
+    "shared_benchmark_sha256": "9ee4555db329495a82cdb43596c9203db30a65fe71e871001cabf8fc1a42fbd5",
+    "kernel_sha256": "20a08f6a9acba6d67528a2e4863cf845d8ac7f476f737f4197326d476c90cf49",
+    "full_tuner_sha256": "85e01766576aafddd0113f44995613c64face45e4f6a356615cb568f6ff35430",
+    "compressed_tuner_sha256": "bf0ff5e131e1fa9f889f179004e63a36dcdb06e1e77bc6329712c7f0e14e3adc",
+    "input_timing_helpers_sha256": "6b064e38b1ea8b34b4a6c068ea0e57f0508765b09921a156b3dfb41848ba046c"
+  },
+  "manifest_sha256": {
+    "gpu0-manifest.json": "233dfcd6ee3215c642b3e39a360832ec55b94ac0df1e018b3003265905df985c",
+    "gpu1-manifest.json": "c7e8461db8f977f4e782e7f43d4f96f26045d7e0f741e7b7f6c4de6b66cdb453",
+    "smoke-gpu0-manifest.json": "5140ef9a1f0a7d797c438dd617f83c8d5795f21bf06357797b2eb0d8199626e7",
+    "smoke-gpu1-manifest.json": "76eab002efb8ae5b0c6476d5fd3b7fd7a3fe11d1b53ef7388430e48dfe3e5248"
+  },
+  "static_selector_and_kernel_unchanged": true,
+  "geometry_shortlist": 8,
+  "comparison": "Fresh full versus compressed tuning; matched inputs, actual startup ceiling and runtime lookup; compare kernels on independent input tensors.",
+  "timing": "11 warm rounds, 41 cold rounds; graph-internal events; cold eviction of 256 MiB outside timed interval; compiler caches prewarmed by previous full-search study.",
+  "development_smoke_excluded": true
+}

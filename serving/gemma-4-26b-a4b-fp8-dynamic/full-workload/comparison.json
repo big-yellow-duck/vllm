@@ -1,0 +1,367 @@
+{
+  "model": "gemma26-fp8",
+  "name": "full-workload",
+  "baseline": [
+    {
+      "model": "gemma26-fp8",
+      "arm": "default",
+      "repeat": 1,
+      "workload": "full",
+      "mtp": false
+    },
+    {
+      "model": "gemma26-fp8",
+      "arm": "default",
+      "repeat": 2,
+      "workload": "full",
+      "mtp": false
+    }
+  ],
+  "candidate": [
+    {
+      "model": "gemma26-fp8",
+      "arm": "segmented-after",
+      "repeat": 1,
+      "workload": "full",
+      "mtp": false
+    },
+    {
+      "model": "gemma26-fp8",
+      "arm": "segmented-after",
+      "repeat": 2,
+      "workload": "full",
+      "mtp": false
+    }
+  ],
+  "means": [
+    {
+      "1": {
+        "output_tokens_per_second": 33.32198736728033,
+        "time_to_first_token_ms": 1958.6335122585297,
+        "request_latency": 16.09024442732334
+      },
+      "2": {
+        "output_tokens_per_second": 29.4864471524481,
+        "time_to_first_token_ms": 2514.8648247122765,
+        "request_latency": 18.28668464720249
+      },
+      "4": {
+        "output_tokens_per_second": 23.48223635165848,
+        "time_to_first_token_ms": 5056.364979594946,
+        "request_latency": 23.34446606040001
+      },
+      "8": {
+        "output_tokens_per_second": 16.5645634603015,
+        "time_to_first_token_ms": 8183.880476281047,
+        "request_latency": 33.74804900586605
+      }
+    },
+    {
+      "1": {
+        "output_tokens_per_second": 53.31691389431576,
+        "time_to_first_token_ms": 588.6103361845016,
+        "request_latency": 9.643129155039787
+      },
+      "2": {
+        "output_tokens_per_second": 49.26307110196408,
+        "time_to_first_token_ms": 583.4476724267006,
+        "request_latency": 10.42650319635868
+      },
+      "4": {
+        "output_tokens_per_second": 47.030837383635706,
+        "time_to_first_token_ms": 805.7672046124935,
+        "request_latency": 11.065833561122417
+      },
+      "8": {
+        "output_tokens_per_second": 41.33194685914751,
+        "time_to_first_token_ms": 1101.3055741786957,
+        "request_latency": 12.611287895590067
+      }
+    }
+  ],
+  "per_repetition": [
+    {
+      "repeat": 1,
+      "means": [
+        {
+          "1": {
+            "output_tokens_per_second": 33.02639821972911,
+            "time_to_first_token_ms": 2025.0820815563202,
+            "request_latency": 16.167537212371826
+          },
+          "2": {
+            "output_tokens_per_second": 29.353677114134484,
+            "time_to_first_token_ms": 2600.3285944461823,
+            "request_latency": 18.377099350094795
+          },
+          "4": {
+            "output_tokens_per_second": 23.492957671365716,
+            "time_to_first_token_ms": 5045.38831859827,
+            "request_latency": 23.33106205612421
+          },
+          "8": {
+            "output_tokens_per_second": 16.55722809269434,
+            "time_to_first_token_ms": 8381.512340158224,
+            "request_latency": 33.77434881404042
+          }
+        },
+        {
+          "1": {
+            "output_tokens_per_second": 52.22833394939328,
+            "time_to_first_token_ms": 836.348831653595,
+            "request_latency": 9.872652530670166
+          },
+          "2": {
+            "output_tokens_per_second": 48.833278279597735,
+            "time_to_first_token_ms": 707.8678160905838,
+            "request_latency": 10.544772639870644
+          },
+          "4": {
+            "output_tokens_per_second": 42.91859049671224,
+            "time_to_first_token_ms": 809.8178952932358,
+            "request_latency": 11.953748479485512
+          },
+          "8": {
+            "output_tokens_per_second": 36.10125758292962,
+            "time_to_first_token_ms": 1074.7112669050694,
+            "request_latency": 14.199348244816065
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "means": [
+        {
+          "1": {
+            "output_tokens_per_second": 33.61757651483155,
+            "time_to_first_token_ms": 1892.1849429607391,
+            "request_latency": 16.012951642274857
+          },
+          "2": {
+            "output_tokens_per_second": 29.61921719076172,
+            "time_to_first_token_ms": 2429.4010549783707,
+            "request_latency": 18.19626994431019
+          },
+          "4": {
+            "output_tokens_per_second": 23.471515031951242,
+            "time_to_first_token_ms": 5067.341640591621,
+            "request_latency": 23.357870064675808
+          },
+          "8": {
+            "output_tokens_per_second": 16.571898827908655,
+            "time_to_first_token_ms": 7986.24861240387,
+            "request_latency": 33.72174919769168
+          }
+        },
+        {
+          "1": {
+            "output_tokens_per_second": 54.40549383923825,
+            "time_to_first_token_ms": 340.8718407154083,
+            "request_latency": 9.413605779409409
+          },
+          "2": {
+            "output_tokens_per_second": 49.69286392433043,
+            "time_to_first_token_ms": 459.0275287628174,
+            "request_latency": 10.308233752846718
+          },
+          "4": {
+            "output_tokens_per_second": 51.14308427055917,
+            "time_to_first_token_ms": 801.7165139317513,
+            "request_latency": 10.177918642759323
+          },
+          "8": {
+            "output_tokens_per_second": 46.5626361353654,
+            "time_to_first_token_ms": 1127.899881452322,
+            "request_latency": 11.023227546364069
+          }
+        }
+      ]
+    }
+  ],
+  "changes_percent": {
+    "1": {
+      "output_tokens_per_second": 60.00520409136503,
+      "time_to_first_token_ms": -69.94790845247174,
+      "request_latency": -40.068473175805266
+    },
+    "2": {
+      "output_tokens_per_second": 67.07021652106376,
+      "time_to_first_token_ms": -76.80003844765484,
+      "request_latency": -42.983086341166086
+    },
+    "4": {
+      "output_tokens_per_second": 100.28261652478454,
+      "time_to_first_token_ms": -84.06429900008835,
+      "request_latency": -52.59761550128681
+    },
+    "8": {
+      "output_tokens_per_second": 149.52029045741725,
+      "time_to_first_token_ms": -86.54299048757423,
+      "request_latency": -62.631060855109034
+    }
+  },
+  "counts": [
+    [
+      [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9999264504797871
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9993870956227664
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.9991249308551424
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.9976011455644125
+        }
+      ],
+      [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9999143167988582
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.999389537738713
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.9991166734389276
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.997691684923925
+        }
+      ]
+    ],
+    [
+      [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9998582661652519
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9993001197970717
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.9983502594684293
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.996077393246669
+        }
+      ],
+      [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9998289484113992
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9993294189927981
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.9986930382111368
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.996168208723221
+        }
+      ]
+    ]
+  ],
+  "backend_counts": [
+    [
+      {
+        "TRITON_ATTN": 30
+      },
+      {
+        "TRITON_ATTN": 30
+      }
+    ],
+    [
+      {
+        "ROCM_SEGMENTED_ATTN": 30
+      },
+      {
+        "ROCM_SEGMENTED_ATTN": 30
+      }
+    ]
+  ],
+  "report": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/vllm-bench-collection/comparisons/gfx1201/gemma-4-26b-a4b-fp8-dynamic/segmented-update-20261016/full-workload/comparison.md",
+  "plot_dir": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/vllm-bench-collection/plots/gfx1201/gemma-4-26b-a4b-fp8-dynamic/segmented-update-20261016/full-workload",
+  "table_markdown": "| Streams | Output tok/s, baseline \u2192 candidate | Output tok/s change | Mean TTFT (ms), baseline \u2192 candidate | Mean TTFT (ms) change | Mean E2E (s), baseline \u2192 candidate | Mean E2E (s) change |\n|---:|---:|---:|---:|---:|---:|---:|\n| 1 | 33.32 \u2192 53.32 | **+60.0%** | 1,959 \u2192 589 | **\u221269.9%** | 16.09 \u2192 9.64 | **\u221240.1%** |\n| 2 | 29.49 \u2192 49.26 | **+67.1%** | 2,515 \u2192 583 | **\u221276.8%** | 18.29 \u2192 10.43 | **\u221243.0%** |\n| 4 | 23.48 \u2192 47.03 | **+100.3%** | 5,056 \u2192 806 | **\u221284.1%** | 23.34 \u2192 11.07 | **\u221252.6%** |\n| 8 | 16.56 \u2192 41.33 | **+149.5%** | 8,184 \u2192 1,101 | **\u221286.5%** | 33.75 \u2192 12.61 | **\u221262.6%** |\n"
+}

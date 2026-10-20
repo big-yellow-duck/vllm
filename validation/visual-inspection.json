@@ -1,0 +1,75 @@
+{
+  "updated": "2026-10-16T12:15:58.197790+00:00",
+  "comparisons": {
+    "qwen27-fp8/full-workload": {
+      "status": "Visually inspected actual TPS and TTFT charts: correct two cases, four stream panels, units, legend and eight conversation steps. Final generation must preserve hashes or be inspected again.",
+      "sha256": {
+        "vllm-bench-collection/plots/gfx1201/qwen3.8-27b-fp8/segmented-update-20261016/full-workload/compare_tps_by_turn.png": "c4fac81735ca5a2baa217d731071481a1e0f165cbb5164cc28f2c90f568934ec",
+        "vllm-bench-collection/plots/gfx1201/qwen3.8-27b-fp8/segmented-update-20261016/full-workload/compare_ttft_by_turn.png": "beccf522b0ca3d68a5a9e77daa2139261c13891ff52e99dde5d35a020a15c638"
+      }
+    },
+    "gemma12-fp8/full-workload": {
+      "status": "Visually inspected actual TPS and TTFT charts: two cases, four stream panels, correct units, readable legend/title and eight turn steps. Clear advantage for segmented grows with context.",
+      "sha256": {
+        "vllm-bench-collection/plots/gfx1201/gemma-4-12b-fp8-dynamic/segmented-update-20261016/full-workload/compare_tps_by_turn.png": "4b758399dada4d66577bd19cc41b5f8390a1b5b4498c3637d8d4ea244924b443",
+        "vllm-bench-collection/plots/gfx1201/gemma-4-12b-fp8-dynamic/segmented-update-20261016/full-workload/compare_ttft_by_turn.png": "87e6c7b42ff7b8b8e15e1a342757096d99b158b9e055932b93da8163dc0349cc"
+      }
+    },
+    "gemma26-fp8/full-workload": {
+      "status": "Visually inspected actual TPS and TTFT charts: correct two backends, four stream panels, units, readable title/legend and eight conversation steps. Segmented advantage grows with context.",
+      "sha256": {
+        "vllm-bench-collection/plots/gfx1201/gemma-4-26b-a4b-fp8-dynamic/segmented-update-20261016/full-workload/compare_tps_by_turn.png": "84a907769b2e5db03767d093830fb7fd4b7f38fe71bf1b9e4ec5f8a7c3db4bc9",
+        "vllm-bench-collection/plots/gfx1201/gemma-4-26b-a4b-fp8-dynamic/segmented-update-20261016/full-workload/compare_ttft_by_turn.png": "b7dcdfed3dd4ae2caeb2f16f05e88bf279e4908e36f9adc5e2b49f5bb9191038"
+      }
+    },
+    "gemma12-fp8/short-mtp-effect-segmented-after": {
+      "status": "Visually inspected actual TPS and TTFT charts: two cases, four streams, eight steps, correct units/legends. MTP TPS higher throughout; one-stream TTFT near parity, larger stream TTFT varies by turn. Labels readable.",
+      "sha256": {
+        "vllm-bench-collection/plots/gfx1201/gemma-4-12b-fp8-dynamic/segmented-update-20261016/short-mtp-effect-segmented-after/compare_tps_by_turn.png": "6942dba6a8eee5556597311d0d9e78d34bed97dc2707d0924eef6e967d067529",
+        "vllm-bench-collection/plots/gfx1201/gemma-4-12b-fp8-dynamic/segmented-update-20261016/short-mtp-effect-segmented-after/compare_ttft_by_turn.png": "dcb6d44bbf663aea95d97bfe74f919aef8ed8ef22fa97ab282c3d4080d601150"
+      }
+    },
+    "gemma12-fp8/short-mtp-backends": {
+      "status": "Visually inspected actual TPS and TTFT charts: correct two cases, 1/2/4/8 panels, eight steps, units and readable labels/legend. Backend gap grows with context. Default MTP effect is modest at 8 streams and mixed by turn.",
+      "sha256": {
+        "vllm-bench-collection/plots/gfx1201/gemma-4-12b-fp8-dynamic/segmented-update-20261016/short-mtp-backends/compare_tps_by_turn.png": "9053e486fd1a356ff191491a17053d51e83d41a0e4125179ab90ff968f247faf",
+        "vllm-bench-collection/plots/gfx1201/gemma-4-12b-fp8-dynamic/segmented-update-20261016/short-mtp-backends/compare_ttft_by_turn.png": "0a8143f1bdfc6c7738e480b7fa8b784a4caafb1c9792f4d252ce3b31bd391d32"
+      }
+    },
+    "gemma12-fp8/short-mtp-effect-default": {
+      "status": "Visually inspected actual TPS and TTFT charts: correct two cases, 1/2/4/8 panels, eight steps, units and readable labels/legend. Backend gap grows with context. Default MTP effect is modest at 8 streams and mixed by turn.",
+      "sha256": {
+        "vllm-bench-collection/plots/gfx1201/gemma-4-12b-fp8-dynamic/segmented-update-20261016/short-mtp-effect-default/compare_tps_by_turn.png": "dae68866831fbf1fad57baac1f4b96861376acc0398f1004e28ebd278eac0783",
+        "vllm-bench-collection/plots/gfx1201/gemma-4-12b-fp8-dynamic/segmented-update-20261016/short-mtp-effect-default/compare_ttft_by_turn.png": "fccc68ef89c407db9caee98d2e054838f9286992606259f553aef2b114a21ceb"
+      }
+    },
+    "gemma26-fp8/short-mtp-effect-segmented-after": {
+      "status": "Visually inspected actual TPS and TTFT charts: two cases, four stream panels, correct units and eight steps. MTP TPS higher throughout; TTFT near parity at1/2 streams and mixed by turn at4/8 streams. Title, legends and axes readable.",
+      "sha256": {
+        "vllm-bench-collection/plots/gfx1201/gemma-4-26b-a4b-fp8-dynamic/segmented-update-20261016/short-mtp-effect-segmented-after/compare_tps_by_turn.png": "9ad55eb75782316149e84ee314169780a30275fcccff9afb35baa670596f58db",
+        "vllm-bench-collection/plots/gfx1201/gemma-4-26b-a4b-fp8-dynamic/segmented-update-20261016/short-mtp-effect-segmented-after/compare_ttft_by_turn.png": "bf74ab3d05e33f0127f6e203dc92fd6c1cffc42dd968fdbfa3e9e4f0c8335876"
+      }
+    },
+    "gemma26-fp8/short-mtp-backends": {
+      "status": "Visually inspected final actual TPS and TTFT charts: correct two cases, 1/2/4/8 panels, eight steps and readable units/legends. Segmented MTP strongly improves backend comparison. Default MTP effect is small/mixed at8 streams; TTFT varies by turn.",
+      "sha256": {
+        "vllm-bench-collection/plots/gfx1201/gemma-4-26b-a4b-fp8-dynamic/segmented-update-20261016/short-mtp-backends/compare_tps_by_turn.png": "e8271ee793c583858cc9b1573312650e1df2f8e06de22852555c4816cef0b080",
+        "vllm-bench-collection/plots/gfx1201/gemma-4-26b-a4b-fp8-dynamic/segmented-update-20261016/short-mtp-backends/compare_ttft_by_turn.png": "111225f1e97504d742a759b2529306f312c2268c5275099b5c68b4878005d2b6"
+      }
+    },
+    "gemma26-fp8/short-mtp-effect-default": {
+      "status": "Visually inspected final actual TPS and TTFT charts: correct two cases, 1/2/4/8 panels, eight steps and readable units/legends. Segmented MTP strongly improves backend comparison. Default MTP effect is small/mixed at8 streams; TTFT varies by turn.",
+      "sha256": {
+        "vllm-bench-collection/plots/gfx1201/gemma-4-26b-a4b-fp8-dynamic/segmented-update-20261016/short-mtp-effect-default/compare_tps_by_turn.png": "cc5bead9a6234444fa070cfb417c095b0cdb19ba1ed2753822bb7f63c0c62087",
+        "vllm-bench-collection/plots/gfx1201/gemma-4-26b-a4b-fp8-dynamic/segmented-update-20261016/short-mtp-effect-default/compare_ttft_by_turn.png": "eb4f31c53a2eb8df3668a8305f15321527df07741d774719c1283e9d318d7993"
+      }
+    }
+  },
+  "overview_figures": {
+    "compression": {
+      "status": "Visually inspected final search-cost/performance figure: readable labels, prewarmed summed cost units, grouped ratios, parity line and no text overlap.",
+      "path": "logs/segmented-attn-gemma4/compressed-search-2026-10-16/search-comparison.png",
+      "sha256": "4acb27b6ca9dd5b049dcb622470ecda6aeb52ed54a06616432b37808fc717f2e"
+    }
+  }
+}

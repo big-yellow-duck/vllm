@@ -1,0 +1,367 @@
+{
+  "model": "qwen27-fp8",
+  "name": "full-workload",
+  "baseline": [
+    {
+      "model": "qwen27-fp8",
+      "arm": "segmented-before",
+      "repeat": 1,
+      "workload": "full",
+      "mtp": false
+    },
+    {
+      "model": "qwen27-fp8",
+      "arm": "segmented-before",
+      "repeat": 2,
+      "workload": "full",
+      "mtp": false
+    }
+  ],
+  "candidate": [
+    {
+      "model": "qwen27-fp8",
+      "arm": "segmented-after",
+      "repeat": 1,
+      "workload": "full",
+      "mtp": false
+    },
+    {
+      "model": "qwen27-fp8",
+      "arm": "segmented-after",
+      "repeat": 2,
+      "workload": "full",
+      "mtp": false
+    }
+  ],
+  "means": [
+    {
+      "1": {
+        "output_tokens_per_second": 26.999826854258554,
+        "time_to_first_token_ms": 1528.2498002052307,
+        "request_latency": 19.370405718684196
+      },
+      "2": {
+        "output_tokens_per_second": 24.661114583639467,
+        "time_to_first_token_ms": 1571.2052583694458,
+        "request_latency": 21.054591700434685
+      },
+      "4": {
+        "output_tokens_per_second": 21.859099668873395,
+        "time_to_first_token_ms": 3014.541804790497,
+        "request_latency": 23.677402302622795
+      },
+      "8": {
+        "output_tokens_per_second": 18.492767174743353,
+        "time_to_first_token_ms": 5462.26461417973,
+        "request_latency": 27.87100264802575
+      }
+    },
+    {
+      "1": {
+        "output_tokens_per_second": 27.281826095762636,
+        "time_to_first_token_ms": 1275.6518125534058,
+        "request_latency": 19.098898321390152
+      },
+      "2": {
+        "output_tokens_per_second": 24.770166310016403,
+        "time_to_first_token_ms": 1492.6807209849358,
+        "request_latency": 20.931725420057774
+      },
+      "4": {
+        "output_tokens_per_second": 21.946719159198924,
+        "time_to_first_token_ms": 2995.7355186343193,
+        "request_latency": 23.5828737616539
+      },
+      "8": {
+        "output_tokens_per_second": 18.48740668927756,
+        "time_to_first_token_ms": 5439.900120720267,
+        "request_latency": 27.88657731190324
+      }
+    }
+  ],
+  "per_repetition": [
+    {
+      "repeat": 1,
+      "means": [
+        {
+          "1": {
+            "output_tokens_per_second": 23.125555730580132,
+            "time_to_first_token_ms": 2038.6059284210205,
+            "request_latency": 22.148635059595108
+          },
+          "2": {
+            "output_tokens_per_second": 21.87152914598245,
+            "time_to_first_token_ms": 1658.3785563707352,
+            "request_latency": 23.43537627160549
+          },
+          "4": {
+            "output_tokens_per_second": 19.83486647906164,
+            "time_to_first_token_ms": 3021.5659588575363,
+            "request_latency": 25.858270227909088
+          },
+          "8": {
+            "output_tokens_per_second": 17.891540516044618,
+            "time_to_first_token_ms": 5416.099637746811,
+            "request_latency": 28.774965852499008
+          }
+        },
+        {
+          "1": {
+            "output_tokens_per_second": 23.7333217347824,
+            "time_to_first_token_ms": 1531.180888414383,
+            "request_latency": 21.58156618475914
+          },
+          "2": {
+            "output_tokens_per_second": 22.108154947725637,
+            "time_to_first_token_ms": 1528.945580124855,
+            "request_latency": 23.176219314336777
+          },
+          "4": {
+            "output_tokens_per_second": 19.87315487170363,
+            "time_to_first_token_ms": 3034.7573831677437,
+            "request_latency": 25.803877592086792
+          },
+          "8": {
+            "output_tokens_per_second": 17.86654961976295,
+            "time_to_first_token_ms": 5378.003049641848,
+            "request_latency": 28.827618811279535
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "means": [
+        {
+          "1": {
+            "output_tokens_per_second": 30.874097977936977,
+            "time_to_first_token_ms": 1017.8936719894409,
+            "request_latency": 16.592176377773285
+          },
+          "2": {
+            "output_tokens_per_second": 27.450700021296488,
+            "time_to_first_token_ms": 1484.0319603681564,
+            "request_latency": 18.673807129263878
+          },
+          "4": {
+            "output_tokens_per_second": 23.88333285868515,
+            "time_to_first_token_ms": 3007.5176507234573,
+            "request_latency": 21.496534377336502
+          },
+          "8": {
+            "output_tokens_per_second": 19.093993833442088,
+            "time_to_first_token_ms": 5508.42959061265,
+            "request_latency": 26.967039443552494
+          }
+        },
+        {
+          "1": {
+            "output_tokens_per_second": 30.83033045674287,
+            "time_to_first_token_ms": 1020.1227366924286,
+            "request_latency": 16.616230458021164
+          },
+          "2": {
+            "output_tokens_per_second": 27.432177672307173,
+            "time_to_first_token_ms": 1456.4158618450165,
+            "request_latency": 18.68723152577877
+          },
+          "4": {
+            "output_tokens_per_second": 24.020283446694222,
+            "time_to_first_token_ms": 2956.713654100895,
+            "request_latency": 21.36186993122101
+          },
+          "8": {
+            "output_tokens_per_second": 19.108263758792166,
+            "time_to_first_token_ms": 5501.797191798687,
+            "request_latency": 26.94553581252694
+          }
+        }
+      ]
+    }
+  ],
+  "changes_percent": {
+    "1": {
+      "output_tokens_per_second": 1.0444483330440457,
+      "time_to_first_token_ms": -16.52857979225014,
+      "request_latency": -1.4016608698709687
+    },
+    "2": {
+      "output_tokens_per_second": 0.44220112601593975,
+      "time_to_first_token_ms": -4.997726233808608,
+      "request_latency": -0.5835604989403498
+    },
+    "4": {
+      "output_tokens_per_second": 0.40083759922782125,
+      "time_to_first_token_ms": -0.6238522261091894,
+      "request_latency": -0.39923526981853197
+    },
+    "8": {
+      "output_tokens_per_second": -0.028986929944774253,
+      "time_to_first_token_ms": -0.40943628767829976,
+      "request_latency": 0.05588124716635612
+    }
+  },
+  "counts": [
+    [
+      [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9999394104032421
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.99944890235098
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.999233615815741
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.997217106081256
+        }
+      ],
+      [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9999089390253113
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9994479483387437
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.999173484705396
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.997006108415851
+        }
+      ]
+    ],
+    [
+      [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9999451654658132
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9994659947958648
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.9992365632811855
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.99716650901166
+        }
+      ],
+      [
+        {
+          "streams": 1,
+          "successful": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 1,
+          "mean_concurrency": 0.9999083015357986
+        },
+        {
+          "streams": 2,
+          "successful": 16,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 2,
+          "mean_concurrency": 1.9994258038971437
+        },
+        {
+          "streams": 4,
+          "successful": 32,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 4,
+          "mean_concurrency": 3.999179024591041
+        },
+        {
+          "streams": 8,
+          "successful": 64,
+          "errors": 0,
+          "incomplete": 0,
+          "peak_concurrency": 8,
+          "mean_concurrency": 7.996994691756861
+        }
+      ]
+    ]
+  ],
+  "backend_counts": [
+    [
+      {
+        "ROCM_SEGMENTED_ATTN": 16
+      },
+      {
+        "ROCM_SEGMENTED_ATTN": 16
+      }
+    ],
+    [
+      {
+        "ROCM_SEGMENTED_ATTN": 16
+      },
+      {
+        "ROCM_SEGMENTED_ATTN": 16
+      }
+    ]
+  ],
+  "report": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/vllm-bench-collection/comparisons/gfx1201/qwen3.8-27b-fp8/segmented-update-20261016/full-workload/comparison.md",
+  "plot_dir": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/vllm-bench-collection/plots/gfx1201/qwen3.8-27b-fp8/segmented-update-20261016/full-workload",
+  "table_markdown": "| Streams | Output tok/s, baseline \u2192 candidate | Output tok/s change | Mean TTFT (ms), baseline \u2192 candidate | Mean TTFT (ms) change | Mean E2E (s), baseline \u2192 candidate | Mean E2E (s) change |\n|---:|---:|---:|---:|---:|---:|---:|\n| 1 | 27.00 \u2192 27.28 | **+1.0%** | 1,528 \u2192 1,276 | **\u221216.5%** | 19.37 \u2192 19.10 | **\u22121.4%** |\n| 2 | 24.66 \u2192 24.77 | **+0.4%** | 1,571 \u2192 1,493 | **\u22125.0%** | 21.05 \u2192 20.93 | **\u22120.6%** |\n| 4 | 21.86 \u2192 21.95 | **+0.4%** | 3,015 \u2192 2,996 | **\u22120.6%** | 23.68 \u2192 23.58 | **\u22120.4%** |\n| 8 | 18.49 \u2192 18.49 | \u22120.0% | 5,462 \u2192 5,440 | **\u22120.4%** | 27.87 \u2192 27.89 | +0.1% |\n"
+}

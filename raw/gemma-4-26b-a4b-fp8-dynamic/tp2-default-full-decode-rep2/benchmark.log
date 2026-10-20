@@ -1,0 +1,135 @@
+ℹ The following environment variables are set and will be used by GuideLLM (if 
+not overridden by CLI arguments/config).
+  GUIDELLM__MAX_WORKER_PROCESSES, GUIDELLM__MP_MAX_PENDING_BUFFER_PERCENT       
+✔ OpenAIHTTPBackend backend validated with model 
+RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic
+  {'kind': 'openai_http', 'target': 'http://127.0.0.1:8026', 'model':           
+  'RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic', 'request_format':                  
+  '/v1/chat/completions', 'api_key': None, 'api_routes': {'/health': 'health',  
+  '/v1/models': 'v1/models', '/v1/completions': 'v1/completions',               
+  '/v1/chat/completions': 'v1/chat/completions', '/v1/embeddings':              
+  'v1/embeddings', '/v1/responses': 'v1/responses', '/v1/audio/transcriptions': 
+  'v1/audio/transcriptions', '/v1/audio/translations': 'v1/audio/translations', 
+  '/pooling': 'pooling'}, 'timeout': None, 'timeout_connect': 5.0, 'http2':     
+  True, 'follow_redirects': True, 'verify': False, 'validate_backend': True,    
+  'stream': True, 'extras': {'method': None, 'stream': None, 'headers': None,   
+  'params': None, 'body': None, 'files': None, 'content': None, 'temperature':  
+  0}, 'max_tokens': None, 'server_history': False, 'tool_call_missing_behavior':
+  'error_stop', 'multiturn_reasoning': False}                                   
+✔ Tokenizer resolved, Using tokenizer 
+'/home/ellm/.cache/huggingface/hub/models--RedHatAI--gemma-4-26B-A4B-it-FP8-dyna
+mic/snapshots/ed35d7abe5d940da41b4ff06eb482feb0be8cb44' from arguments
+  {'kind': 'huggingface_auto', 'model':                                         
+  '/home/ellm/.cache/huggingface/hub/models--RedHatAI--gemma-4-26B-A4B-it-FP8-dy
+  namic/snapshots/ed35d7abe5d940da41b4ff06eb482feb0be8cb44', 'load_kwargs': {}} 
+✔ 1 datasets resolved
+  [{'kind': 'synthetic_text', 'load_kwargs': {}, 'prompt_tokens': 2048,         
+  'prompt_tokens_stdev': None, 'prompt_tokens_min': None, 'prompt_tokens_max':  
+  None, 'output_tokens': 512, 'output_tokens_stdev': None, 'output_tokens_min': 
+  None, 'output_tokens_max': None, 'delay': None, 'delay_stdev': None,          
+  'delay_min': None, 'delay_max': None, 'turns': 8, 'tool_call_turns': [],      
+  'tools': None, 'tool_response_tokens': None, 'tool_response_tokens_stdev':    
+  None, 'tool_response_tokens_min': None, 'tool_response_tokens_max': None,     
+  'server_tool_call_turns': [], 'prefix_buckets': None}]                        
+✔ 2 preprocessors resolved
+  [{'kind': 'generative_column_mapper', 'column_mappings': None}, {'kind':      
+  'encode_media', 'audio_kwargs': {}, 'image_kwargs': {}, 'video_kwargs': {}}]  
+✔ Finalizer resolved
+  {'kind': 'generative', 'tool_call_mode': 'client'}                            
+✔ Request loader resolved with inf unique requests
+  {'kind': 'pytorch', 'samples': -1, 'shuffle': False, 'num_workers': 1}        
+✔ ConcurrentProfile profile resolved
+  {'kind': 'concurrent', 'rampup_duration': 0.0, 'warmup': {'percent': None,    
+  'value': 1, 'mode': 'requests'}, 'cooldown': {'percent': None, 'value': None, 
+  'mode': 'prefer_duration'}, 'streams': [1, 2, 4, 8]}                          
+✔ Output formats resolved
+  [{'kind': 'json', 'path':                                                     
+  '/home/ellm/jeff/rocm_workspaces/10/gfx1201/vllm-bench-collection/results/gfx1
+  201/gemma-4-26b-a4b-fp8-dynamic/segmented-update-20261016/tp2-default-full-dec
+  ode-rep2/agent-multiturn-benchmarks.json'}]                                   
+✔ Setup complete, starting benchmarks...
+
+
+
+
+
+ℹ Run Summary Info
+|============|==========|==========|=======|======|======|==========|=====|=====|=========|=====|=====|
+| Benchmark  | Timings                               ||||| Input Tokens       ||| Output Tokens     |||
+| Strategy   | Start    | End      | Dur   | Warm | Cool | Comp     | Inc | Err | Comp    | Inc | Err |
+|            |          |          | Sec   | Sec  | Sec  | Tot      | Tot | Tot | Tot     | Tot | Tot |
+|------------|----------|----------|-------|------|------|----------|-----|-----|---------|-----|-----|
+| concurrent | 18:17:05 | 18:18:50 | 105.2 | 22.9 | 0.0  | 81209.0  | 0.0 | 0.0 | 3072.0  | 0.0 | 0.0 |
+| concurrent | 18:19:04 | 18:21:18 | 133.8 | 11.8 | 0.0  | 172647.0 | 0.0 | 0.0 | 7168.0  | 0.0 | 0.0 |
+| concurrent | 18:21:19 | 18:24:26 | 186.9 | 0.0  | 0.0  | 352174.0 | 0.0 | 0.0 | 16384.0 | 0.0 | 0.0 |
+| concurrent | 18:24:28 | 18:28:57 | 269.8 | 0.0  | 0.0  | 707126.0 | 0.0 | 0.0 | 32768.0 | 0.0 | 0.0 |
+|============|==========|==========|=======|======|======|==========|=====|=====|=========|=====|=====|
+
+
+ℹ Text Metrics Statistics (Completed Requests)
+|============|=========|=========|========|========|========|========|=======|=======|=========|=========|========|========|
+| Benchmark  | Input Tokens                     |||| Input Words                  |||| Input Characters                 ||||
+| Strategy   | Per Request      || Per Second     || Per Request    || Per Second   || Per Request      || Per Second     ||
+|            | Mdn     | p95     | Mdn    | Mean   | Mdn    | p95    | Mdn   | Mean  | Mdn     | p95     | Mdn    | Mean   |
+|------------|---------|---------|--------|--------|--------|--------|-------|-------|---------|---------|--------|--------|
+| concurrent | 12250.0 | 19959.0 | 763.1  | 890.4  | 1621.0 | 1634.0 | 95.1  | 106.9 | 10908.0 | 11046.0 | 645.7  | 717.0  |
+| concurrent | 12337.0 | 20046.0 | 1302.8 | 1440.3 | 1627.0 | 1641.0 | 158.1 | 189.9 | 10897.0 | 11144.0 | 1058.8 | 1274.2 |
+| concurrent | 9771.0  | 20048.0 | 1010.4 | 2035.9 | 1623.0 | 1634.0 | 114.7 | 300.5 | 10903.0 | 11059.0 | 778.7  | 2018.9 |
+| concurrent | 9771.0  | 20045.0 | 716.6  | 2812.4 | 1626.0 | 1639.0 | 89.3  | 414.0 | 10892.0 | 11026.0 | 594.4  | 2775.0 |
+|============|=========|=========|========|========|========|========|=======|=======|=========|=========|========|========|
+| Benchmark  | Output Tokens                    |||| Output Words                 |||| Output Characters                ||||
+| Strategy   | Per Request      || Per Second     || Per Request    || Per Second   || Per Request      || Per Second     ||
+|            | Mdn     | p95     | Mdn    | Mean   | Mdn    | p95    | Mdn   | Mean  | Mdn     | p95     | Mdn    | Mean   |
+|------------|---------|---------|--------|--------|--------|--------|-------|-------|---------|---------|--------|--------|
+| concurrent | 512.0   | 512.0   | 30.1   | 33.7   | 304.0  | 315.0  | 17.7  | 19.9  | 2233.0  | 2296.0  | 133.8  | 146.8  |
+| concurrent | 512.0   | 512.0   | 49.7   | 59.8   | 309.0  | 339.0  | 30.6  | 35.8  | 2228.0  | 2311.0  | 223.8  | 258.1  |
+| concurrent | 512.0   | 512.0   | 36.3   | 94.7   | 323.0  | 342.0  | 24.1  | 59.2  | 2265.0  | 2295.0  | 155.8  | 412.5  |
+| concurrent | 512.0   | 512.0   | 28.2   | 130.3  | 319.0  | 336.0  | 17.1  | 81.1  | 2266.0  | 2409.0  | 124.9  | 577.4  |
+|============|=========|=========|========|========|========|========|=======|=======|=========|=========|========|========|
+
+
+ℹ Request Token Statistics (Completed Requests)
+|============|=========|=========|=======|=======|=========|=========|=======|=======|=========|========|
+| Benchmark  | Input Tok        || Output Tok   || Total Tok        || Stream Iter  || Output Tok      ||
+| Strategy   | Per Req          || Per Req      || Per Req          || Per Req      || Per Stream Iter ||
+|            | Mdn     | p95     | Mdn   | p95   | Mdn     | p95     | Mdn   | p95   | Mdn     | p95    |
+|------------|---------|---------|-------|-------|---------|---------|-------|-------|---------|--------|
+| concurrent | 12250.0 | 19959.0 | 512.0 | 512.0 | 12762.0 | 20471.0 | 515.0 | 515.0 | 1.0     | 1.0    |
+| concurrent | 12337.0 | 20046.0 | 512.0 | 512.0 | 12849.0 | 20558.0 | 515.0 | 515.0 | 1.0     | 1.0    |
+| concurrent | 9771.0  | 20048.0 | 512.0 | 512.0 | 10283.0 | 20560.0 | 515.0 | 515.0 | 1.0     | 1.1    |
+| concurrent | 9771.0  | 20045.0 | 512.0 | 512.0 | 10283.0 | 20557.0 | 515.0 | 515.0 | 1.0     | 1.0    |
+|============|=========|=========|=======|=======|=========|=========|=======|=======|=========|========|
+
+
+ℹ Request Latency Statistics (Completed Requests)
+|============|=========|========|========|=========|========|=========|======|======|======|======|
+| Benchmark  | Request Latency || TTFT            || TTFOT           || ITL        || TPOT       ||
+| Strategy   | Sec             || ms              || ms              || ms         || ms         ||
+|            | Mdn     | p95    | Mdn    | p95     | Mdn    | p95     | Mdn  | p95  | Mdn  | p95  |
+|------------|---------|--------|--------|---------|--------|---------|------|------|------|------|
+| concurrent | 16.4    | 21.2   | 1758.8 | 4516.0  | 1758.8 | 4516.0  | 28.6 | 34.5 | 32.0 | 41.3 |
+| concurrent | 18.9    | 24.1   | 2618.0 | 5563.1  | 2618.0 | 5563.1  | 31.9 | 41.5 | 37.0 | 47.1 |
+| concurrent | 23.3    | 31.1   | 4247.0 | 10573.6 | 4247.0 | 10573.6 | 35.1 | 51.9 | 45.5 | 60.7 |
+| concurrent | 33.8    | 48.9   | 7068.5 | 18952.2 | 7068.5 | 18952.2 | 50.2 | 74.6 | 66.0 | 95.5 |
+|============|=========|========|========|=========|========|=========|======|======|======|======|
+
+
+ℹ Server Throughput Statistics (All Requests)
+|============|=======|======|=========|==============|===============|==============|
+| Benchmark  | Requests             ||| Input Tokens | Output Tokens | Total Tokens |
+| Strategy   | Concurrency || Per Sec | Per Sec      | Per Sec       | Per Sec      |
+|            | Mdn   | Mean | Mean                                               ||||
+|------------|-------|------|---------|--------------|---------------|--------------|
+| concurrent | 1.0   | 1.0  | 0.1     | 939.7        | 29.5          | 809.9        |
+| concurrent | 2.0   | 2.0  | 0.1     | 1508.8       | 53.9          | 1352.0       |
+| concurrent | 4.0   | 4.0  | 0.2     | 2120.8       | 87.8          | 1975.5       |
+| concurrent | 8.0   | 8.0  | 0.2     | 2900.5       | 121.6         | 2745.4       |
+|============|=======|======|=========|==============|===============|==============|
+
+
+
+✔ Benchmarking complete, generated 4 benchmark(s)
+…   json    : 
+/home/ellm/jeff/rocm_workspaces/10/gfx1201/vllm-bench-collection/results/gfx1201
+/gemma-4-26b-a4b-fp8-dynamic/segmented-update-20261016/tp2-default-full-decode-r
+ep2/agent-multiturn-benchmarks.json

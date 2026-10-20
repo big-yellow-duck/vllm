@@ -1,0 +1,40 @@
+{
+  "id": "chatcmpl-85ca02b244a99df5",
+  "object": "chat.completion",
+  "created": 1792151488,
+  "model": "RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hello!",
+        "refusal": null,
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "reasoning": null
+      },
+      "logprobs": null,
+      "finish_reason": "stop",
+      "stop_reason": 106,
+      "token_ids": null,
+      "routed_experts": null
+    }
+  ],
+  "service_tier": null,
+  "system_fingerprint": "vllm-0.1.dev22962+gd9a543c50-tp2-6e7d1e15",
+  "usage": {
+    "prompt_tokens": 19,
+    "total_tokens": 22,
+    "completion_tokens": 3,
+    "prompt_tokens_details": null,
+    "completion_tokens_details": null
+  },
+  "prompt_logprobs": null,
+  "prompt_token_ids": null,
+  "prompt_text": null,
+  "kv_transfer_params": null,
+  "ec_transfer_params": null,
+  "metrics": null
+}

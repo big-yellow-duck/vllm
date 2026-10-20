@@ -1,0 +1,13 @@
+✨ Pixi task (segmented-python): bash scripts/run_segmented_gemma.sh logs/segmented-attn-gemma4/selector-integration-2026-10-15/run_cpu_contracts.py
+........................................................................ [ 22%]
+........................................................................ [ 45%]
+........................................................................ [ 67%]
+........................................................................ [ 90%]
+...............................                                          [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/torch/jit/_script.py:365: 14 warnings
+  /home/ellm/jeff/rocm_workspaces/10/gfx1201/.venv/lib/python3.12/site-packages/torch/jit/_script.py:365: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+319 passed, 107 deselected, 14 warnings in 39.73s

@@ -1,0 +1,23 @@
+{
+  "status": "completed:20 measured cases and9 two-case comparisons",
+  "models": [
+    "RedHatAI/gemma-4-12B-it-FP8-Dynamic",
+    "Qwen/Qwen3.8-27B-FP8",
+    "RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic"
+  ],
+  "tp": 2,
+  "kv_cache_dtype": "fp8",
+  "activation_dtype": "bfloat16",
+  "model_weights": "FP8 checkpoints",
+  "main": "Qwen saved pre-selector segmented source vs final segmented source; Gemmas automatic backend vs segmented; two alternating fresh-server repetitions; startup autotune on for every segmented case",
+  "workload": "Original simple-agent:8 turns,2048 new prompt tokens,512 output tokens,streams1/2/4/8,seed20260715",
+  "mtp": "Both Gemmas:4 short conditions (automatic/segmented x plain/MTP1),128 output tokens,otherwise same workload; one repetition per condition; matching pinned Google assistants",
+  "serving_cases": 20,
+  "guidellm_skill": "vllm-bench-collection/guidellm-benchmark-compare/SKILL.md",
+  "pending_optional_clarification": "Asked whether BF16 meant activations or BF16-weight counterparts. Proceed with the three explicitly named FP8 checkpoints and BF16 activations unless user steers otherwise.",
+  "queue": "completed via scripts/run_segmented_serving.py and scripts/report_segmented_serving.py; historical parent is retired",
+  "completed": "2026-10-16T12:18:27.102267+00:00",
+  "report_bundle": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/reports/segmented-attention-2026-10-16",
+  "report_entry": "README.md",
+  "next_work": "Prepared rocm/segmented-attn-gemma4-mm-prefix at b7a87748e3; multimodal implementation follows report review."
+}

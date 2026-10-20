@@ -1,0 +1,24 @@
+{
+  "cases": 1704,
+  "profiles": 1284,
+  "full_winners_present_in_compressed_pool": 1284,
+  "same_stored_winner_profiles": 1088,
+  "same_runtime_config_cases": 1382,
+  "full_mode_counts": {
+    "native4": 1087,
+    "native1": 16,
+    "normal": 181
+  },
+  "compressed_mode_counts": {
+    "native4": 1075,
+    "normal": 186,
+    "native1": 23
+  },
+  "excluded_full_winners": [],
+  "rejected_compressed_candidates": 120,
+  "available_candidates": 83521,
+  "compressed_attempted_candidates": 48757,
+  "fp8_available_candidates": 80850,
+  "fp8_attempted_candidates": 46086,
+  "attempted_candidate_reduction_fraction": 0.4162306485793992
+}

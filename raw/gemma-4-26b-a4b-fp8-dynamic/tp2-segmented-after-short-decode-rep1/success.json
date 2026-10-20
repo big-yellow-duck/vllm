@@ -1,0 +1,47 @@
+{
+  "case": {
+    "model": "gemma26-fp8",
+    "arm": "segmented-after",
+    "repeat": 1,
+    "workload": "short",
+    "mtp": false
+  },
+  "counts": [
+    {
+      "streams": 1,
+      "successful": 8,
+      "errors": 0,
+      "incomplete": 0,
+      "peak_concurrency": 1,
+      "mean_concurrency": 0.9993415835598592
+    },
+    {
+      "streams": 2,
+      "successful": 16,
+      "errors": 0,
+      "incomplete": 0,
+      "peak_concurrency": 2,
+      "mean_concurrency": 1.9976901990574492
+    },
+    {
+      "streams": 4,
+      "successful": 32,
+      "errors": 0,
+      "incomplete": 0,
+      "peak_concurrency": 4,
+      "mean_concurrency": 3.9950996874976514
+    },
+    {
+      "streams": 8,
+      "successful": 64,
+      "errors": 0,
+      "incomplete": 0,
+      "peak_concurrency": 8,
+      "mean_concurrency": 7.990645062828687
+    }
+  ],
+  "report_sha256": "8ab31dab12890f75d9226fdd2893043572ead4b51859d40ad73c87c19e74aa61",
+  "startup_s": 65.01517363905441,
+  "primer_report_sha256": "641cfeea887b33f855de1efedefdbdbe5bc7535dccaae61ff85689931363c823",
+  "completed": "2026-10-16T11:55:12.024680+00:00"
+}

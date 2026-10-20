@@ -1,0 +1,10 @@
+{
+  "python": "3.13.12 (main, Feb 12 2026, 00:45:41) [Clang 21.1.4 ]",
+  "packages": {
+    "guidellm": "0.7.3",
+    "transformers": "5.15.1",
+    "tokenizers": "0.22.2",
+    "matplotlib": "3.11.1"
+  },
+  "executable": "/home/ellm/jeff/rocm_workspaces/10/gfx1201-archive/vllm-sources-20261013/vllm-bench-collection/.venv/bin/python"
+}

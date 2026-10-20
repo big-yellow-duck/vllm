@@ -1,0 +1,66 @@
+{
+  "completed": "2026-10-16T10:30:00.500349+00:00",
+  "method": "Before either MTP run starts, copy each matching model/backend's valid Triton compiler cache and target-attention tuning tables from its completed plain runs. Existing vLLM identity and workload validation controls cache hits. MTP-only shapes and assistant kernels still compile/tune as needed. Torch model graph caches are not copied. Startup is excluded from all serving measurements.",
+  "entries": [
+    {
+      "model": "gemma12-fp8",
+      "arm": "default",
+      "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma12-fp8/default/decode/triton",
+      "target": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma12-fp8/default/mtp1/triton",
+      "files": 1769,
+      "bytes": 158220398,
+      "tuning_json_sha256": {}
+    },
+    {
+      "model": "gemma12-fp8",
+      "arm": "segmented-after",
+      "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma12-fp8/segmented-after/decode/triton",
+      "target": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma12-fp8/segmented-after/mtp1/triton",
+      "files": 63225,
+      "bytes": 7603359405,
+      "tuning_json_sha256": {}
+    },
+    {
+      "model": "gemma12-fp8",
+      "arm": "segmented-after",
+      "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma12-fp8/segmented-after/decode/vllm/rocm_segmented_attention",
+      "target": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma12-fp8/segmented-after/mtp1/vllm/rocm_segmented_attention",
+      "files": 4,
+      "bytes": 17716625,
+      "tuning_json_sha256": {
+        "b1e0cf6175c352fe0396fcb98554bacde6fe9eee981ed5878816b45e347f4030.json": "60a004866d54a8b6b433c1b38afe83e8827b928a01bbb7258e3895978560b330",
+        "4e600b9229a666be13714eba9706a6da37c20e8a57339fcd8d512822b60a3ccc.json": "0fb4445534a6ae4f9172a38c729fc1b08cf31620a0a41576669660f1d025b8ae"
+      }
+    },
+    {
+      "model": "gemma26-fp8",
+      "arm": "default",
+      "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma26-fp8/default/decode/triton",
+      "target": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma26-fp8/default/mtp1/triton",
+      "files": 1865,
+      "bytes": 161985821,
+      "tuning_json_sha256": {}
+    },
+    {
+      "model": "gemma26-fp8",
+      "arm": "segmented-after",
+      "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma26-fp8/segmented-after/decode/triton",
+      "target": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma26-fp8/segmented-after/mtp1/triton",
+      "files": 63313,
+      "bytes": 7602277335,
+      "tuning_json_sha256": {}
+    },
+    {
+      "model": "gemma26-fp8",
+      "arm": "segmented-after",
+      "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma26-fp8/segmented-after/decode/vllm/rocm_segmented_attention",
+      "target": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma26-fp8/segmented-after/mtp1/vllm/rocm_segmented_attention",
+      "files": 4,
+      "bytes": 17712218,
+      "tuning_json_sha256": {
+        "b1e0cf6175c352fe0396fcb98554bacde6fe9eee981ed5878816b45e347f4030.json": "d45952229dadfa7c499f577f8bf11dce6ae34840f3db7d745e0069dbd999dc12",
+        "4e600b9229a666be13714eba9706a6da37c20e8a57339fcd8d512822b60a3ccc.json": "a75dadedd4f6bdeee24acef3bae203212871d274b1a77764ebc1dccea9b06cbf"
+      }
+    }
+  ]
+}

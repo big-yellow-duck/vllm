@@ -1,0 +1,42 @@
+{
+  "source_sha256": {
+    "vllm/v1/attention/ops/segmented_attention.py": "cef3242c0e76863afc1dffdcf2cae34dc86a0c67711f77cb9c29502e4fc728e8",
+    "vllm/v1/attention/backends/rocm_segmented_attn.py": "cc1ac8800e305f60b09936e8ebca8d50d4c822d625389ea9c1bf8ff3814a3c9b",
+    "vllm/v1/attention/ops/segmented_attention_config.py": "36c4a675af39f85b5e94cec4837421e9980262cb17d4ef8ba7f668f4144fbe25",
+    "vllm/model_executor/warmup/rocm_segmented_attn_autotune_warmup.py": "2dfc181e90a5f24ef0d3ad219858cf95c3f8eccae133ae2af6943c68c1454a0b",
+    "tests/kernels/attention/test_segmented_attention.py": "172f7595372b6ab7d82fc00daa5c2d603bf62451c3bfd04a9fcefb2e83e9c292"
+  },
+  "cpu_passed": 319,
+  "gpu_passed": 20,
+  "precommit": "passed (including mypy)",
+  "equivalence": {
+    "before_ops_sha256": "ea356190dad1bf37caa2aa0d17462c9c63a6b58e811af4d672d35e33c1653c50",
+    "after_ops_sha256": "cef3242c0e76863afc1dffdcf2cae34dc86a0c67711f77cb9c29502e4fc728e8",
+    "jit_functions": {
+      "_segmented_kv_upcast": {
+        "ast_equal": true,
+        "line_equal": true,
+        "line": 67,
+        "triton_cache_key": "b235dc9c4d57942aba9bfd8e5aa8bd23e603e336f74fd55bb160cfc151606531"
+      },
+      "_segmented_attention_stage": {
+        "ast_equal": true,
+        "line_equal": true,
+        "line": 121,
+        "triton_cache_key": "8bd2e3dc14276d40cb16f8d11c0577ab6137bd7841818591a1a646ab2f0f56dd"
+      },
+      "_segmented_attention_reduce": {
+        "ast_equal": true,
+        "line_equal": true,
+        "line": 402,
+        "triton_cache_key": "47caa4b2f7a57a62f9ea5bf58ac3b6cf08d8e8bda2e5ad905a6525fb5d934533"
+      }
+    },
+    "projected_kv_dispatch": {
+      "cases": 6144,
+      "identical": 6144,
+      "accepted": 1728
+    }
+  },
+  "change": "Allow paired None K/V for read-only attention against existing KV cache; preserve kernel arithmetic and existing projected-K/V dispatch."
+}

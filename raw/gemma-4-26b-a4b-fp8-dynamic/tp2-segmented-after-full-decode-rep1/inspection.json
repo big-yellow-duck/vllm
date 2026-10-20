@@ -1,0 +1,1410 @@
+{
+  "results": [
+    {
+      "model": "/home/ellm/.cache/huggingface/hub/models--RedHatAI--gemma-4-26B-A4B-it-FP8-dynamic/snapshots/ed35d7abe5d940da41b4ff06eb482feb0be8cb44",
+      "tp": 2,
+      "dtype": "torch.bfloat16",
+      "kv_cache_dtype": "fp8",
+      "attention_layers": [
+        {
+          "name": "language_model.model.layers.0.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.1.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.2.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.3.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.4.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.5.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.6.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.7.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.8.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.9.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.10.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.11.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.12.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.13.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.14.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.15.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.16.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.17.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.18.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.19.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.20.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.21.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.22.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.23.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.24.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.25.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.26.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.27.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.28.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.29.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        }
+      ],
+      "tuning_tables": [
+        {
+          "key": [
+            "0",
+            "torch.bfloat16",
+            "torch.float8_e4m3fn",
+            "8",
+            "4",
+            "256",
+            "16",
+            "1.0",
+            "1023",
+            "True",
+            "False"
+          ],
+          "identity": {
+            "schema": 8,
+            "gpu": "AMD Radeon AI PRO R9700",
+            "arch": "gfx1201",
+            "compute_units": 32,
+            "torch": "2.13.0+rocm10.0.0",
+            "hip": "7.15.26333",
+            "compiler_env": {},
+            "kernel_sha256": "ea356190dad1bf37caa2aa0d17462c9c63a6b58e811af4d672d35e33c1653c50",
+            "selector_sha256": "36c4a675af39f85b5e94cec4837421e9980262cb17d4ef8ba7f668f4144fbe25",
+            "tuner_sha256": "2dfc181e90a5f24ef0d3ad219858cf95c3f8eccae133ae2af6943c68c1454a0b",
+            "dtype": "torch.bfloat16",
+            "kv_dtype": "torch.float8_e4m3fn",
+            "heads": 8,
+            "kv_heads": 4,
+            "dim": 256,
+            "page": 16,
+            "scale": 1.0,
+            "max_tokens": 8192,
+            "max_len": 9215,
+            "max_seqs": 8,
+            "sliding_window": 1023,
+            "causal": true,
+            "max_query_len": 8192,
+            "has_sinks": false,
+            "physical_max_len": 32768,
+            "query_buckets": [
+              1,
+              2,
+              4,
+              8,
+              16,
+              32,
+              64,
+              128,
+              256,
+              512,
+              1024,
+              2048,
+              4096,
+              8192
+            ],
+            "batch_buckets": [
+              1,
+              2,
+              4,
+              8,
+              16,
+              32
+            ],
+            "sequence_buckets": [
+              128,
+              512,
+              2048,
+              8192,
+              32768,
+              131072,
+              262144
+            ],
+            "compile_workers": 2,
+            "condition_rounds": 2,
+            "screen_rounds": 5,
+            "finalist_count": 3,
+            "final_rounds": 7,
+            "min_promotion_speedup": 1.02,
+            "warm_cache_guard": true,
+            "kv_upcast_modes": [
+              "normal",
+              "native1",
+              "native4"
+            ],
+            "kv_upcast_search": "native4_geometry_shortlist",
+            "kv_upcast_geometry_shortlist": 8,
+            "promotion_objective": "warm_cold_geomean",
+            "graph_internal_events": true,
+            "max_warm_slowdown": 1.02,
+            "warm_graph_calls": 2,
+            "max_warm_graph_calls": 256,
+            "warm_target_us": 1000
+          },
+          "records": 176,
+          "best_modes": [
+            "native1",
+            "native4",
+            "normal"
+          ]
+        },
+        {
+          "key": [
+            "0",
+            "torch.bfloat16",
+            "torch.float8_e4m3fn",
+            "8",
+            "1",
+            "512",
+            "16",
+            "1.0",
+            "-1",
+            "True",
+            "False"
+          ],
+          "identity": {
+            "schema": 8,
+            "gpu": "AMD Radeon AI PRO R9700",
+            "arch": "gfx1201",
+            "compute_units": 32,
+            "torch": "2.13.0+rocm10.0.0",
+            "hip": "7.15.26333",
+            "compiler_env": {},
+            "kernel_sha256": "ea356190dad1bf37caa2aa0d17462c9c63a6b58e811af4d672d35e33c1653c50",
+            "selector_sha256": "36c4a675af39f85b5e94cec4837421e9980262cb17d4ef8ba7f668f4144fbe25",
+            "tuner_sha256": "2dfc181e90a5f24ef0d3ad219858cf95c3f8eccae133ae2af6943c68c1454a0b",
+            "dtype": "torch.bfloat16",
+            "kv_dtype": "torch.float8_e4m3fn",
+            "heads": 8,
+            "kv_heads": 1,
+            "dim": 512,
+            "page": 16,
+            "scale": 1.0,
+            "max_tokens": 8192,
+            "max_len": 32768,
+            "max_seqs": 8,
+            "sliding_window": -1,
+            "causal": true,
+            "max_query_len": 8192,
+            "has_sinks": false,
+            "physical_max_len": 32768,
+            "query_buckets": [
+              1,
+              2,
+              4,
+              8,
+              16,
+              32,
+              64,
+              128,
+              256,
+              512,
+              1024,
+              2048,
+              4096,
+              8192
+            ],
+            "batch_buckets": [
+              1,
+              2,
+              4,
+              8,
+              16,
+              32
+            ],
+            "sequence_buckets": [
+              128,
+              512,
+              2048,
+              8192,
+              32768,
+              131072,
+              262144
+            ],
+            "compile_workers": 2,
+            "condition_rounds": 2,
+            "screen_rounds": 5,
+            "finalist_count": 3,
+            "final_rounds": 7,
+            "min_promotion_speedup": 1.02,
+            "warm_cache_guard": true,
+            "kv_upcast_modes": [
+              "normal",
+              "native1",
+              "native4"
+            ],
+            "kv_upcast_search": "native4_geometry_shortlist",
+            "kv_upcast_geometry_shortlist": 8,
+            "promotion_objective": "warm_cold_geomean",
+            "graph_internal_events": true,
+            "max_warm_slowdown": 1.02,
+            "warm_graph_calls": 2,
+            "max_warm_graph_calls": 256,
+            "warm_target_us": 1000
+          },
+          "records": 176,
+          "best_modes": [
+            "native1",
+            "native4"
+          ]
+        }
+      ],
+      "segmented_sources": {
+        "ops": {
+          "path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/ops/segmented_attention.py",
+          "sha256": "ea356190dad1bf37caa2aa0d17462c9c63a6b58e811af4d672d35e33c1653c50"
+        },
+        "tuner": {
+          "path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/model_executor/warmup/rocm_segmented_attn_autotune_warmup.py",
+          "sha256": "2dfc181e90a5f24ef0d3ad219858cf95c3f8eccae133ae2af6943c68c1454a0b"
+        }
+      },
+      "speculative_method": null,
+      "num_speculative_tokens": null
+    },
+    {
+      "model": "/home/ellm/.cache/huggingface/hub/models--RedHatAI--gemma-4-26B-A4B-it-FP8-dynamic/snapshots/ed35d7abe5d940da41b4ff06eb482feb0be8cb44",
+      "tp": 2,
+      "dtype": "torch.bfloat16",
+      "kv_cache_dtype": "fp8",
+      "attention_layers": [
+        {
+          "name": "language_model.model.layers.0.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.1.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.2.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.3.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.4.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.5.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.6.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.7.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.8.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.9.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.10.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.11.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.12.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.13.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.14.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.15.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.16.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.17.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.18.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.19.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.20.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.21.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.22.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.23.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.24.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.25.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.26.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.27.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.28.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 4,
+          "head_dim": 256,
+          "sliding_window": [
+            1023,
+            0
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        },
+        {
+          "name": "language_model.model.layers.29.self_attn.attn",
+          "backend": "ROCM_SEGMENTED_ATTN",
+          "implementation": "RocmSegmentedAttentionImpl",
+          "heads": 8,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "sliding_window": [
+            -1,
+            -1
+          ],
+          "kv_cache_dtype": "fp8",
+          "kv_sharing_target": null,
+          "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/backends/rocm_segmented_attn.py",
+          "source_sha256": "342012923c47305a9b80106c30e1c866f3fb36d2edf9864685566b502bc00c69"
+        }
+      ],
+      "tuning_tables": [
+        {
+          "key": [
+            "1",
+            "torch.bfloat16",
+            "torch.float8_e4m3fn",
+            "8",
+            "4",
+            "256",
+            "16",
+            "1.0",
+            "1023",
+            "True",
+            "False"
+          ],
+          "identity": {
+            "schema": 8,
+            "gpu": "AMD Radeon AI PRO R9700",
+            "arch": "gfx1201",
+            "compute_units": 32,
+            "torch": "2.13.0+rocm10.0.0",
+            "hip": "7.15.26333",
+            "compiler_env": {},
+            "kernel_sha256": "ea356190dad1bf37caa2aa0d17462c9c63a6b58e811af4d672d35e33c1653c50",
+            "selector_sha256": "36c4a675af39f85b5e94cec4837421e9980262cb17d4ef8ba7f668f4144fbe25",
+            "tuner_sha256": "2dfc181e90a5f24ef0d3ad219858cf95c3f8eccae133ae2af6943c68c1454a0b",
+            "dtype": "torch.bfloat16",
+            "kv_dtype": "torch.float8_e4m3fn",
+            "heads": 8,
+            "kv_heads": 4,
+            "dim": 256,
+            "page": 16,
+            "scale": 1.0,
+            "max_tokens": 8192,
+            "max_len": 9215,
+            "max_seqs": 8,
+            "sliding_window": 1023,
+            "causal": true,
+            "max_query_len": 8192,
+            "has_sinks": false,
+            "physical_max_len": 32768,
+            "query_buckets": [
+              1,
+              2,
+              4,
+              8,
+              16,
+              32,
+              64,
+              128,
+              256,
+              512,
+              1024,
+              2048,
+              4096,
+              8192
+            ],
+            "batch_buckets": [
+              1,
+              2,
+              4,
+              8,
+              16,
+              32
+            ],
+            "sequence_buckets": [
+              128,
+              512,
+              2048,
+              8192,
+              32768,
+              131072,
+              262144
+            ],
+            "compile_workers": 2,
+            "condition_rounds": 2,
+            "screen_rounds": 5,
+            "finalist_count": 3,
+            "final_rounds": 7,
+            "min_promotion_speedup": 1.02,
+            "warm_cache_guard": true,
+            "kv_upcast_modes": [
+              "normal",
+              "native1",
+              "native4"
+            ],
+            "kv_upcast_search": "native4_geometry_shortlist",
+            "kv_upcast_geometry_shortlist": 8,
+            "promotion_objective": "warm_cold_geomean",
+            "graph_internal_events": true,
+            "max_warm_slowdown": 1.02,
+            "warm_graph_calls": 2,
+            "max_warm_graph_calls": 256,
+            "warm_target_us": 1000
+          },
+          "records": 176,
+          "best_modes": [
+            "native1",
+            "native4",
+            "normal"
+          ]
+        },
+        {
+          "key": [
+            "1",
+            "torch.bfloat16",
+            "torch.float8_e4m3fn",
+            "8",
+            "1",
+            "512",
+            "16",
+            "1.0",
+            "-1",
+            "True",
+            "False"
+          ],
+          "identity": {
+            "schema": 8,
+            "gpu": "AMD Radeon AI PRO R9700",
+            "arch": "gfx1201",
+            "compute_units": 32,
+            "torch": "2.13.0+rocm10.0.0",
+            "hip": "7.15.26333",
+            "compiler_env": {},
+            "kernel_sha256": "ea356190dad1bf37caa2aa0d17462c9c63a6b58e811af4d672d35e33c1653c50",
+            "selector_sha256": "36c4a675af39f85b5e94cec4837421e9980262cb17d4ef8ba7f668f4144fbe25",
+            "tuner_sha256": "2dfc181e90a5f24ef0d3ad219858cf95c3f8eccae133ae2af6943c68c1454a0b",
+            "dtype": "torch.bfloat16",
+            "kv_dtype": "torch.float8_e4m3fn",
+            "heads": 8,
+            "kv_heads": 1,
+            "dim": 512,
+            "page": 16,
+            "scale": 1.0,
+            "max_tokens": 8192,
+            "max_len": 32768,
+            "max_seqs": 8,
+            "sliding_window": -1,
+            "causal": true,
+            "max_query_len": 8192,
+            "has_sinks": false,
+            "physical_max_len": 32768,
+            "query_buckets": [
+              1,
+              2,
+              4,
+              8,
+              16,
+              32,
+              64,
+              128,
+              256,
+              512,
+              1024,
+              2048,
+              4096,
+              8192
+            ],
+            "batch_buckets": [
+              1,
+              2,
+              4,
+              8,
+              16,
+              32
+            ],
+            "sequence_buckets": [
+              128,
+              512,
+              2048,
+              8192,
+              32768,
+              131072,
+              262144
+            ],
+            "compile_workers": 2,
+            "condition_rounds": 2,
+            "screen_rounds": 5,
+            "finalist_count": 3,
+            "final_rounds": 7,
+            "min_promotion_speedup": 1.02,
+            "warm_cache_guard": true,
+            "kv_upcast_modes": [
+              "normal",
+              "native1",
+              "native4"
+            ],
+            "kv_upcast_search": "native4_geometry_shortlist",
+            "kv_upcast_geometry_shortlist": 8,
+            "promotion_objective": "warm_cold_geomean",
+            "graph_internal_events": true,
+            "max_warm_slowdown": 1.02,
+            "warm_graph_calls": 2,
+            "max_warm_graph_calls": 256,
+            "warm_target_us": 1000
+          },
+          "records": 176,
+          "best_modes": [
+            "native1",
+            "native4"
+          ]
+        }
+      ],
+      "segmented_sources": {
+        "ops": {
+          "path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/v1/attention/ops/segmented_attention.py",
+          "sha256": "ea356190dad1bf37caa2aa0d17462c9c63a6b58e811af4d672d35e33c1653c50"
+        },
+        "tuner": {
+          "path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/model_executor/warmup/rocm_segmented_attn_autotune_warmup.py",
+          "sha256": "2dfc181e90a5f24ef0d3ad219858cf95c3f8eccae133ae2af6943c68c1454a0b"
+        }
+      },
+      "speculative_method": null,
+      "num_speculative_tokens": null
+    }
+  ]
+}

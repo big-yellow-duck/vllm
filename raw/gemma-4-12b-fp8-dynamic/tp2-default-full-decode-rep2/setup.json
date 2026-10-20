@@ -1,0 +1,224 @@
+{
+  "case": {
+    "model": "gemma12-fp8",
+    "arm": "default",
+    "repeat": 2,
+    "workload": "full",
+    "mtp": false
+  },
+  "hardware": {
+    "devices": [
+      {
+        "name": "AMD Radeon AI PRO R9700",
+        "memory": [
+          34126954496,
+          34208743424
+        ]
+      },
+      {
+        "name": "AMD Radeon AI PRO R9700",
+        "memory": [
+          34126954496,
+          34208743424
+        ]
+      }
+    ],
+    "busy_percent": [
+      2,
+      3
+    ]
+  },
+  "command": [
+    "/home/ellm/jeff/rocm_workspaces/10/gfx1201/vllm-segmented-attn-gemma/.venv/bin/python",
+    "-m",
+    "vllm.entrypoints.openai.api_server",
+    "--model",
+    "/home/ellm/.cache/huggingface/hub/models--RedHatAI--gemma-4-12B-it-FP8-Dynamic/snapshots/2083adceb2a3df0465e6021e08a7196d21dbbb44",
+    "--served-model-name",
+    "RedHatAI/gemma-4-12B-it-FP8-Dynamic",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "8026",
+    "--language-model-only",
+    "--dtype",
+    "bfloat16",
+    "--tensor-parallel-size",
+    "2",
+    "--kv-cache-dtype",
+    "fp8",
+    "--max-model-len",
+    "32768",
+    "--max-num-seqs",
+    "8",
+    "--max-num-batched-tokens",
+    "8192",
+    "--gpu-memory-utilization",
+    "0.90",
+    "--enable-prefix-caching",
+    "--seed",
+    "20260715",
+    "--generation-config",
+    "vllm",
+    "--worker-extension-cls",
+    "scripts.segmented_serving_probe.SegmentedServingInspector"
+  ],
+  "model": {
+    "model": "RedHatAI/gemma-4-12B-it-FP8-Dynamic",
+    "revision": "2083adceb2a3df0465e6021e08a7196d21dbbb44",
+    "snapshot": "/home/ellm/.cache/huggingface/hub/models--RedHatAI--gemma-4-12B-it-FP8-Dynamic/snapshots/2083adceb2a3df0465e6021e08a7196d21dbbb44",
+    "config_sha256": "cb84681c12b7664de3323f015f5d003ce7eb398702b48e14f05faba09af41ee8",
+    "weight_bytes": 15037393456,
+    "weights": [
+      {
+        "file": "model.safetensors",
+        "bytes": 15037393456,
+        "blob": "deecaf1d302ea7833b699d55591589021b5ec6670c9fafeccb22756aad0dd0be"
+      }
+    ],
+    "model_type": "gemma4_unified",
+    "dtype": "bfloat16",
+    "head_dim": 256,
+    "global_head_dim": 512,
+    "heads": 16,
+    "kv_heads": 8,
+    "global_kv_heads": 1,
+    "layers": 48,
+    "quantization_config": {
+      "config_groups": {
+        "group_0": {
+          "format": "float-quantized",
+          "input_activations": {
+            "actorder": null,
+            "block_structure": null,
+            "dynamic": true,
+            "group_size": null,
+            "num_bits": 8,
+            "observer": null,
+            "observer_kwargs": {},
+            "scale_dtype": null,
+            "strategy": "token",
+            "symmetric": true,
+            "type": "float",
+            "zp_dtype": null
+          },
+          "output_activations": null,
+          "targets": [
+            "Linear"
+          ],
+          "weights": {
+            "actorder": null,
+            "block_structure": null,
+            "dynamic": false,
+            "group_size": null,
+            "num_bits": 8,
+            "observer": "imatrix_mse",
+            "observer_kwargs": {},
+            "scale_dtype": null,
+            "strategy": "channel",
+            "symmetric": true,
+            "type": "float",
+            "zp_dtype": null
+          }
+        }
+      },
+      "format": "float-quantized",
+      "global_compression_ratio": null,
+      "ignore": [
+        "model.embed_vision.patch_dense",
+        "model.embed_vision.multimodal_embedder.embedding_projection",
+        "model.embed_audio.embedding_projection",
+        "lm_head",
+        "model.vision_embedder.patch_dense"
+      ],
+      "kv_cache_scheme": null,
+      "quant_method": "compressed-tensors",
+      "quantization_status": "compressed",
+      "sparsity_config": {},
+      "transform_config": {},
+      "version": "0.17.1.dev0"
+    }
+  },
+  "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after",
+  "resolved_vllm": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after/vllm/__init__.py",
+  "env": {
+    "TORCHINDUCTOR_CACHE_DIR": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma12-fp8/default/decode/inductor",
+    "TRITON_CACHE_DIR": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma12-fp8/default/decode/triton",
+    "PYTHONPATH": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/source-after:/home/ellm/jeff/rocm_workspaces/10/gfx1201:/home/ellm/jeff/rocm_workspaces/10/gfx1201/vllm-segmented-attn-gemma:/home/ellm/jeff/rocm_workspaces/10/gfx1201/.pixi/envs/default/lib/python3.12/site-packages/_rocm_sdk_devel/share/amd_smi",
+    "CUDA_VISIBLE_DEVICES": "0,1",
+    "NCCL_PROTO": "Simple",
+    "VLLM_SERVER_DEV_MODE": "1",
+    "VLLM_LOGGING_LEVEL": "INFO",
+    "VLLM_CACHE_ROOT": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma12-fp8/default/decode/vllm"
+  },
+  "workload": {
+    "metadata": {
+      "labels": {
+        "workload": "simple-agent-multiturn-prefix-cache"
+      }
+    },
+    "spec": {
+      "backend": {
+        "kind": "openai_http",
+        "target": "http://127.0.0.1:8026",
+        "request_format": "/v1/chat/completions",
+        "stream": true,
+        "model": "RedHatAI/gemma-4-12B-it-FP8-Dynamic",
+        "extras": {
+          "temperature": 0
+        }
+      },
+      "profile": {
+        "kind": "concurrent",
+        "streams": [
+          1,
+          2,
+          4,
+          8
+        ],
+        "rampup_duration": 0,
+        "warmup": {
+          "mode": "requests",
+          "value": 1
+        }
+      },
+      "constraints": [
+        {
+          "kind": "max_requests",
+          "count": [
+            8,
+            16,
+            32,
+            64
+          ]
+        }
+      ],
+      "data": [
+        {
+          "kind": "synthetic_text",
+          "turns": 8,
+          "prompt_tokens": 2048,
+          "output_tokens": 512
+        }
+      ],
+      "seed": {
+        "kind": "static",
+        "value": 20260715
+      },
+      "outputs": [
+        {
+          "kind": "json",
+          "path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/vllm-bench-collection/results/gfx1201/gemma-4-12b-fp8-dynamic/segmented-update-20261016/tp2-default-full-decode-rep2/agent-multiturn-benchmarks.json"
+        }
+      ],
+      "metrics": {
+        "kind": "generative",
+        "sample_size": 0
+      },
+      "tokenizer": {
+        "kind": "huggingface_auto",
+        "model": "/home/ellm/.cache/huggingface/hub/models--RedHatAI--gemma-4-12B-it-FP8-Dynamic/snapshots/2083adceb2a3df0465e6021e08a7196d21dbbb44"
+      }
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "id": "chatcmpl-875b320d148d526e",
+  "object": "chat.completion",
+  "created": 1792135327,
+  "model": "RedHatAI/gemma-4-12B-it-FP8-Dynamic",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hello! How can I help you today?",
+        "refusal": null,
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "reasoning": null
+      },
+      "logprobs": null,
+      "finish_reason": "stop",
+      "stop_reason": 106,
+      "token_ids": null,
+      "routed_experts": null
+    }
+  ],
+  "service_tier": null,
+  "system_fingerprint": "vllm-0.1.dev22962+gd9a543c50-tp2-44a7aba8",
+  "usage": {
+    "prompt_tokens": 19,
+    "total_tokens": 29,
+    "completion_tokens": 10,
+    "prompt_tokens_details": null,
+    "completion_tokens_details": null
+  },
+  "prompt_logprobs": null,
+  "prompt_token_ids": null,
+  "prompt_text": null,
+  "kv_transfer_params": null,
+  "ec_transfer_params": null,
+  "metrics": null
+}

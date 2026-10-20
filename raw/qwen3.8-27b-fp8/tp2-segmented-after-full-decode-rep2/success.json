@@ -1,0 +1,46 @@
+{
+  "case": {
+    "model": "qwen27-fp8",
+    "arm": "segmented-after",
+    "repeat": 2,
+    "workload": "full",
+    "mtp": false
+  },
+  "counts": [
+    {
+      "streams": 1,
+      "successful": 8,
+      "errors": 0,
+      "incomplete": 0,
+      "peak_concurrency": 1,
+      "mean_concurrency": 0.9999083015357986
+    },
+    {
+      "streams": 2,
+      "successful": 16,
+      "errors": 0,
+      "incomplete": 0,
+      "peak_concurrency": 2,
+      "mean_concurrency": 1.9994258038971437
+    },
+    {
+      "streams": 4,
+      "successful": 32,
+      "errors": 0,
+      "incomplete": 0,
+      "peak_concurrency": 4,
+      "mean_concurrency": 3.999179024591041
+    },
+    {
+      "streams": 8,
+      "successful": 64,
+      "errors": 0,
+      "incomplete": 0,
+      "peak_concurrency": 8,
+      "mean_concurrency": 7.996994691756861
+    }
+  ],
+  "report_sha256": "c9994eab3b51c93d4614b68ac669dd9c0fc303b0496b42be9e82cdbdb9aefe12",
+  "startup_s": 50.01075315894559,
+  "completed": "2026-10-16T09:26:07.813068+00:00"
+}

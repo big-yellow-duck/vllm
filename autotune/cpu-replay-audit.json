@@ -1,0 +1,10 @@
+{
+  "profiles": 1284,
+  "eligible_fp8_profiles": 1154,
+  "available_candidates": 83401,
+  "selected_candidates": 48605,
+  "full_winners_retained": 1284,
+  "ineligible_searches_unchanged": true,
+  "cpu_contracts_passed": 318,
+  "gpu_measurements": false
+}

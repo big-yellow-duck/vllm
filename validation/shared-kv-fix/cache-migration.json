@@ -1,0 +1,41 @@
+{
+  "proof": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/logs/segmented-serving-2026-10-16/shared-kv-fix/math-equivalence.json",
+  "entries": [
+    {
+      "old_path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma12-fp8/segmented-after/mtp1/vllm/rocm_segmented_attention/b1e0cf6175c352fe0396fcb98554bacde6fe9eee981ed5878816b45e347f4030.json",
+      "new_path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma12-fp8/segmented-after/mtp1/vllm/rocm_segmented_attention/f3df430c2d115dc05cc7533f168c47cbe7a59539096f2da860cd3c061131c784.json",
+      "old_sha256": "60a004866d54a8b6b433c1b38afe83e8827b928a01bbb7258e3895978560b330",
+      "new_sha256": "d31f35a95e237528132488d466ed2e09e33e9e8141a646b8e53aeae1e7958a90",
+      "records": 176,
+      "only_identity_change": "kernel_sha256",
+      "original_preserved": true
+    },
+    {
+      "old_path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma12-fp8/segmented-after/mtp1/vllm/rocm_segmented_attention/4e600b9229a666be13714eba9706a6da37c20e8a57339fcd8d512822b60a3ccc.json",
+      "new_path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma12-fp8/segmented-after/mtp1/vllm/rocm_segmented_attention/c8870dcf3a1c305a4aa3b41fd78a93e23d081ad6dc756c696b9ce0eac0505a2e.json",
+      "old_sha256": "0fb4445534a6ae4f9172a38c729fc1b08cf31620a0a41576669660f1d025b8ae",
+      "new_sha256": "1a627952dfde342bd803c293456f5d9c428be9f9b8379e89a355bf7cef5db299",
+      "records": 176,
+      "only_identity_change": "kernel_sha256",
+      "original_preserved": true
+    },
+    {
+      "old_path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma26-fp8/segmented-after/mtp1/vllm/rocm_segmented_attention/b1e0cf6175c352fe0396fcb98554bacde6fe9eee981ed5878816b45e347f4030.json",
+      "new_path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma26-fp8/segmented-after/mtp1/vllm/rocm_segmented_attention/f3df430c2d115dc05cc7533f168c47cbe7a59539096f2da860cd3c061131c784.json",
+      "old_sha256": "d45952229dadfa7c499f577f8bf11dce6ae34840f3db7d745e0069dbd999dc12",
+      "new_sha256": "7ca284c5ed385090661e494060c3e2f6aa5fa767fc5721567b9c41ef4d9f6d1d",
+      "records": 176,
+      "only_identity_change": "kernel_sha256",
+      "original_preserved": true
+    },
+    {
+      "old_path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma26-fp8/segmented-after/mtp1/vllm/rocm_segmented_attention/4e600b9229a666be13714eba9706a6da37c20e8a57339fcd8d512822b60a3ccc.json",
+      "new_path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/.cache/segmented-serving-20261016/gemma26-fp8/segmented-after/mtp1/vllm/rocm_segmented_attention/c8870dcf3a1c305a4aa3b41fd78a93e23d081ad6dc756c696b9ce0eac0505a2e.json",
+      "old_sha256": "a75dadedd4f6bdeee24acef3bae203212871d274b1a77764ebc1dccea9b06cbf",
+      "new_sha256": "5f7970688a6e296eb59056fd7a12627a4565213459609aab097c8a789528855d",
+      "records": 176,
+      "only_identity_change": "kernel_sha256",
+      "original_preserved": true
+    }
+  ]
+}

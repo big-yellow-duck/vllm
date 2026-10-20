@@ -1,0 +1,55 @@
+✨ Pixi task (segmented-python): bash scripts/run_segmented_gemma.sh -c import os,runpy,sys; os.chdir("vllm-segmented-attn-gemma"); sys.argv=["pre-commit","run","--files","vllm/v1/attention/ops/segmented_attention.py","vllm/v1/attention/backends/rocm_segmented_attn.py","tests/kernels/attention/test_segmented_attention.py"]; runpy.run_module("pre_commit",run_name="__main__")
+ruff check..........................................................................................Passed
+ruff format.........................................................................................Passed
+typos...............................................................................................Passed
+clang-format....................................................................(no files to check)Skipped
+markdownlint-cli2...............................................................(no files to check)Skipped
+Lint GitHub Actions workflow files..............................................(no files to check)Skipped
+shellcheck......................................................................(no files to check)Skipped
+pip-compile.....................................................................(no files to check)Skipped
+pip-compile-rocm................................................................(no files to check)Skipped
+pip-compile-xpu.................................................................(no files to check)Skipped
+pip-compile-cpu.................................................................(no files to check)Skipped
+pip-compile-docs................................................................(no files to check)Skipped
+check json......................................................................(no files to check)Skipped
+reformat test/nightly-torch.txt to be in sync with test/cuda.in.................(no files to check)Skipped
+Check auto-label rules still match real files...................................(no files to check)Skipped
+Check agent instruction files and skills........................................(no files to check)Skipped
+- hook id: check-agent-files
+Check every Buildkite step declares an explicit key.............................(no files to check)Skipped
+Check new tests are wired into Buildkite CI.........................................................Passed
+- hook id: check-test-tethering
+- duration: 2.1s
+Run mypy for the oldest supported Python version....................................................Failed
+- hook id: mypy
+- exit code: 1
+
+tests/kernels/attention/test_segmented_attention.py:491: error: List item 0 has incompatible type "dict[str, int]"; expected "SegmentedAttentionConfig"  [list-item]
+tests/kernels/attention/test_segmented_attention.py:491: error: List item 1 has incompatible type "dict[str, int]"; expected "SegmentedAttentionConfig"  [list-item]
+tests/kernels/attention/test_segmented_attention.py:509: error: List item 0 has incompatible type "dict[str, int]"; expected "SegmentedAttentionConfig"  [list-item]
+tests/kernels/attention/test_segmented_attention.py:509: error: List item 1 has incompatible type "dict[str, int]"; expected "SegmentedAttentionConfig"  [list-item]
+tests/kernels/attention/test_segmented_attention.py:529: error: List item 0 has incompatible type "dict[str, int]"; expected "SegmentedAttentionConfig"  [list-item]
+tests/kernels/attention/test_segmented_attention.py:529: error: List item 1 has incompatible type "dict[str, int]"; expected "SegmentedAttentionConfig"  [list-item]
+Found 6 errors in 1 file (checked 3 source files)
+$ mypy --python-version 3.11
+
+Lint PNG exports from excalidraw................................................(no files to check)Skipped
+Check SPDX headers..................................................................................Passed
+Check root lazy imports.............................................................................Passed
+Check for spaces in all filenames...................................................................Passed
+Update Dockerfile dependency graph..................................................................Passed
+Test non-root entrypoint wrapper................................................(no files to check)Skipped
+Check for forbidden imports.........................................................................Passed
+Prevent new 'torch.cuda' APIs call..................................................................Passed
+Validate configuration has default values and that each field has a docstring.......................Passed
+Validate docker/versions.json matches Dockerfile................................(no files to check)Skipped
+Check for boolean ops in with-statements............................................................Passed
+Rust - Normalize Cargo manifests with autoinherit...............................(no files to check)Skipped
+Rust - Sort Cargo manifest sections.............................................(no files to check)Skipped
+Rust - Format code..............................................................(no files to check)Skipped
+Suggestion..........................................................................................Passed
+- hook id: suggestion
+- duration: 0s
+
+To bypass all the pre-commit hooks, add --no-verify to git commit. To skip a specific hook, prefix the commit command with SKIP=<hook-id>.
+
