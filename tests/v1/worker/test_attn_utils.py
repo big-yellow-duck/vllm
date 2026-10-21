@@ -21,6 +21,7 @@ from tests.v1.attention.utils import (
     dense_kv_cache_views,
 )
 from vllm.config.compilation import CompilationConfig, CUDAGraphMode
+from vllm.multimodal.inputs import MultiModalFeatureSpec, PlaceholderRange
 from vllm.v1.attention.backend import AttentionBackend, AttentionCGSupport, MultipleOf
 from vllm.v1.core.kv_cache_utils import KVCacheBlockCopy
 from vllm.v1.hisparse.binding import allocate_hisparse_kv_caches
@@ -49,6 +50,30 @@ from vllm.v1.worker.utils import (
     customize_attention_spec,
     map_kv_caches_to_kernel_blocks,
 )
+
+
+@pytest.mark.parametrize("window", [None, 1024])
+@pytest.mark.parametrize("clamp", [False, True])
+def test_mm_prefix_ranges_retain_large_images_for_kernel_window_clamping(window, clamp):
+    """Gemma4 keeps large image islands; other models retain the size filter."""
+    features = [
+        MultiModalFeatureSpec(None, modality, modality, PlaceholderRange(start, length))
+        for modality, start, length in [
+            ("image", 16, 1120),
+            ("video", 1200, 280),
+            ("audio", 1600, 1120),
+        ]
+    ]
+    ranges = attn_utils.compute_mm_prefix_ranges(
+        ["image-request", "text-request"],
+        {"image-request": features},
+        sliding_window=window,
+        mm_prefix_clamp_sliding_window=clamp,
+    )
+    expected = [(16, 1135), (1200, 1479)]
+    if window is not None and not clamp:
+        expected = expected[1:]
+    assert ranges == {0: expected, 1: []}
 
 
 @pytest.mark.parametrize(
