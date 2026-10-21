@@ -868,6 +868,24 @@ def test_segmented_tuning_persists_without_retuning(segmented_tuner, monkeypatch
         pytest.param(4, {"sliding_window": 7}, id="sliding-window"),
         pytest.param(4, {"sliding_window": 7, "causal": False}, id="draft-window"),
         pytest.param(4, {"has_sinks": True}, id="sinks"),
+        pytest.param(
+            4,
+            {
+                "mm_prefix_mode": "clamped",
+                "mm_prefix_max_span": 8,
+                "mm_prefix_max_ranges": 1,
+            },
+            id="mm-clamped",
+        ),
+        pytest.param(
+            4,
+            {
+                "mm_prefix_mode": "unclamped",
+                "mm_prefix_max_span": 8,
+                "mm_prefix_max_ranges": 2,
+            },
+            id="mm-unclamped",
+        ),
     ],
 )
 def test_segmented_tuning_does_not_reuse_incompatible_winners(
@@ -878,13 +896,16 @@ def test_segmented_tuning_does_not_reuse_incompatible_winners(
     tuning = state.module
     tuning.warmup_segmented_attention(*state.warmup_args, memory_budget_bytes=2**50)
     previous_calls = len(state.calls)
+    lookup_args = state.lookup_args
+    if mode.get("mm_prefix_mode"):
+        lookup_args = (*lookup_args[:9], max_tokens, lookup_args[10])
     if mode:
-        assert tuning.get_segmented_config(*state.lookup_args, **mode) is None
+        assert tuning.get_segmented_config(*lookup_args, **mode) is None
     args = (*state.warmup_args[:7], max_tokens, *state.warmup_args[8:])
     tuning.warmup_segmented_attention(*args, memory_budget_bytes=2**50, **mode)
     assert len(state.calls) > previous_calls
     assert len(list(state.cache_dir.rglob("*.json"))) == 2
-    assert tuning.get_segmented_config(*state.lookup_args, **mode) is not None
+    assert tuning.get_segmented_config(*lookup_args, **mode) is not None
 
 
 @pytest.mark.parametrize(
@@ -1211,7 +1232,7 @@ def test_rocm_segmented_attn_cache_only_reader(
 
 @pytest.mark.parametrize("fp8", [False, True])
 @pytest.mark.parametrize("head_size", [64, 128, 256, 512])
-@pytest.mark.parametrize("gqa", [2, 8])
+@pytest.mark.parametrize("gqa", [2, 3, 8])
 @pytest.mark.parametrize("window,clamp", [(0, False), (8, False), (8, True)])
 @pytest.mark.parametrize("splits", [1, 4])
 @pytest.mark.parametrize("causal", [True, False])
@@ -1270,8 +1291,13 @@ def test_rocm_segmented_mm_prefix(
     def forbidden(*args, **kwargs):
         pytest.fail("MM attention used text tuning profiles or the fallback")
 
+    def mm_lookup(*args, **kwargs):
+        assert kwargs["mm_prefix_mode"] == ("clamped" if clamp else "unclamped")
+        assert kwargs["mm_prefix_max_ranges"] == 2
+        return None
+
     monkeypatch.setattr(dispatcher, "select_segmented_config", select)
-    monkeypatch.setattr(dispatcher, "get_segmented_config", forbidden)
+    monkeypatch.setattr(dispatcher, "get_segmented_config", mm_lookup)
     monkeypatch.setattr(dispatcher, "unified_attention", forbidden)
     k_cache, v_cache = case["key_cache"], case["value_cache"]
     if fp8:
@@ -1331,6 +1357,128 @@ def test_rocm_segmented_mm_prefix(
         )["reference"]
         check(reference)
     torch.testing.assert_close(cache, original_cache, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("fp8", [False, True])
+@pytest.mark.parametrize("clamp", [False, True])
+@pytest.mark.parametrize("causal", [False, True])
+@torch.inference_mode()
+def test_single_query_mm_clamping_reuses_text_dispatch(monkeypatch, fp8, clamp, causal):
+    """Clamped Q1 cannot open extra keys; unclamped Q1 can reopen old image keys."""
+    if fp8 and not on_gfx12x():
+        pytest.skip("FP8 segmented attention requires gfx12")
+    from vllm.v1.attention.backends.utils import compute_mm_prefix_range_tensor
+    from vllm.v1.attention.ops import segmented_attention as dispatcher
+
+    ranges = {0: [(0, 70)], 1: [(40, 80)]}
+    case = _make_paged_attention_case(
+        [1, 1],
+        [47, 71],
+        num_heads=8,
+        num_kv_heads=4,
+        head_size=256,
+        block_size=16,
+        fp8=fp8,
+        causal=causal,
+        sliding_window=8,
+        mm_ranges=ranges,
+        mm_prefix_clamp_sliding_window=clamp,
+    )
+    mm = compute_mm_prefix_range_tensor(ranges, 2, case["query"].device)
+
+    def lookup(*args, **kwargs):
+        assert kwargs["mm_prefix_mode"] == ("none" if clamp else "unclamped")
+        return None
+
+    monkeypatch.setattr(dispatcher, "get_segmented_config", lookup)
+    output = torch.empty_like(case["query"])
+    dispatcher.segmented_attention(
+        query=case["query"],
+        key=None,
+        value=None,
+        output=output,
+        kv_cache_dtype="fp8" if fp8 else "auto",
+        key_cache=case["key_cache"],
+        value_cache=case["value_cache"],
+        block_table=case["block_table"],
+        query_start_loc=case["starts"],
+        seq_lens=case["seq_lens"],
+        max_seq_len=case["max_seq_len"],
+        max_query_len=1,
+        k_scale=case["k_scale"],
+        v_scale=case["v_scale"],
+        sm_scale=256**-0.5,
+        sliding_window=7,
+        causal=causal,
+        mm_prefix_range=mm,
+        mm_prefix_clamp_sliding_window=clamp,
+        mm_prefix_max_span=71,
+    )
+    relative = (output.float() - case["reference"]).norm(dim=-1) / case[
+        "reference"
+    ].norm(dim=-1).clamp_min(1e-6)
+    assert torch.isfinite(output).all() and relative.max().item() < 0.01
+
+
+@pytest.mark.parametrize("fp8", [False, True])
+@pytest.mark.parametrize("clamp", [False, True])
+@pytest.mark.parametrize("causal", [False, True])
+@pytest.mark.parametrize(
+    "count,overlap", [(1, False), (4, False), (4, True), (16, False), (16, True)]
+)
+@torch.inference_mode()
+def test_segmented_mm_query_bounds_preserve_separate_and_overlapping_islands(
+    fp8, clamp, causal, count, overlap
+):
+    """Hoisted per-query bounds keep gaps, unions, windows, and cache clipping."""
+    if fp8 and not on_gfx12x():
+        pytest.skip("FP8 segmented attention requires gfx12")
+    from vllm.v1.attention.backends.utils import compute_mm_prefix_range_tensor
+    from vllm.v1.attention.ops import segmented_attention as dispatcher
+
+    stride = 12 if overlap else 24
+    ranges = {0: [(2030 + ri * stride, 2049 + ri * stride) for ri in range(count)]}
+    case = _make_paged_attention_case(
+        [256],
+        [2000],
+        num_heads=8,
+        num_kv_heads=4,
+        head_size=256,
+        block_size=16,
+        fp8=fp8,
+        causal=causal,
+        sliding_window=8,
+        mm_ranges=ranges,
+        mm_prefix_clamp_sliding_window=clamp,
+    )
+    output = torch.empty_like(case["query"])
+    dispatcher.segmented_attention(
+        query=case["query"],
+        key=None,
+        value=None,
+        output=output,
+        kv_cache_dtype="fp8" if fp8 else "auto",
+        key_cache=case["key_cache"],
+        value_cache=case["value_cache"],
+        block_table=case["block_table"],
+        query_start_loc=case["starts"],
+        seq_lens=case["seq_lens"],
+        max_seq_len=case["max_seq_len"],
+        max_query_len=256,
+        k_scale=case["k_scale"],
+        v_scale=case["v_scale"],
+        sm_scale=256**-0.5,
+        sliding_window=7,
+        causal=causal,
+        mm_prefix_range=compute_mm_prefix_range_tensor(ranges, 1, output.device),
+        mm_prefix_clamp_sliding_window=clamp,
+        mm_prefix_max_span=20,
+        use_tuned_config=False,
+    )
+    relative = (output.float() - case["reference"]).norm(dim=-1) / case[
+        "reference"
+    ].norm(dim=-1).clamp_min(1e-6)
+    assert torch.isfinite(output).all() and relative.max().item() < 0.01
 
 
 @pytest.mark.parametrize("fp8", [False, True])
