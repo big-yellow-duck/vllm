@@ -795,6 +795,9 @@ def test_rdna4_flydsl_fp8_matches_quark_emulation(shape, dtype, dynamic, dist_in
     if dynamic:
         # Peak 56 gives an exactly representable per-token scale of 1/8.
         x[..., 0] = 56
+    if m == 7:
+        x = torch.stack((x, x), dim=-1)[..., 0]
+        assert not x.is_contiguous()
     make_layer = (
         _make_dynamic_fp8_mxfp4_layer if dynamic else _make_static_fp8_mxfp4_layer
     )

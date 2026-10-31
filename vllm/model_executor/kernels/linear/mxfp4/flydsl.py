@@ -159,6 +159,7 @@ class FlydslMxfp4LinearKernel(MxFp4LinearKernel):
                 (x_2d / layer.input_scale)
                 .clamp(fp8_min, fp8_max)
                 .to(torch.float8_e4m3fn)
+                .contiguous()
             )
             x_scale = (
                 layer.input_scale.reshape(())
