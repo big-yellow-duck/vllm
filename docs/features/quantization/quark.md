@@ -256,6 +256,33 @@ python3 quantize_quark.py --model_dir meta-llama/Llama-2-70b-chat-hf \
 
 ## Using OCP MX (MXFP4, MXFP6) models
 
+### RDNA4 MXFP4 weights with FP8 activations
+
+On ROCm gfx1200/gfx1201, the `flydsl` linear backend supports Quark checkpoints
+with OCP MXFP4 weights, E8M0 scales per 32 weights, and static per-tensor or
+dynamic per-token FP8 E4M3 activations. Install a FlyDSL build that provides
+`flydsl.kernels.gemm.rdna4_mxfp4`; vLLM imports the implementation from that
+package. Weight preparation runs once during model loading and retains
+compressed weights. GEMM uses native FP8 WMMA with FP32 accumulation.
+
+```bash
+vllm serve amd/Qwen3.8-27B-Quark-AWQ-MXFP4 \
+  --dtype bfloat16 \
+  --quantization-config '{"linear":{"activation":"fp8_per_token"}}' \
+  --kernel-config '{"linear_backend_per_quant":{"mxfp4":"flydsl"}}'
+```
+
+This checkpoint declares dynamic MXFP4 activations. The explicit override above
+changes it to W4A8; retain the same override when comparing backends or evaluating
+accuracy. Checkpoints that already declare static FP8 activations do not need an
+override. Auto selection enables this backend only on RDNA4 when the FlyDSL
+kernel package and a supported FP8 scheme are available. To compare against
+dequantization and half-precision GEMM with the same FP8 activation quantizer,
+select `"mxfp4":"emulation"` instead. Explicitly
+selecting FlyDSL on unsupported hardware or without its kernels raises a
+kernel-selection error. Dynamic MXFP4 activations and weight-only MXFP4
+schemes continue to use their existing backends unless explicitly overridden.
+
 vLLM supports loading MXFP4 and MXFP6 models quantized offline through AMD Quark, compliant with [Open Compute Project (OCP) specification](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf).
 
 The scheme currently only supports dynamic quantization for activations.

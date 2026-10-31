@@ -22,7 +22,7 @@ import torch
 from tests.kernels.utils import _assert_accurate, _assert_deterministic
 from tests.quantization.reference_mxfp4 import dq_mxfp4_torch, qdq_mxfp4_torch
 from vllm.platforms import current_platform
-from vllm.platforms.rocm import on_gfx950
+from vllm.platforms.rocm import on_gfx950, on_rdna4
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_rocm(), reason="ROCm-specific tests"
@@ -727,3 +727,182 @@ def test_aiter_mxfp4_asm_layout_follows_aiter_tuned_configs(
         # Triton path stores the transposed, contiguous scale.
         assert tuple(layer.weight_scale.shape) == scale_shape[::-1]
         assert layer.weight_scale.is_contiguous()
+
+
+# RDNA4 static FP8 activations / MXFP4 weights -----------------------------
+
+
+def _make_static_fp8_mxfp4_layer(packed, scales, backend):
+    from vllm.config import VllmConfig, set_current_vllm_config
+    from vllm.model_executor.layers.quantization.quark.schemes.quark_w4a8_mxfp4_fp8 import (  # noqa: E501
+        QuarkW4A8_MXFP4_FP8,
+    )
+    from vllm.model_executor.layers.quantization.utils.quant_utils import (
+        kFp8StaticTensorSym,
+    )
+    from vllm.model_executor.model_loader.weight_utils import default_weight_loader
+
+    n, half_k = packed.shape
+    config = VllmConfig(kernel_config={"linear_backend_per_quant": {"mxfp4": backend}})
+    with set_current_vllm_config(config), torch.device(packed.device):
+        scheme = QuarkW4A8_MXFP4_FP8(kFp8StaticTensorSym)
+        layer = torch.nn.Module()
+        scheme.create_weights(
+            layer, [n], half_k * 2, torch.bfloat16, default_weight_loader
+        )
+        default_weight_loader(layer.weight, packed)
+        default_weight_loader(layer.weight_scale, scales)
+        default_weight_loader(
+            layer.input_scale, torch.tensor([0.125], device=packed.device)
+        )
+        scheme.process_weights_after_loading(layer)
+    return scheme, layer
+
+
+def _make_dynamic_fp8_mxfp4_layer(packed, scales, backend):
+    from vllm.config import VllmConfig, set_current_vllm_config
+    from vllm.model_executor.kernels.linear import init_mxfp4_linear_kernel
+    from vllm.model_executor.layers.quantization.utils.quant_utils import (
+        kFp8DynamicTokenSym,
+    )
+
+    config = VllmConfig(kernel_config={"linear_backend_per_quant": {"mxfp4": backend}})
+    with set_current_vllm_config(config):
+        kernel = init_mxfp4_linear_kernel(kFp8DynamicTokenSym)
+        layer = torch.nn.Module()
+        layer.register_parameter("weight", torch.nn.Parameter(packed.clone(), False))
+        layer.register_parameter(
+            "weight_scale", torch.nn.Parameter(scales.clone(), False)
+        )
+        kernel.process_weights_after_loading(layer)
+    return kernel, layer
+
+
+@pytest.mark.skipif(not on_rdna4(), reason="requires ROCm RDNA4")
+@pytest.mark.parametrize("shape", [(7, 70, 160), (73, 128, 1120)])
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
+@pytest.mark.parametrize("dynamic", [False, True])
+def test_rdna4_flydsl_fp8_matches_quark_emulation(shape, dtype, dynamic, dist_init):
+    """Real Quark loading preserves the existing static-FP8 math exactly.
+
+    Dyadic inputs and bounded exponents make FP32 accumulation exact, so this
+    comparison also catches nibble order, scale placement and cached pointers.
+    """
+    m, n, k = shape
+    generator = torch.Generator(device="cuda").manual_seed(37)
+    x = torch.randint(-8, 8, (1, m, k), generator=generator, device="cuda")
+    x = (x * 0.125).to(dtype)
+    if dynamic:
+        # Peak 56 gives an exactly representable per-token scale of 1/8.
+        x[..., 0] = 56
+    make_layer = (
+        _make_dynamic_fp8_mxfp4_layer if dynamic else _make_static_fp8_mxfp4_layer
+    )
+    results = []
+    for _ in range(2):
+        packed = torch.randint(
+            0,
+            256,
+            (n, k // 2),
+            generator=generator,
+            device="cuda",
+            dtype=torch.uint8,
+        )
+        scales = torch.randint(
+            124,
+            130,
+            (n, k // 32),
+            generator=generator,
+            device="cuda",
+            dtype=torch.uint8,
+        )
+        scheme, layer = make_layer(packed, scales, "flydsl")
+        # Quark's reference decoder requires N*K divisible by 512. Pad its
+        # output rows while retaining the unpadded FlyDSL tail being tested.
+        reference_n = (n + 15) // 16 * 16
+        reference_scheme, reference_layer = make_layer(
+            torch.nn.functional.pad(packed, (0, 0, 0, reference_n - n)),
+            torch.nn.functional.pad(scales, (0, 0, 0, reference_n - n), value=127),
+            "emulation",
+        )
+        expected = reference_scheme.apply_weights(reference_layer, x)[..., :n]
+        actual = scheme.apply_weights(layer, x)
+        assert actual.shape == (1, m, n) and actual.dtype == dtype
+        torch.testing.assert_close(actual, expected, atol=0, rtol=0)
+        results.append(actual)
+        bias = torch.linspace(-1, 1, n, device="cuda", dtype=dtype)
+        torch.testing.assert_close(
+            scheme.apply_weights(layer, x, bias), expected + bias, atol=0, rtol=0
+        )
+    assert not torch.equal(*results)
+
+
+@pytest.mark.skipif(not on_rdna4(), reason="requires ROCm RDNA4")
+@pytest.mark.parametrize("dynamic", [False, True])
+def test_rdna4_flydsl_compiled_graph_reads_changed_inputs(dynamic, dist_init):
+    """The registered functional op supports compilation and graph replay."""
+    m, n, k = 7, 70, 160
+    packed = torch.full((n, k // 2), 0x32, device="cuda", dtype=torch.uint8)
+    scales = torch.full((n, k // 32), 127, device="cuda", dtype=torch.uint8)
+    make_layer = (
+        _make_dynamic_fp8_mxfp4_layer if dynamic else _make_static_fp8_mxfp4_layer
+    )
+    scheme, layer = make_layer(packed, scales, "flydsl")
+    x = torch.ones(m, k, device="cuda", dtype=torch.bfloat16)
+
+    def apply(value):
+        return scheme.apply_weights(layer, value)
+
+    compiled = torch.compile(apply, backend="eager", fullgraph=True)
+    expected = apply(x)
+    torch.testing.assert_close(compiled(x), expected, atol=0, rtol=0)
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        output = compiled(x)
+    x.mul_(0.5)
+    graph.replay()
+    torch.accelerator.synchronize()
+    torch.testing.assert_close(output, expected * 0.5, atol=0, rtol=0)
+    assert compiled(x[:0]).shape == (0, n)
+
+
+@pytest.mark.skipif(not on_rdna4(), reason="requires ROCm RDNA4")
+@pytest.mark.slow_test
+def test_rdna4_flydsl_serves_quark_checkpoint_with_fp8_override():
+    """Exercise checkpoint loading and the FP8 override through the real server."""
+    from tests.utils import RemoteOpenAIServer
+
+    model = "amd/Qwen3.8-27B-Quark-AWQ-MXFP4"
+    server_args = [
+        "--revision",
+        "5233554c5fa56afda40150556b95573c2d7d29c0",
+        "--dtype",
+        "bfloat16",
+        "--language-model-only",
+        "--enforce-eager",
+        "--max-model-len",
+        "4096",
+        "--max-num-seqs",
+        "4",
+        "--max-num-batched-tokens",
+        "1024",
+        "--quantization-config",
+        '{"linear":{"activation":"fp8_per_token"}}',
+        "--kernel-config",
+        '{"linear_backend_per_quant":{"mxfp4":"flydsl"}}',
+        "--disable-uvicorn-access-log",
+    ]
+    with RemoteOpenAIServer(model, server_args, max_wait_seconds=1200) as server:
+        response = server.get_client().chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": "What is 2 + 2? Reply with just one integer.",
+                }
+            ],
+            temperature=0,
+            max_tokens=16,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        )
+        assert response.choices[0].message.content.strip().rstrip(".") == "4"

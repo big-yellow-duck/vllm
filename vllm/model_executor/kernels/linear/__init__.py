@@ -82,6 +82,9 @@ from vllm.model_executor.kernels.linear.mxfp4.emulation import (
 from vllm.model_executor.kernels.linear.mxfp4.flashinfer import (
     FlashInferMxFp4LinearKernel,
 )
+from vllm.model_executor.kernels.linear.mxfp4.flydsl import (
+    FlydslMxfp4LinearKernel,
+)
 from vllm.model_executor.kernels.linear.mxfp4.humming import (
     HummingMxFp4LinearKernel,
 )
@@ -374,6 +377,9 @@ _LINEAR_BACKEND_KERNEL_MAP: dict[str, set[type]] = {
     "exllama": {
         ExllamaLinearKernel,
     },
+    "flydsl": {
+        FlydslMxfp4LinearKernel,
+    },
     "emulation": {
         EmulationMxfp8LinearKernel,
         EmulationNvFp4LinearKernel,
@@ -631,6 +637,7 @@ _POSSIBLE_MXFP4_KERNELS: dict[PlatformEnum, list[type[MxFp4LinearKernel]]] = {
         EmulationMxfp4LinearKernel,
     ],
     PlatformEnum.ROCM: [
+        FlydslMxfp4LinearKernel,
         Rdna3W4A8MxFp4LinearKernel,
         AiterMxfp4LinearKernel,
         EmulationMxfp4LinearKernel,

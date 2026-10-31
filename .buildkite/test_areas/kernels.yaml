@@ -499,6 +499,8 @@ steps:
   source_file_dependencies:
   - csrc/quantization/
   - vllm/model_executor/layers/quantization
+  - vllm/model_executor/kernels/linear/
+  - vllm/config/kernel.py
   - tests/kernels/quantization
   commands:
     - pytest -v -s kernels/quantization --shard-id=$$BUILDKITE_PARALLEL_JOB --num-shards=$$BUILDKITE_PARALLEL_JOB_COUNT

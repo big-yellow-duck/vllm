@@ -15,6 +15,7 @@ from vllm.model_executor.kernels.linear import (
     AiterMxfp4LinearKernel,
     EmulationMxfp4LinearKernel,
     FlashInferMxFp4LinearKernel,
+    FlydslMxfp4LinearKernel,
     MarlinMxFp4LinearKernel,
     MxFp4LinearKernel,
     MxFp4LinearLayerConfig,
@@ -64,6 +65,38 @@ def test_can_implement_is_abstract():
     """Test that can_implement()/is_supported() are properly defined."""
     assert hasattr(MxFp4LinearKernel, "can_implement")
     assert hasattr(MxFp4LinearKernel, "is_supported")
+
+
+@pytest.mark.parametrize("activation", [None, kMxfp4Dynamic, kMxfp6E3M2Dynamic])
+def test_flydsl_rejects_non_static_fp8_activation(activation):
+    config = MxFp4LinearLayerConfig(activation_quant_key=activation)
+    supported, reason = FlydslMxfp4LinearKernel.can_implement(config)
+    assert not supported and reason
+
+
+def test_flydsl_accepts_fp8_activation_schemes():
+    from vllm.model_executor.layers.quantization.utils.quant_utils import (
+        kFp8DynamicTokenSym,
+        kFp8StaticTensorSym,
+        kMxfp4Static,
+    )
+
+    config = MxFp4LinearLayerConfig(activation_quant_key=kFp8StaticTensorSym)
+    assert FlydslMxfp4LinearKernel.can_implement(config) == (True, None)
+    assert FlydslMxfp4LinearKernel._supports_quant_scheme(
+        kMxfp4Static, kFp8StaticTensorSym
+    )
+    assert not FlydslMxfp4LinearKernel._supports_quant_scheme(kMxfp4Static, None)
+    assert FlydslMxfp4LinearKernel._supports_quant_scheme(
+        kMxfp4Static, kFp8DynamicTokenSym
+    )
+
+
+def test_flydsl_backend_is_an_explicit_kernel_config_option():
+    from vllm.config.kernel import KernelConfig
+
+    config = KernelConfig(linear_backend_per_quant={"mxfp4": "flydsl"})
+    assert config.linear_backend_per_quant == {"mxfp4": "flydsl"}
 
 
 @pytest.mark.parametrize("kernel_cls", _TRUE_W4A4_KERNELS)
