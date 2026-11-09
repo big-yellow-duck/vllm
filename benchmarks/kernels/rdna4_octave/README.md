@@ -3,7 +3,7 @@
 Standalone Torch reference, HIP kernels, correctness checks, and measured tuning
 results for Octave paged attention on RDNA4. This directory is independent of
 the RDNA3 kernel. The production runtime is now available through
-`ROCM_OCTAVE_RDNA4`; see the [TP2 serving smoke results and command](reports/20261109-serving/report.md).
+`ROCM_OCTAVE_RDNA4`; see the [default-graph and vision serving results](reports/20261109-serving-defaults/report.md).
 The measurements below describe the earlier standalone tuning campaign.
 
 ## Interface

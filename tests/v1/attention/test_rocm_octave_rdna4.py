@@ -2,12 +2,16 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Serving adapter: packed stores, mixed batches and captured BF16/FP16 output."""
 
+import hashlib
 import json
 import math
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
+import pybase64 as base64
 import pytest
 import torch
+from PIL import Image, ImageDraw
 
 from tests.utils import RemoteOpenAIServer
 from vllm.config import set_current_vllm_config
@@ -45,8 +49,6 @@ def config():
         max_model_len=2048,
         max_num_batched_tokens=512,
         max_num_seqs=8,
-        language_model_only=True,
-        enforce_eager=True,
     ).create_engine_config()
 
 
@@ -225,14 +227,13 @@ def test_serving_store_and_graph_replay(config, cache_dtype, dtype, token_major,
 @pytest.mark.slow_test
 @pytest.mark.skipif(not _rdna4(), reason="Native RDNA4 serving requires gfx1200/1")
 def test_qwen27_fp8_tp2_serving(tmp_path):
-    """Real TP2 server: greedy answers, batched decode, and cached-prefix recall."""
+    """Default compiled TP2 server: text, image content and cached-prefix recall."""
     if torch.accelerator.device_count() < 2:
         pytest.skip("TP2 serving requires two RDNA4 GPUs")
     model = "Qwen/Qwen3.8-27B-FP8"
     args = [
         "--revision",
         "017b9c7af6b5689d5dd426a76e0bc077eb5ca20a",
-        "--language-model-only",
         "--dtype",
         "bfloat16",
         "--tensor-parallel-size",
@@ -253,17 +254,24 @@ def test_qwen27_fp8_tp2_serving(tmp_path):
         "--enable-prompt-tokens-details",
         "--generation-config",
         "vllm",
-        "--compilation-config",
-        (
-            '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY",'
-            '"cudagraph_capture_sizes":[1,2,4]}'
-        ),
     ]
     records = []
     with RemoteOpenAIServer(model, args, max_wait_seconds=1200) as server:
         client = server.get_client()
 
-        def answer(prompt):
+        def answer(prompt, images=()):
+            content = prompt
+            if images:
+                content = [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime};base64,"
+                            + base64.b64encode(blob).decode("ascii")
+                        },
+                    }
+                    for blob, mime in images
+                ] + [{"type": "text", "text": prompt}]
             result = client.chat.completions.create(
                 model=model,
                 messages=[
@@ -271,7 +279,7 @@ def test_qwen27_fp8_tp2_serving(tmp_path):
                         "role": "system",
                         "content": "Give only the answer. No explanation.",
                     },
-                    {"role": "user", "content": prompt},
+                    {"role": "user", "content": content},
                 ],
                 temperature=0,
                 max_tokens=32,
@@ -279,7 +287,15 @@ def test_qwen27_fp8_tp2_serving(tmp_path):
             )
             content = result.choices[0].message.content
             assert content is not None and content.strip()
-            return result.model_dump()
+            payload = result.model_dump()
+            if images:
+                assert (
+                    payload["usage"]["prompt_tokens_details"]["multimodal_tokens"][
+                        "image"
+                    ]
+                    > 0
+                )
+            return payload
 
         prompts = [
             "What is 2 + 2?",
@@ -292,6 +308,100 @@ def test_qwen27_fp8_tp2_serving(tmp_path):
         for prompt, expected, response in zip(prompts, ["4", "8", "5", "12"], results):
             assert response["choices"][0]["message"]["content"].strip() == expected
             records.append(dict(prompt=prompt, response=response))
+
+        def image_input(image, name):
+            path = tmp_path / name
+            image.save(path)
+            return path.read_bytes(), "image/png"
+
+        red = image_input(Image.new("RGB", (224, 224), "red"), "red.png")
+        blue = image_input(Image.new("RGB", (448, 336), "blue"), "blue.png")
+        color_prompt = "What color fills the image? Reply with exactly one color word."
+        for label, image in (("red", red), ("blue", blue), ("red", red)):
+            response = answer(color_prompt, [image])
+            assert (
+                response["choices"][0]["message"]["content"].strip().lower().rstrip(".")
+                == label
+            )
+            records.append(
+                dict(
+                    vision_case=f"solid-{label}",
+                    image_sha256=hashlib.sha256(image[0]).hexdigest(),
+                    response=response,
+                )
+            )
+        shape_prompt = (
+            "What is the shape of the green object? Reply with exactly one shape word."
+        )
+        shape_inputs = {}
+        for label in ("circle", "square"):
+            image = Image.new("RGB", (288, 288), "white")
+            draw = ImageDraw.Draw(image)
+            if label == "circle":
+                draw.ellipse((48, 48, 240, 240), fill="green")
+            else:
+                draw.rectangle((48, 48, 240, 240), fill="green")
+            encoded = image_input(image, f"{label}.png")
+            shape_inputs[label] = encoded
+            response = answer(shape_prompt, [encoded])
+            assert (
+                response["choices"][0]["message"]["content"].strip().lower().rstrip(".")
+                == label
+            )
+            records.append(
+                dict(
+                    vision_case=label,
+                    image_sha256=hashlib.sha256(encoded[0]).hexdigest(),
+                    response=response,
+                )
+            )
+        response = answer(
+            "List the color of each image in input order. "
+            "Reply with just two color words, separated by a comma.",
+            [blue, red],
+        )
+        colors = tuple(
+            part.strip().lower().rstrip(".")
+            for part in response["choices"][0]["message"]["content"].split(",")
+        )
+        assert colors == ("blue", "red")
+        records.append(dict(vision_case="two-images-blue-red", response=response))
+        photo = (
+            Path(__file__).resolve().parents[1] / "ec_connector/integration/hato.jpg"
+        )
+        response = answer(
+            "Name the type of bird nearest the camera. Reply with one word.",
+            [(photo.read_bytes(), "image/jpeg")],
+        )
+        bird = response["choices"][0]["message"]["content"].lower()
+        assert "pigeon" in bird or "dove" in bird
+        records.append(
+            dict(
+                vision_case="photo-pigeon",
+                image_sha256=hashlib.sha256(photo.read_bytes()).hexdigest(),
+                response=response,
+            )
+        )
+
+        def concurrent_image(case):
+            label, prompt, image = case
+            response = answer(prompt, [image])
+            observed = response["choices"][0]["message"]["content"]
+            assert observed.strip().lower().rstrip(".") == label
+            return dict(
+                vision_case=f"concurrent-{label}",
+                image_sha256=hashlib.sha256(image[0]).hexdigest(),
+                response=response,
+            )
+
+        image_cases = [
+            ("red", color_prompt, red),
+            ("blue", color_prompt, blue),
+            ("circle", shape_prompt, shape_inputs["circle"]),
+            ("square", shape_prompt, shape_inputs["square"]),
+        ]
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            records.extend(pool.map(concurrent_image, image_cases))
         prefix = (
             "The access code is ORCHID-729.\n"
             + "This is neutral padding for the cache recall check.\n" * 512

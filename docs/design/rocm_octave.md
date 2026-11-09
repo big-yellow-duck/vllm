@@ -16,13 +16,15 @@ Selecting an `octave_*` cache dtype picks it automatically on these devices;
 
 ```bash
 HIP_VISIBLE_DEVICES=0,1 vllm serve Qwen/Qwen3.8-27B-FP8 \
-    --tensor-parallel-size 2 --language-model-only --dtype bfloat16 \
+    --tensor-parallel-size 2 --dtype bfloat16 \
     --attention-backend ROCM_OCTAVE_RDNA4 --kv-cache-dtype octave_k3v4 \
-    --max-model-len 32768 --max-num-batched-tokens 8192 --max-num-seqs 4 \
-    --compilation-config '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4]}'
+    --max-model-len 32768 --max-num-batched-tokens 8192 --max-num-seqs 4
 ```
 
 FP8 here describes model weights; the KV cache uses the selected Octave format.
+The default configuration uses Torch compilation and `FULL_AND_PIECEWISE`
+graphs with the vision encoder enabled. The serving regression checks PNG/JPEG
+image content, multiple images, concurrent image requests and cached text.
 The native HIP sources ship with the Python package. A ROCm `hipcc` compiler
 must be on `PATH` for the first build. Libraries are cached under
 `VLLM_CACHE_ROOT/octave_rdna4`, with a process lock for concurrent TP workers,

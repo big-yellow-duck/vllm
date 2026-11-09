@@ -1,5 +1,9 @@
 # RDNA4 Octave serving smoke
 
+This report preserves the initial text-only smoke from commit `a00ac1f3e2`.
+For the current launch command and full vision support with default compilation
+and graph modes, see the [default-mode and image validation](../20261109-serving-defaults/report.md).
+
 The production backend is `ROCM_OCTAVE_RDNA4`. It uses the promoted native RDNA4
 runtime packaged in `vllm/v1/attention/ops/rocm_octave_rdna4`, independently of
 the RDNA3/CDNA3 kernels. An `octave_*` KV dtype selects it automatically on
