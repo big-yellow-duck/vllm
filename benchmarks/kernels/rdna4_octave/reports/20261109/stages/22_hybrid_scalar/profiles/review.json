@@ -1,0 +1,1129 @@
+{
+  "stage": "22_hybrid_scalar",
+  "source_sha256": "ff051956a104f29dc8032d8c2a3b66201deac4d6e3f99dd8b8d5b2e7156e68c7",
+  "cases": {
+    "prefill128": {
+      "trace": "stages/22_hybrid_scalar/profiles/prefill128-trace/intelbro/770756_kernel_trace.csv",
+      "roles": {
+        "matrix": {
+          "count": 3,
+          "median_ms": 5.460419,
+          "max_vgpr": 200,
+          "max_scratch_bytes_per_thread": 0,
+          "max_lds_bytes": 18432,
+          "kernels": [
+            "void (anonymous namespace)::matrix<(anonymous namespace)::Format<false, 4>, hip_bfloat16, true, true, false>(float*, float*, (anonymous namespace)::Activation, (anonymous namespace)::Activation, (anonymous namespace)::Activation, (anonymous namespace)::PagedCache, int const*, long, int const*, int const*, int, unsigned int const*, float, int, int)"
+          ]
+        },
+        "guard": {
+          "count": 3,
+          "median_ms": 0.0132,
+          "max_vgpr": 56,
+          "max_scratch_bytes_per_thread": 0,
+          "max_lds_bytes": 0,
+          "kernels": [
+            "void (anonymous namespace)::unsafe_rows<(anonymous namespace)::Format<false, 4>, hip_bfloat16, true>(float*, float*, (anonymous namespace)::Activation, (anonymous namespace)::Activation, (anonymous namespace)::Activation, (anonymous namespace)::PagedCache, int const*, long, int const*, int const*, int, unsigned int const*, float, int, int)"
+          ]
+        },
+        "merge": {
+          "count": 3,
+          "median_ms": 0.02712,
+          "max_vgpr": 16,
+          "max_scratch_bytes_per_thread": 0,
+          "max_lds_bytes": 0,
+          "kernels": [
+            "(anonymous namespace)::merge(float*, float const*, int)"
+          ]
+        }
+      }
+    },
+    "decode_mha": {
+      "trace": "stages/22_hybrid_scalar/profiles/decode_mha-trace/intelbro/770710_kernel_trace.csv",
+      "roles": {
+        "attention": {
+          "count": 3,
+          "median_ms": 0.638687,
+          "max_vgpr": 56,
+          "max_scratch_bytes_per_thread": 0,
+          "max_lds_bytes": 0,
+          "kernels": [
+            "void (anonymous namespace)::scalar<(anonymous namespace)::Format<false, 4>, hip_bfloat16, false, false>(float*, float*, (anonymous namespace)::Activation, (anonymous namespace)::Activation, (anonymous namespace)::Activation, (anonymous namespace)::PagedCache, int const*, long, int const*, int const*, int, unsigned int const*, float, int, int)"
+          ]
+        },
+        "merge": {
+          "count": 3,
+          "median_ms": 0.01672,
+          "max_vgpr": 40,
+          "max_scratch_bytes_per_thread": 0,
+          "max_lds_bytes": 4608,
+          "kernels": [
+            "(anonymous namespace)::merge_parallel(float*, float const*, int)"
+          ]
+        }
+      }
+    },
+    "decode_batch": {
+      "trace": "stages/22_hybrid_scalar/profiles/decode_batch-trace/intelbro/770734_kernel_trace.csv",
+      "roles": {
+        "matrix": {
+          "count": 3,
+          "median_ms": 2.972232,
+          "max_vgpr": 200,
+          "max_scratch_bytes_per_thread": 0,
+          "max_lds_bytes": 18432,
+          "kernels": [
+            "void (anonymous namespace)::matrix<(anonymous namespace)::Format<false, 4>, hip_bfloat16, false, true, false>(float*, float*, (anonymous namespace)::Activation, (anonymous namespace)::Activation, (anonymous namespace)::Activation, (anonymous namespace)::PagedCache, int const*, long, int const*, int const*, int, unsigned int const*, float, int, int)"
+          ]
+        },
+        "guard": {
+          "count": 3,
+          "median_ms": 0.0574,
+          "max_vgpr": 56,
+          "max_scratch_bytes_per_thread": 0,
+          "max_lds_bytes": 0,
+          "kernels": [
+            "void (anonymous namespace)::unsafe_rows<(anonymous namespace)::Format<false, 4>, hip_bfloat16, false>(float*, float*, (anonymous namespace)::Activation, (anonymous namespace)::Activation, (anonymous namespace)::Activation, (anonymous namespace)::PagedCache, int const*, long, int const*, int const*, int, unsigned int const*, float, int, int)"
+          ]
+        }
+      }
+    },
+    "residual_scalar112": {
+      "trace": "stages/22_hybrid_scalar/profiles/residual_scalar112-trace/intelbro/774806_kernel_trace.csv",
+      "roles": {
+        "attention": {
+          "count": 3,
+          "median_ms": 0.560167,
+          "max_vgpr": 64,
+          "max_scratch_bytes_per_thread": 0,
+          "max_lds_bytes": 0,
+          "kernels": [
+            "void (anonymous namespace)::scalar<(anonymous namespace)::Format<false, 3>, __half, false, true>(float*, float*, (anonymous namespace)::Activation, (anonymous namespace)::Activation, (anonymous namespace)::Activation, (anonymous namespace)::PagedCache, int const*, long, int const*, int const*, int, unsigned int const*, float, int, int)"
+          ]
+        },
+        "merge": {
+          "count": 3,
+          "median_ms": 0.0138,
+          "max_vgpr": 16,
+          "max_scratch_bytes_per_thread": 0,
+          "max_lds_bytes": 0,
+          "kernels": [
+            "(anonymous namespace)::merge(float*, float const*, int)"
+          ]
+        }
+      }
+    },
+    "residual_scalar128": {
+      "trace": "stages/22_hybrid_scalar/profiles/residual_scalar128-trace/intelbro/770693_kernel_trace.csv",
+      "roles": {
+        "attention": {
+          "count": 3,
+          "median_ms": 3.637119,
+          "max_vgpr": 80,
+          "max_scratch_bytes_per_thread": 0,
+          "max_lds_bytes": 0,
+          "kernels": [
+            "void (anonymous namespace)::scalar<(anonymous namespace)::Format<false, 4>, hip_bfloat16, false, true>(float*, float*, (anonymous namespace)::Activation, (anonymous namespace)::Activation, (anonymous namespace)::Activation, (anonymous namespace)::PagedCache, int const*, long, int const*, int const*, int, unsigned int const*, float, int, int)"
+          ]
+        },
+        "merge": {
+          "count": 3,
+          "median_ms": 0.180842,
+          "max_vgpr": 16,
+          "max_scratch_bytes_per_thread": 0,
+          "max_lds_bytes": 0,
+          "kernels": [
+            "(anonymous namespace)::merge(float*, float const*, int)"
+          ]
+        }
+      }
+    }
+  },
+  "counter_validation": [
+    {
+      "case": "residual_scalar112",
+      "counter": "SQ_WAVES",
+      "accepted": true,
+      "reason": "Matches launched wave count",
+      "minimum": 333.0,
+      "maximum": 5328.0,
+      "file": "stages/22_hybrid_scalar/profiles/residual_scalar112-waves/intelbro/774840_counter_collection.csv"
+    }
+  ],
+  "instruction_traces": [
+    {
+      "file": "stages/22_hybrid_scalar/profiles/residual_scalar112-att/stats_ui_output_agent_33761_dispatch_1.csv",
+      "scope": "sampled shader engine/WGP/SIMD, not whole-GPU utilization",
+      "ops": [
+        {
+          "op": "s_wait_loadcnt",
+          "Hitcount": 94409,
+          "Latency": 3044440,
+          "Stall": 2950031,
+          "Idle": 0
+        },
+        {
+          "op": "s_wait_dscnt",
+          "Hitcount": 46820,
+          "Latency": 1848484,
+          "Stall": 1801664,
+          "Idle": 0
+        },
+        {
+          "op": "ds_bpermute_b32",
+          "Hitcount": 46820,
+          "Latency": 93640,
+          "Stall": 0,
+          "Idle": 966372
+        },
+        {
+          "op": "v_add_f32_e32",
+          "Hitcount": 48258,
+          "Latency": 188177,
+          "Stall": 139919,
+          "Idle": 512540
+        },
+        {
+          "op": "v_cndmask_b32_e64",
+          "Hitcount": 30864,
+          "Latency": 131706,
+          "Stall": 100842,
+          "Idle": 497348
+        },
+        {
+          "op": "v_lshrrev_b32_e32",
+          "Hitcount": 75372,
+          "Latency": 504984,
+          "Stall": 429612,
+          "Idle": 114374
+        },
+        {
+          "op": "v_mul_f32_e32",
+          "Hitcount": 131763,
+          "Latency": 424891,
+          "Stall": 293128,
+          "Idle": 187920
+        },
+        {
+          "op": "v_bfe_i32",
+          "Hitcount": 74912,
+          "Latency": 201555,
+          "Stall": 126643,
+          "Idle": 272679
+        },
+        {
+          "op": "v_perm_b32",
+          "Hitcount": 93640,
+          "Latency": 286818,
+          "Stall": 193178,
+          "Idle": 123535
+        },
+        {
+          "op": "s_xor_b32",
+          "Hitcount": 37778,
+          "Latency": 51273,
+          "Stall": 13495,
+          "Idle": 299369
+        },
+        {
+          "op": "s_add_co_i32",
+          "Hitcount": 38246,
+          "Latency": 51225,
+          "Stall": 12979,
+          "Idle": 276479
+        },
+        {
+          "op": "v_cvt_f32_i32_e32",
+          "Hitcount": 74912,
+          "Latency": 237447,
+          "Stall": 162535,
+          "Idle": 123623
+        },
+        {
+          "op": "s_wait_kmcnt",
+          "Hitcount": 9643,
+          "Latency": 286628,
+          "Stall": 276985,
+          "Idle": 0
+        },
+        {
+          "op": "v_bfe_u32",
+          "Hitcount": 74912,
+          "Latency": 212648,
+          "Stall": 137736,
+          "Idle": 88314
+        },
+        {
+          "op": "global_load_b32",
+          "Hitcount": 131681,
+          "Latency": 175133,
+          "Stall": 43251,
+          "Idle": 171788
+        },
+        {
+          "op": "s_sub_co_i32",
+          "Hitcount": 28736,
+          "Latency": 36966,
+          "Stall": 8230,
+          "Idle": 197571
+        },
+        {
+          "op": "v_and_or_b32",
+          "Hitcount": 56230,
+          "Latency": 193370,
+          "Stall": 137140,
+          "Idle": 56258
+        },
+        {
+          "op": "s_and_not1_saveexec_b32",
+          "Hitcount": 18728,
+          "Latency": 18728,
+          "Stall": 0,
+          "Idle": 191326
+        },
+        {
+          "op": "v_dual_mul_f32",
+          "Hitcount": 28184,
+          "Latency": 48530,
+          "Stall": 20346,
+          "Idle": 157793
+        },
+        {
+          "op": "s_cbranch_execz",
+          "Hitcount": 37943,
+          "Latency": 37943,
+          "Stall": 0,
+          "Idle": 175558
+        },
+        {
+          "op": "s_or_b32",
+          "Hitcount": 19129,
+          "Latency": 19492,
+          "Stall": 363,
+          "Idle": 154371
+        },
+        {
+          "op": "global_load_d16_b16",
+          "Hitcount": 47004,
+          "Latency": 83768,
+          "Stall": 36764,
+          "Idle": 113241
+        },
+        {
+          "op": "v_fma_mix_f32",
+          "Hitcount": 46820,
+          "Latency": 158735,
+          "Stall": 111915,
+          "Idle": 25968
+        },
+        {
+          "op": "v_and_b32_e32",
+          "Hitcount": 19191,
+          "Latency": 101316,
+          "Stall": 82125,
+          "Idle": 52155
+        },
+        {
+          "op": "v_exp_f32_e32",
+          "Hitcount": 18923,
+          "Latency": 98655,
+          "Stall": 22963,
+          "Idle": 81155
+        },
+        {
+          "op": "v_max_num_f32_e32",
+          "Hitcount": 18767,
+          "Latency": 79135,
+          "Stall": 60368,
+          "Idle": 39183
+        },
+        {
+          "op": "s_cmp_ge_u32",
+          "Hitcount": 19004,
+          "Latency": 26543,
+          "Stall": 7539,
+          "Idle": 91684
+        },
+        {
+          "op": "v_fmac_f32_e32",
+          "Hitcount": 28403,
+          "Latency": 50346,
+          "Stall": 21943,
+          "Idle": 72482
+        },
+        {
+          "op": "s_mul_hi_u32",
+          "Hitcount": 9640,
+          "Latency": 25736,
+          "Stall": 6456,
+          "Idle": 84751
+        },
+        {
+          "op": "v_dual_fmac_f32",
+          "Hitcount": 28092,
+          "Latency": 86310,
+          "Stall": 58218,
+          "Idle": 30878
+        },
+        {
+          "op": "s_load_b32",
+          "Hitcount": 9554,
+          "Latency": 12397,
+          "Stall": 2843,
+          "Idle": 84380
+        },
+        {
+          "op": "v_dual_mov_b32",
+          "Hitcount": 9658,
+          "Latency": 53358,
+          "Stall": 43700,
+          "Idle": 39430
+        },
+        {
+          "op": "v_lshlrev_b32_e32",
+          "Hitcount": 28690,
+          "Latency": 98202,
+          "Stall": 69512,
+          "Idle": 6812
+        },
+        {
+          "op": "v_cmp_eq_u32_e64",
+          "Hitcount": 19096,
+          "Latency": 25381,
+          "Stall": 6285,
+          "Idle": 69972
+        },
+        {
+          "op": "v_fma_f32",
+          "Hitcount": 18902,
+          "Latency": 42546,
+          "Stall": 23644,
+          "Idle": 52506
+        },
+        {
+          "op": "v_dual_sub_f32",
+          "Hitcount": 9456,
+          "Latency": 9639,
+          "Stall": 183,
+          "Idle": 64332
+        },
+        {
+          "op": "v_cvt_f32_f16_e32",
+          "Hitcount": 184,
+          "Latency": 47652,
+          "Stall": 47468,
+          "Idle": 0
+        },
+        {
+          "op": "v_s_rcp_f32",
+          "Hitcount": 184,
+          "Latency": 14146,
+          "Stall": 13962,
+          "Idle": 24453
+        },
+        {
+          "op": "v_mov_b32_e32",
+          "Hitcount": 1084,
+          "Latency": 37322,
+          "Stall": 36238,
+          "Idle": 1132
+        },
+        {
+          "op": "s_ashr_i32",
+          "Hitcount": 37882,
+          "Latency": 40815,
+          "Stall": 2933,
+          "Idle": 28697
+        },
+        {
+          "op": "s_abs_i32",
+          "Hitcount": 9640,
+          "Latency": 17993,
+          "Stall": 8353,
+          "Idle": 19650
+        },
+        {
+          "op": "v_xor_b32_e32",
+          "Hitcount": 794,
+          "Latency": 26304,
+          "Stall": 25510,
+          "Idle": 159
+        },
+        {
+          "op": "v_cmpx_gt_u32_e32",
+          "Hitcount": 325,
+          "Latency": 325,
+          "Stall": 0,
+          "Idle": 24131
+        },
+        {
+          "op": "v_cmp_lt_f32_e64",
+          "Hitcount": 9367,
+          "Latency": 9367,
+          "Stall": 0,
+          "Idle": 22797
+        },
+        {
+          "op": "v_permlane16_var_b32",
+          "Hitcount": 1496,
+          "Latency": 21536,
+          "Stall": 20040,
+          "Idle": 957
+        },
+        {
+          "op": "s_clause",
+          "Hitcount": 9413,
+          "Latency": 28406,
+          "Stall": 18993,
+          "Idle": 110
+        },
+        {
+          "op": "s_mul_u64",
+          "Hitcount": 19108,
+          "Latency": 96214,
+          "Stall": 674,
+          "Idle": 15945
+        },
+        {
+          "op": "s_add_nc_u64",
+          "Hitcount": 28716,
+          "Latency": 35500,
+          "Stall": 6784,
+          "Idle": 9008
+        },
+        {
+          "op": "v_cmp_gt_u32_e64",
+          "Hitcount": 276,
+          "Latency": 7268,
+          "Stall": 6992,
+          "Idle": 8497
+        },
+        {
+          "op": "s_cselect_b32",
+          "Hitcount": 28601,
+          "Latency": 38005,
+          "Stall": 9404,
+          "Idle": 3278
+        },
+        {
+          "op": "s_and_saveexec_b32",
+          "Hitcount": 18826,
+          "Latency": 18826,
+          "Stall": 0,
+          "Idle": 11566
+        },
+        {
+          "op": "s_mul_i32",
+          "Hitcount": 19096,
+          "Latency": 41198,
+          "Stall": 3006,
+          "Idle": 6880
+        },
+        {
+          "op": "s_cmp_ge_i32",
+          "Hitcount": 9364,
+          "Latency": 12095,
+          "Stall": 2731,
+          "Idle": 3905
+        },
+        {
+          "op": "v_or_b32_e32",
+          "Hitcount": 230,
+          "Latency": 4927,
+          "Stall": 4697,
+          "Idle": 434
+        },
+        {
+          "op": "v_lshlrev_b32_e64",
+          "Hitcount": 46,
+          "Latency": 5095,
+          "Stall": 5049,
+          "Idle": 0
+        },
+        {
+          "op": "s_load_b256",
+          "Hitcount": 138,
+          "Latency": 2383,
+          "Stall": 2245,
+          "Idle": 2636
+        },
+        {
+          "op": "v_permlanex16_var_b32",
+          "Hitcount": 374,
+          "Latency": 3439,
+          "Stall": 3065,
+          "Idle": 1172
+        },
+        {
+          "op": "global_store_b32",
+          "Hitcount": 196,
+          "Latency": 1095,
+          "Stall": 691,
+          "Idle": 3354
+        },
+        {
+          "op": "s_cbranch_vccnz",
+          "Hitcount": 250,
+          "Latency": 250,
+          "Stall": 0,
+          "Idle": 3642
+        },
+        {
+          "op": "v_add_co_ci_u32_e64",
+          "Hitcount": 231,
+          "Latency": 231,
+          "Stall": 0,
+          "Idle": 3618
+        },
+        {
+          "op": "v_dual_add_f32",
+          "Hitcount": 463,
+          "Latency": 2551,
+          "Stall": 2088,
+          "Idle": 878
+        },
+        {
+          "op": "v_mbcnt_lo_u32_b32",
+          "Hitcount": 46,
+          "Latency": 2598,
+          "Stall": 2552,
+          "Idle": 0
+        },
+        {
+          "op": "s_cvt_u32_f32",
+          "Hitcount": 184,
+          "Latency": 746,
+          "Stall": 194,
+          "Idle": 2155
+        },
+        {
+          "op": "v_sub_co_u32",
+          "Hitcount": 92,
+          "Latency": 2177,
+          "Stall": 2085,
+          "Idle": 191
+        },
+        {
+          "op": "s_lshl_b64",
+          "Hitcount": 9548,
+          "Latency": 9706,
+          "Stall": 158,
+          "Idle": 2020
+        },
+        {
+          "op": "v_cmp_eq_u32_e32",
+          "Hitcount": 92,
+          "Latency": 1641,
+          "Stall": 1549,
+          "Idle": 617
+        },
+        {
+          "op": "s_cbranch_scc1",
+          "Hitcount": 9648,
+          "Latency": 9648,
+          "Stall": 0,
+          "Idle": 2105
+        },
+        {
+          "op": "s_mov_b32",
+          "Hitcount": 861,
+          "Latency": 1931,
+          "Stall": 1070,
+          "Idle": 905
+        },
+        {
+          "op": "s_cmp_eq_u32",
+          "Hitcount": 238,
+          "Latency": 297,
+          "Stall": 59,
+          "Idle": 1788
+        },
+        {
+          "op": "v_add_co_u32",
+          "Hitcount": 231,
+          "Latency": 231,
+          "Stall": 0,
+          "Idle": 1789
+        },
+        {
+          "op": "s_mul_f32",
+          "Hitcount": 184,
+          "Latency": 1018,
+          "Stall": 466,
+          "Idle": 1246
+        },
+        {
+          "op": "s_and_not1_b32",
+          "Hitcount": 76,
+          "Latency": 76,
+          "Stall": 0,
+          "Idle": 1323
+        },
+        {
+          "op": "v_sub_f32_e32",
+          "Hitcount": 287,
+          "Latency": 1213,
+          "Stall": 926,
+          "Idle": 80
+        },
+        {
+          "op": "v_div_scale_f32",
+          "Hitcount": 116,
+          "Latency": 523,
+          "Stall": 407,
+          "Idle": 565
+        },
+        {
+          "op": "s_and_b32",
+          "Hitcount": 92,
+          "Latency": 92,
+          "Stall": 0,
+          "Idle": 896
+        },
+        {
+          "op": "global_store_b64",
+          "Hitcount": 46,
+          "Latency": 138,
+          "Stall": 0,
+          "Idle": 863
+        },
+        {
+          "op": "s_cvt_f32_u32",
+          "Hitcount": 184,
+          "Latency": 968,
+          "Stall": 416,
+          "Idle": 394
+        },
+        {
+          "op": "s_load_b96",
+          "Hitcount": 46,
+          "Latency": 351,
+          "Stall": 305,
+          "Idle": 457
+        },
+        {
+          "op": "s_load_b64",
+          "Hitcount": 92,
+          "Latency": 773,
+          "Stall": 681,
+          "Idle": 0
+        },
+        {
+          "op": "s_min_i32",
+          "Hitcount": 46,
+          "Latency": 195,
+          "Stall": 149,
+          "Idle": 440
+        },
+        {
+          "op": "s_cbranch_scc0",
+          "Hitcount": 46,
+          "Latency": 46,
+          "Stall": 0,
+          "Idle": 421
+        },
+        {
+          "op": "v_div_fixup_f32",
+          "Hitcount": 58,
+          "Latency": 253,
+          "Stall": 195,
+          "Idle": 214
+        },
+        {
+          "op": "s_load_b128",
+          "Hitcount": 49,
+          "Latency": 130,
+          "Stall": 81,
+          "Idle": 288
+        },
+        {
+          "op": "s_branch",
+          "Hitcount": 9669,
+          "Latency": 9669,
+          "Stall": 0,
+          "Idle": 232
+        },
+        {
+          "op": "s_cmp_lt_i32",
+          "Hitcount": 92,
+          "Latency": 126,
+          "Stall": 34,
+          "Idle": 170
+        },
+        {
+          "op": "v_rcp_f32_e32",
+          "Hitcount": 58,
+          "Latency": 232,
+          "Stall": 0,
+          "Idle": 166
+        },
+        {
+          "op": "s_mov_b64",
+          "Hitcount": 58,
+          "Latency": 58,
+          "Stall": 0,
+          "Idle": 166
+        },
+        {
+          "op": "s_max_i32",
+          "Hitcount": 46,
+          "Latency": 186,
+          "Stall": 140,
+          "Idle": 0
+        },
+        {
+          "op": "s_lshr_b32",
+          "Hitcount": 46,
+          "Latency": 177,
+          "Stall": 131,
+          "Idle": 0
+        },
+        {
+          "op": "v_cndmask_b32_e32",
+          "Hitcount": 46,
+          "Latency": 108,
+          "Stall": 62,
+          "Idle": 66
+        },
+        {
+          "op": "v_cmp_nlt_f32_e64",
+          "Hitcount": 46,
+          "Latency": 72,
+          "Stall": 26,
+          "Idle": 43
+        },
+        {
+          "op": "v_div_fmas_f32",
+          "Hitcount": 58,
+          "Latency": 58,
+          "Stall": 0,
+          "Idle": 65
+        },
+        {
+          "op": "v_mad_co_u64_u32",
+          "Hitcount": 6,
+          "Latency": 24,
+          "Stall": 0,
+          "Idle": 55
+        },
+        {
+          "op": "s_cmp_gt_i32",
+          "Hitcount": 49,
+          "Latency": 88,
+          "Stall": 39,
+          "Idle": 0
+        },
+        {
+          "op": "v_lshlrev_b64_e32",
+          "Hitcount": 12,
+          "Latency": 24,
+          "Stall": 0,
+          "Idle": 36
+        },
+        {
+          "op": "s_cbranch_execnz",
+          "Hitcount": 3,
+          "Latency": 3,
+          "Stall": 0,
+          "Idle": 24
+        },
+        {
+          "op": "v_add_nc_u32_e32",
+          "Hitcount": 15,
+          "Latency": 15,
+          "Stall": 0,
+          "Idle": 24
+        },
+        {
+          "op": "v_cmp_gt_i32_e32",
+          "Hitcount": 3,
+          "Latency": 3,
+          "Stall": 0,
+          "Idle": 22
+        },
+        {
+          "op": "s_cmp_lg_u32",
+          "Hitcount": 46,
+          "Latency": 67,
+          "Stall": 21,
+          "Idle": 0
+        },
+        {
+          "op": "v_dual_max_num_f32",
+          "Hitcount": 3,
+          "Latency": 3,
+          "Stall": 0,
+          "Idle": 18
+        },
+        {
+          "op": "v_cmp_nlt_f32_e32",
+          "Hitcount": 192,
+          "Latency": 192,
+          "Stall": 0,
+          "Idle": 2
+        },
+        {
+          "op": "s_delay_alu",
+          "Hitcount": 0,
+          "Latency": 0,
+          "Stall": 0,
+          "Idle": 0
+        },
+        {
+          "op": "s_wait_alu",
+          "Hitcount": 0,
+          "Latency": 0,
+          "Stall": 0,
+          "Idle": 0
+        },
+        {
+          "op": "v_cmp_le_i32_e64",
+          "Hitcount": 3,
+          "Latency": 3,
+          "Stall": 0,
+          "Idle": 0
+        },
+        {
+          "op": "v_cmp_le_i32_e32",
+          "Hitcount": 3,
+          "Latency": 3,
+          "Stall": 0,
+          "Idle": 0
+        },
+        {
+          "op": "v_cmpx_lt_f32_e32",
+          "Hitcount": 3,
+          "Latency": 3,
+          "Stall": 0,
+          "Idle": 0
+        },
+        {
+          "op": "v_cmp_lt_u32_e32",
+          "Hitcount": 12,
+          "Latency": 12,
+          "Stall": 0,
+          "Idle": 0
+        },
+        {
+          "op": "s_endpgm",
+          "Hitcount": 49,
+          "Latency": 12118,
+          "Stall": 0,
+          "Idle": 0
+        }
+      ],
+      "hot_instructions": [
+        {
+          "instruction": "s_wait_loadcnt 0x0",
+          "address": "197932",
+          "hits": 9364,
+          "stall_cycles": 1617845,
+          "idle_cycles": 0
+        },
+        {
+          "instruction": "s_wait_loadcnt 0x0",
+          "address": "197724",
+          "hits": 9364,
+          "stall_cycles": 976080,
+          "idle_cycles": 0
+        },
+        {
+          "instruction": "s_wait_dscnt 0x0",
+          "address": "197076",
+          "hits": 9364,
+          "stall_cycles": 363347,
+          "idle_cycles": 0
+        },
+        {
+          "instruction": "s_wait_dscnt 0x0",
+          "address": "197044",
+          "hits": 9364,
+          "stall_cycles": 361839,
+          "idle_cycles": 0
+        },
+        {
+          "instruction": "s_wait_dscnt 0x0",
+          "address": "197092",
+          "hits": 9364,
+          "stall_cycles": 361422,
+          "idle_cycles": 0
+        },
+        {
+          "instruction": "s_wait_dscnt 0x0",
+          "address": "197060",
+          "hits": 9364,
+          "stall_cycles": 360326,
+          "idle_cycles": 0
+        },
+        {
+          "instruction": "s_wait_dscnt 0x0",
+          "address": "197028",
+          "hits": 9364,
+          "stall_cycles": 354730,
+          "idle_cycles": 0
+        },
+        {
+          "instruction": "v_cndmask_b32_e64 v45, v45, v47, s8",
+          "address": "197996",
+          "hits": 9364,
+          "stall_cycles": 61241,
+          "idle_cycles": 164477
+        },
+        {
+          "instruction": "v_cndmask_b32_e64 v1, v1, v45, s8",
+          "address": "197788",
+          "hits": 9364,
+          "stall_cycles": 0,
+          "idle_cycles": 225078
+        },
+        {
+          "instruction": "s_wait_kmcnt 0x0",
+          "address": "197576",
+          "hits": 9364,
+          "stall_cycles": 222648,
+          "idle_cycles": 0
+        },
+        {
+          "instruction": "ds_bpermute_b32 v2, v35, v1",
+          "address": "197036",
+          "hits": 9364,
+          "stall_cycles": 0,
+          "idle_cycles": 196044
+        },
+        {
+          "instruction": "ds_bpermute_b32 v2, v34, v1",
+          "address": "197020",
+          "hits": 9364,
+          "stall_cycles": 0,
+          "idle_cycles": 194967
+        },
+        {
+          "instruction": "ds_bpermute_b32 v2, v36, v1",
+          "address": "197052",
+          "hits": 9364,
+          "stall_cycles": 0,
+          "idle_cycles": 192138
+        },
+        {
+          "instruction": "ds_bpermute_b32 v2, v38, v1",
+          "address": "197084",
+          "hits": 9364,
+          "stall_cycles": 0,
+          "idle_cycles": 192092
+        },
+        {
+          "instruction": "ds_bpermute_b32 v2, v37, v1",
+          "address": "197068",
+          "hits": 9364,
+          "stall_cycles": 0,
+          "idle_cycles": 191131
+        },
+        {
+          "instruction": "v_lshrrev_b32_e32 v2, v16, v1",
+          "address": "197728",
+          "hits": 9364,
+          "stall_cycles": 176476,
+          "idle_cycles": 0
+        },
+        {
+          "instruction": "v_lshrrev_b32_e32 v46, v16, v45",
+          "address": "197936",
+          "hits": 9364,
+          "stall_cycles": 174669,
+          "idle_cycles": 0
+        },
+        {
+          "instruction": "s_add_co_i32 s27, s27, 1",
+          "address": "196728",
+          "hits": 9364,
+          "stall_cycles": 7862,
+          "idle_cycles": 165271
+        },
+        {
+          "instruction": "v_bfe_i32 v1, v1, 0, 8",
+          "address": "196692",
+          "hits": 9364,
+          "stall_cycles": 0,
+          "idle_cycles": 151789
+        },
+        {
+          "instruction": "v_add_f32_e32 v1, v1, v2",
+          "address": "197048",
+          "hits": 9364,
+          "stall_cycles": 0,
+          "idle_cycles": 134652
+        },
+        {
+          "instruction": "global_load_d16_b16 v2, v19, s[20:21] offset:104",
+          "address": "197800",
+          "hits": 9364,
+          "stall_cycles": 31592,
+          "idle_cycles": 101952
+        },
+        {
+          "instruction": "v_add_f32_e32 v1, v1, v2",
+          "address": "197064",
+          "hits": 9364,
+          "stall_cycles": 0,
+          "idle_cycles": 130821
+        },
+        {
+          "instruction": "v_add_f32_e32 v1, v1, v2",
+          "address": "197080",
+          "hits": 9364,
+          "stall_cycles": 0,
+          "idle_cycles": 128781
+        },
+        {
+          "instruction": "s_wait_loadcnt 0xf",
+          "address": "196760",
+          "hits": 9364,
+          "stall_cycles": 127949,
+          "idle_cycles": 0
+        },
+        {
+          "instruction": "v_add_f32_e32 v2, v1, v2",
+          "address": "197096",
+          "hits": 9364,
+          "stall_cycles": 120564,
+          "idle_cycles": 0
+        },
+        {
+          "instruction": "s_xor_b32 s8, exec_lo, s8",
+          "address": "197612",
+          "hits": 9364,
+          "stall_cycles": 3046,
+          "idle_cycles": 116961
+        },
+        {
+          "instruction": "v_add_f32_e32 v1, v1, v2",
+          "address": "197032",
+          "hits": 9364,
+          "stall_cycles": 0,
+          "idle_cycles": 114640
+        },
+        {
+          "instruction": "s_sub_co_i32 s45, s8, s9",
+          "address": "197484",
+          "hits": 9364,
+          "stall_cycles": 3730,
+          "idle_cycles": 100298
+        },
+        {
+          "instruction": "v_cndmask_b32_e64 v44, 0, v44, s8",
+          "address": "197288",
+          "hits": 9364,
+          "stall_cycles": 0,
+          "idle_cycles": 100380
+        },
+        {
+          "instruction": "s_add_co_i32 s20, s27, s8",
+          "address": "197552",
+          "hits": 9364,
+          "stall_cycles": 3325,
+          "idle_cycles": 95041
+        }
+      ]
+    }
+  ],
+  "legacy_source_sha256": "48e9a4b1438615aaf05b9847db67dc4ba1d00dfff3268a3584288b2230c5dc59"
+}

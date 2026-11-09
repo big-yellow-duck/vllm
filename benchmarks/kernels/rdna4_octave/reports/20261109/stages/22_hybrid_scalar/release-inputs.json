@@ -1,0 +1,10 @@
+{
+  "stage": "22_hybrid_scalar",
+  "frozen_at_utc": "2026-11-08T21:50:17.591744+00:00",
+  "inputs": {
+    "stages/22_hybrid_scalar/geometry_kernel_src/octave_rdna4.hip": "ff051956a104f29dc8032d8c2a3b66201deac4d6e3f99dd8b8d5b2e7156e68c7",
+    "stages/22_hybrid_scalar/tuned_kernel_src/octave_rdna4.hip": "48e9a4b1438615aaf05b9847db67dc4ba1d00dfff3268a3584288b2230c5dc59",
+    "stages/22_hybrid_scalar/python/octave_splits.py": "01598a827ed38a3409e234e2b9dfeaf463ac816292e78269001931cc1d7faf20",
+    "stages/22_hybrid_scalar/python/octave_tuned.py": "eb0e0126701e65d16a24fe572086ef7bf5e3d638f9a943a1d7857970e6b852a8"
+  }
+}

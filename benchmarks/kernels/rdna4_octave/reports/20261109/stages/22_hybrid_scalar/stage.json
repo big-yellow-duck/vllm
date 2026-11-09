@@ -1,0 +1,7 @@
+{
+  "stage": "22_hybrid_scalar",
+  "parent": "20_release_policy",
+  "heldout_generation": "v4",
+  "hypothesis": "Original shuffle lowering improves the two large scalar grids 1.065x/1.130x but slows single-query MHA to 0.895x. Compile a separate scalar reduction for physical D<=256 and >256 output rows, retaining native register reductions elsewhere. Native matrix/store/merge/guard bodies are unchanged in source and will be checked in ISA.",
+  "status": "candidate"
+}

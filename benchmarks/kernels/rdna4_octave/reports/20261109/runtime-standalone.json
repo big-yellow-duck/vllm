@@ -1,0 +1,26 @@
+{
+  "cases": [
+    {
+      "dim": 128,
+      "rope": 128,
+      "raw_prefill_ones": true,
+      "empty_decode_poisoned_mapping": true,
+      "graph": true
+    },
+    {
+      "dim": 256,
+      "rope": 64,
+      "raw_prefill_ones": true,
+      "empty_decode_poisoned_mapping": true,
+      "graph": true
+    },
+    {
+      "dim": 1024,
+      "rope": 128,
+      "raw_prefill_ones": true,
+      "empty_decode_poisoned_mapping": true,
+      "graph": true
+    }
+  ],
+  "reference_module_imported": false
+}

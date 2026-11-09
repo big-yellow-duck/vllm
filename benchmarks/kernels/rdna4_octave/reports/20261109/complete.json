@@ -1,0 +1,11 @@
+{
+  "stage": "22_hybrid_scalar",
+  "public_api_cases": 32,
+  "public_scalar_cases": 6,
+  "cpu_tests_passed": 189,
+  "full_package_tests_passed": 210,
+  "runtime_without_reference": true,
+  "summary": "summary.json",
+  "manifest": "manifest.json",
+  "report": "report.md"
+}
