@@ -2,7 +2,9 @@
 
 Standalone Torch reference, HIP kernels, correctness checks, and measured tuning
 results for Octave paged attention on RDNA4. This directory is independent of
-the RDNA3 kernel and is not registered as a vLLM serving backend.
+the RDNA3 kernel. The production runtime is now available through
+`ROCM_OCTAVE_RDNA4`; see the [TP2 serving smoke results and command](reports/20261109-serving/report.md).
+The measurements below describe the earlier standalone tuning campaign.
 
 ## Interface
 
@@ -39,8 +41,8 @@ no FP8 conversion is introduced. The D256/R64 fast path uses native INT8 WMMA
 QK where eligible, FP16 WMMA PV, and FP32 softmax/accumulation. Generic geometries
 use FP16 WMMA with FP32 range recovery. D<32 uses FP32 directly.
 
-Unequal QK/V MLA, sliding windows, softcap, additional bias/mask semantics, and
-model integration require separate work. Gfx1201 is measured; gfx1200 was
+Unequal QK/V MLA, sliding windows, softcap, and additional bias/mask semantics
+require separate work. Gfx1201 is measured; gfx1200 was
 compile-tested only.
 
 ## Reference and tests

@@ -1620,6 +1620,7 @@ if _build_custom_ops():
 package_data = {
     "vllm": [
         "py.typed",
+        "v1/attention/ops/rocm_octave_rdna4/native/*/*.hip",
         "libs/*.so*",
         "model_executor/layers/fused_moe/configs/*.json",
         # Tuned kernel configs must be explicit: the setuptools-scm git

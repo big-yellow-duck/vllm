@@ -3,7 +3,7 @@
   "scope": "Standalone publication of 22_hybrid_scalar; historical broad results plus separate checkout validation.",
   "files": {
     ".gitignore": "c6ca47afee291d24bdefb4cf733fa74520998b10d37d553773db02163b1f6c36",
-    "README.md": "ba8468d1c7b5105e52e94ab834f1c1774838063ae5f49b2db4062e99772ad66e",
+    "README.md": "0e76c8826aaaf0fbe83e4d4c2bbb020a9fc1e6f84271e805c061b26a63c6c182",
     "geometry_kernel_src/octave_rdna4.hip": "ff051956a104f29dc8032d8c2a3b66201deac4d6e3f99dd8b8d5b2e7156e68c7",
     "kernel_src/octave_rdna4.hip": "05ff866acf71448d45000f8eba2b3e2d5a43426ad3e885a298eb451f00bc3c1b",
     "octave_geometry.py": "a89366f10be7ee3dfd224a19a9662962226007c97e14b6381842aef2cb64804a",
@@ -93,5 +93,6 @@
   ],
   "format_source_sha256": "2f1990ccbcbaeb14e82d7d50d2fc29b96b91f7ef977ad12edfa8f22e5a3c3696",
   "historical_manifest": "reports/20261109/original-workspace-manifest.json",
-  "checkout_validation": "reports/20261109/checkout-validation.json"
+  "checkout_validation": "reports/20261109/checkout-validation.json",
+  "documentation_update": "README links subsequent serving integration; measured native sources and records are unchanged."
 }

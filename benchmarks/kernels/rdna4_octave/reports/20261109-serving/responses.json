@@ -1,0 +1,332 @@
+[
+  {
+    "prompt": "What is 2 + 2?",
+    "response": {
+      "id": "chatcmpl-b515544849bb2b76",
+      "choices": [
+        {
+          "finish_reason": "stop",
+          "index": 0,
+          "logprobs": null,
+          "message": {
+            "content": "4",
+            "refusal": null,
+            "role": "assistant",
+            "annotations": null,
+            "audio": null,
+            "function_call": null,
+            "tool_calls": null,
+            "reasoning": null
+          },
+          "stop_reason": null,
+          "token_ids": null,
+          "routed_experts": null,
+          "weight_versions": null
+        }
+      ],
+      "created": 1794213170,
+      "model": "Qwen/Qwen3.8-27B-FP8",
+      "object": "chat.completion",
+      "metadata": null,
+      "moderation": null,
+      "service_tier": null,
+      "system_fingerprint": "vllm-0.1.dev22580+g19c5e8318-tp2-29431fd9",
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 33,
+        "total_tokens": 35,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": {
+          "audio_tokens": null,
+          "cache_write_tokens": null,
+          "cached_tokens": 0,
+          "image_tokens": null,
+          "text_tokens": null,
+          "created_cache_tokens": 0,
+          "multimodal_tokens": null
+        }
+      },
+      "prompt_logprobs": null,
+      "prompt_token_ids": null,
+      "prompt_text": null,
+      "kv_transfer_params": null,
+      "ec_transfer_params": null,
+      "metrics": null
+    }
+  },
+  {
+    "prompt": "What is 3 + 5?",
+    "response": {
+      "id": "chatcmpl-bb2fe86a8277e1c7",
+      "choices": [
+        {
+          "finish_reason": "stop",
+          "index": 0,
+          "logprobs": null,
+          "message": {
+            "content": "8",
+            "refusal": null,
+            "role": "assistant",
+            "annotations": null,
+            "audio": null,
+            "function_call": null,
+            "tool_calls": null,
+            "reasoning": null
+          },
+          "stop_reason": null,
+          "token_ids": null,
+          "routed_experts": null,
+          "weight_versions": null
+        }
+      ],
+      "created": 1794213170,
+      "model": "Qwen/Qwen3.8-27B-FP8",
+      "object": "chat.completion",
+      "metadata": null,
+      "moderation": null,
+      "service_tier": null,
+      "system_fingerprint": "vllm-0.1.dev22580+g19c5e8318-tp2-29431fd9",
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 33,
+        "total_tokens": 35,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": {
+          "audio_tokens": null,
+          "cache_write_tokens": null,
+          "cached_tokens": 0,
+          "image_tokens": null,
+          "text_tokens": null,
+          "created_cache_tokens": 0,
+          "multimodal_tokens": null
+        }
+      },
+      "prompt_logprobs": null,
+      "prompt_token_ids": null,
+      "prompt_text": null,
+      "kv_transfer_params": null,
+      "ec_transfer_params": null,
+      "metrics": null
+    }
+  },
+  {
+    "prompt": "What is 7 - 2?",
+    "response": {
+      "id": "chatcmpl-ad32a591028c7f9c",
+      "choices": [
+        {
+          "finish_reason": "stop",
+          "index": 0,
+          "logprobs": null,
+          "message": {
+            "content": "5",
+            "refusal": null,
+            "role": "assistant",
+            "annotations": null,
+            "audio": null,
+            "function_call": null,
+            "tool_calls": null,
+            "reasoning": null
+          },
+          "stop_reason": null,
+          "token_ids": null,
+          "routed_experts": null,
+          "weight_versions": null
+        }
+      ],
+      "created": 1794213170,
+      "model": "Qwen/Qwen3.8-27B-FP8",
+      "object": "chat.completion",
+      "metadata": null,
+      "moderation": null,
+      "service_tier": null,
+      "system_fingerprint": "vllm-0.1.dev22580+g19c5e8318-tp2-29431fd9",
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 33,
+        "total_tokens": 35,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": {
+          "audio_tokens": null,
+          "cache_write_tokens": null,
+          "cached_tokens": 0,
+          "image_tokens": null,
+          "text_tokens": null,
+          "created_cache_tokens": 0,
+          "multimodal_tokens": null
+        }
+      },
+      "prompt_logprobs": null,
+      "prompt_token_ids": null,
+      "prompt_text": null,
+      "kv_transfer_params": null,
+      "ec_transfer_params": null,
+      "metrics": null
+    }
+  },
+  {
+    "prompt": "What is 4 * 3?",
+    "response": {
+      "id": "chatcmpl-a6027710e164d2fe",
+      "choices": [
+        {
+          "finish_reason": "stop",
+          "index": 0,
+          "logprobs": null,
+          "message": {
+            "content": "12",
+            "refusal": null,
+            "role": "assistant",
+            "annotations": null,
+            "audio": null,
+            "function_call": null,
+            "tool_calls": null,
+            "reasoning": null
+          },
+          "stop_reason": null,
+          "token_ids": null,
+          "routed_experts": null,
+          "weight_versions": null
+        }
+      ],
+      "created": 1794213170,
+      "model": "Qwen/Qwen3.8-27B-FP8",
+      "object": "chat.completion",
+      "metadata": null,
+      "moderation": null,
+      "service_tier": null,
+      "system_fingerprint": "vllm-0.1.dev22580+g19c5e8318-tp2-29431fd9",
+      "usage": {
+        "completion_tokens": 3,
+        "prompt_tokens": 33,
+        "total_tokens": 36,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": {
+          "audio_tokens": null,
+          "cache_write_tokens": null,
+          "cached_tokens": 0,
+          "image_tokens": null,
+          "text_tokens": null,
+          "created_cache_tokens": 0,
+          "multimodal_tokens": null
+        }
+      },
+      "prompt_logprobs": null,
+      "prompt_token_ids": null,
+      "prompt_text": null,
+      "kv_transfer_params": null,
+      "ec_transfer_params": null,
+      "metrics": null
+    }
+  },
+  {
+    "prompt": "The access code is ORCHID-729.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\n\nWhat is the access code? Give just the code.",
+    "response": {
+      "id": "chatcmpl-bf91e00bd7c275b5",
+      "choices": [
+        {
+          "finish_reason": "stop",
+          "index": 0,
+          "logprobs": null,
+          "message": {
+            "content": "ORCHID-729",
+            "refusal": null,
+            "role": "assistant",
+            "annotations": null,
+            "audio": null,
+            "function_call": null,
+            "tool_calls": null,
+            "reasoning": null
+          },
+          "stop_reason": null,
+          "token_ids": null,
+          "routed_experts": null,
+          "weight_versions": null
+        }
+      ],
+      "created": 1794213170,
+      "model": "Qwen/Qwen3.8-27B-FP8",
+      "object": "chat.completion",
+      "metadata": null,
+      "moderation": null,
+      "service_tier": null,
+      "system_fingerprint": "vllm-0.1.dev22580+g19c5e8318-tp2-29431fd9",
+      "usage": {
+        "completion_tokens": 8,
+        "prompt_tokens": 5681,
+        "total_tokens": 5689,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": {
+          "audio_tokens": null,
+          "cache_write_tokens": null,
+          "cached_tokens": 0,
+          "image_tokens": null,
+          "text_tokens": null,
+          "created_cache_tokens": 3264,
+          "multimodal_tokens": null
+        }
+      },
+      "prompt_logprobs": null,
+      "prompt_token_ids": null,
+      "prompt_text": null,
+      "kv_transfer_params": null,
+      "ec_transfer_params": null,
+      "metrics": null
+    }
+  },
+  {
+    "prompt": "The access code is ORCHID-729.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\nThis is neutral padding for the cache recall check.\n\nWhat is the access code? Give just the code.",
+    "response": {
+      "id": "chatcmpl-90a5e6a207685e07",
+      "choices": [
+        {
+          "finish_reason": "stop",
+          "index": 0,
+          "logprobs": null,
+          "message": {
+            "content": "ORCHID-729",
+            "refusal": null,
+            "role": "assistant",
+            "annotations": null,
+            "audio": null,
+            "function_call": null,
+            "tool_calls": null,
+            "reasoning": null
+          },
+          "stop_reason": null,
+          "token_ids": null,
+          "routed_experts": null,
+          "weight_versions": null
+        }
+      ],
+      "created": 1794213173,
+      "model": "Qwen/Qwen3.8-27B-FP8",
+      "object": "chat.completion",
+      "metadata": null,
+      "moderation": null,
+      "service_tier": null,
+      "system_fingerprint": "vllm-0.1.dev22580+g19c5e8318-tp2-29431fd9",
+      "usage": {
+        "completion_tokens": 8,
+        "prompt_tokens": 5681,
+        "total_tokens": 5689,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": {
+          "audio_tokens": null,
+          "cache_write_tokens": null,
+          "cached_tokens": 3264,
+          "image_tokens": null,
+          "text_tokens": null,
+          "created_cache_tokens": 0,
+          "multimodal_tokens": null
+        }
+      },
+      "prompt_logprobs": null,
+      "prompt_token_ids": null,
+      "prompt_text": null,
+      "kv_transfer_params": null,
+      "ec_transfer_params": null,
+      "metrics": null
+    }
+  }
+]

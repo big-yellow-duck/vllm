@@ -7,6 +7,50 @@ selected with `--kv-cache-dtype octave_k3v3_compact`, `octave_k3v3` or
 `--attention-backend ROCM_OCTAVE` also works). The name comes from the 3-bit
 codes: each one indexes an eight-level codebook.
 
+## RDNA4 serving
+
+RDNA4 uses the independent `ROCM_OCTAVE_RDNA4` backend on `gfx1200`/`gfx1201`.
+Selecting an `octave_*` cache dtype picks it automatically on these devices;
+`--attention-backend ROCM_OCTAVE_RDNA4` selects it explicitly. The existing
+`ROCM_OCTAVE` backend retains its RDNA3/CDNA3 architecture contract.
+
+```bash
+HIP_VISIBLE_DEVICES=0,1 vllm serve Qwen/Qwen3.8-27B-FP8 \
+    --tensor-parallel-size 2 --language-model-only --dtype bfloat16 \
+    --attention-backend ROCM_OCTAVE_RDNA4 --kv-cache-dtype octave_k3v4 \
+    --max-model-len 32768 --max-num-batched-tokens 8192 --max-num-seqs 4 \
+    --compilation-config '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,4]}'
+```
+
+FP8 here describes model weights; the KV cache uses the selected Octave format.
+The native HIP sources ship with the Python package. A ROCm `hipcc` compiler
+must be on `PATH` for the first build. Libraries are cached under
+`VLLM_CACHE_ROOT/octave_rdna4`, with a process lock for concurrent TP workers,
+and compiled before graph capture. Subsequent starts reuse those libraries.
+
+The RDNA4 adapter supports equal Q/K/V logical dimensions 1–1024 when the
+separately padded RoPE/NoPE layout fits 1024, partial/full RoPE, positive integer
+GQA, MHA/MQA, and both paged-cache strides. It preserves the three wire formats.
+It uses the measured native INT8/FP16 WMMA paths and FP32 range recovery, then
+copies FP32 attention output into vLLM's FP16/BF16 output buffer. A shared
+workspace reserves the automatic split policy's 2 GiB scratch bound plus the
+largest FP32 output before graph capture and memory budgeting.
+
+The adapter shares causal metadata construction with the original backend.
+Decode/MTP chunks of at most 128 query tokens per request read packed KV;
+larger prefills read packed prefixes and unquantized current-chunk K/V.
+Sliding windows, ALiBi, attention sinks, soft caps, unequal QK/V MLA and fused
+output quantization are rejected. Kernel measurements were made on `gfx1201`;
+`gfx1200` has compilation coverage only. A serving smoke test establishes
+basic execution and recall, not broad model task accuracy or serving throughput.
+
+```bash
+pytest -q tests/v1/attention/test_rocm_octave_rdna4.py
+```
+
+The remaining sections describe the original D256/RoPE64 RDNA3/CDNA3 kernels
+and format measurements; RDNA4 uses its separate runtime and wider geometry.
+
 ## Why it exists
 
 Long-context serving on AMD GPUs is bounded by KV-cache memory long before it

@@ -1,0 +1,53 @@
+{
+  "model": "Qwen/Qwen3.8-27B-FP8",
+  "revision": "017b9c7af6b5689d5dd426a76e0bc077eb5ca20a",
+  "tensor_parallel_size": 2,
+  "device": "Radeon AI PRO R9700 gfx1201",
+  "query_heads_per_rank": 12,
+  "kv_heads_per_rank": 2,
+  "head_dim": 256,
+  "rope_dim": 64,
+  "weights": "fp8",
+  "activations": "bfloat16",
+  "kv_cache_dtype": "octave_k3v4",
+  "backend": "ROCM_OCTAVE_RDNA4",
+  "max_model_len": 32768,
+  "max_num_batched_tokens": 8192,
+  "max_num_seqs": 4,
+  "compilation_config": {
+    "mode": 0,
+    "cudagraph_mode": "FULL_DECODE_ONLY",
+    "cudagraph_capture_sizes": [
+      1,
+      2,
+      4
+    ]
+  },
+  "adapter_tests": 37,
+  "server_tests": 1,
+  "correct_responses": 6,
+  "total_responses": 6,
+  "recall_prompt_tokens": 5681,
+  "reused_prefix_tokens": 3264,
+  "native_sources": {
+    "vllm/v1/attention/ops/rocm_octave_rdna4/native/legacy/octave_rdna4.hip": "48e9a4b1438615aaf05b9847db67dc4ba1d00dfff3268a3584288b2230c5dc59",
+    "vllm/v1/attention/ops/rocm_octave_rdna4/native/geometry/octave_rdna4.hip": "ff051956a104f29dc8032d8c2a3b66201deac4d6e3f99dd8b8d5b2e7156e68c7"
+  },
+  "scope": "Functional smoke and packed-KV accuracy only; no serving throughput or broad model quality claim.",
+  "runtime": "Source checkout with existing ROCm vLLM core extensions; RDNA4 libraries compiled independently with hipcc.",
+  "shutdown": "Test stops server and confirms GPU memory release. Output handler logs EngineDeadError during intentional SIGTERM teardown after requests complete.",
+  "repository_checks": "pre-commit passed",
+  "source_sha256": {
+    "vllm/v1/attention/backends/rocm_octave_rdna4_attn.py": "b3041cac031275277d54345fa32f5d55c9b741ca1c9068bbbd6bdc7da8abbf64",
+    "vllm/platforms/rocm.py": "65e99b5711115513db1237852322a239c041966122030f0d513009b7615e1d4d",
+    "vllm/v1/attention/backends/registry.py": "1e7db29048ea09fc42aeacfe0ae440b3ea3d5fc92152b7cc5c49897d5130206d",
+    "tests/v1/attention/test_rocm_octave_rdna4.py": "15459cef9d184e2056f9c23457510f5d7aefd8644e65e221327c040120134995",
+    "vllm/v1/attention/ops/rocm_octave_rdna4/geometry.py": "9dc0a3c8010611d065f0f95d55af6aa03c794e4df22875adf4b8e42120f7e6c7",
+    "vllm/v1/attention/ops/rocm_octave_rdna4/geometry_build.py": "1073199c7a655ac6a7c84279bf8f71859daee18d32051b0fa8c2894b3c3c93d8",
+    "vllm/v1/attention/ops/rocm_octave_rdna4/hip.py": "0a992fd6ff856236ca71ac18f06bbb6717733cf9709d4e8ea33f810bb2e0b722",
+    "vllm/v1/attention/ops/rocm_octave_rdna4/splits.py": "86c8161ebac7301e57ac262bf5ddf2f95950c6b4f9f3dee809f95f13509bad2b",
+    "vllm/v1/attention/ops/rocm_octave_rdna4/tuned.py": "0f1221b8699956637de1975709aafacd79a4387139f45c878791efa18bd65849",
+    "vllm/v1/attention/ops/rocm_octave_rdna4/__init__.py": "64b5b63cce43536f423c73a211dc2e4792209de7c5986c0620e2237672247d86"
+  },
+  "published_log_format": "Line endings and trailing whitespace normalized; original logs retained in the workspace."
+}
