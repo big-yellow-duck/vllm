@@ -572,8 +572,6 @@ def _get_backend_priorities(
     backends.append(AttentionBackendEnum.TRITON_ATTN)
     backends.append(AttentionBackendEnum.TURBOQUANT)
     backends.append(AttentionBackendEnum.ROCM_OCTAVE)
-    if on_rdna4():
-        backends.append(AttentionBackendEnum.ROCM_OCTAVE_RDNA4)
     backends.append(AttentionBackendEnum.ULTRAQUANT)
 
     return backends

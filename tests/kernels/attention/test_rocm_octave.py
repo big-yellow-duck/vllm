@@ -20,18 +20,29 @@ def _arch() -> str | None:
         return None
     from vllm.platforms.rocm import get_cdna_version, get_rdna_version
 
-    if get_rdna_version() == 3:
-        return "rdna3"
+    if get_rdna_version() in (3, 4):
+        return f"rdna{get_rdna_version()}"
     return "cdna3" if get_cdna_version() == 3 else None
 
 
 pytestmark = pytest.mark.skipif(
-    _arch() is None or not hasattr(torch.ops._C, "octave_decode"),
-    reason="Octave kernels need RDNA3 or CDNA3",
+    _arch() is None
+    or (_arch() != "rdna4" and not hasattr(torch.ops._C, "octave_decode")),
+    reason="Octave kernels need RDNA3, RDNA4 or CDNA3",
 )
 
 HEAD, ROPE, BLOCK = 256, 64, 16
 CACHE_DTYPES = ["octave_k3v4", "octave_k3v3", "octave_k3v3_compact"]
+
+
+@pytest.fixture(scope="module")
+def kernel():
+    if _arch() != "rdna4":
+        return None
+    from vllm.v1.attention.ops.rocm_octave_rdna4 import TunedHipOctave
+
+    arch = torch.cuda.get_device_properties(0).gcnArchName.split(":")[0]
+    return TunedHipOctave.build(HEAD, ROPE, arch=arch)
 
 
 def _format(cache_dtype: str) -> sq.OctaveFormat:
@@ -48,20 +59,31 @@ def _token_slots(cache: torch.Tensor, slots: torch.Tensor) -> torch.Tensor:
     return flat[slots]
 
 
-def _fill(cache, block_ids, k, v, k_signs, v_signs, fmt):
+def _cache_dtype(fmt):
+    return "octave_k3v3_compact" if fmt.compact else f"octave_k3v{fmt.v_bits}"
+
+
+def _store(k, v, cache, slots, k_signs, v_signs, fmt, kernel):
+    if kernel is not None:
+        kernel.store(k, v, cache, slots, k_signs, _cache_dtype(fmt))
+    else:
+        torch.ops._C.octave_cache_store(
+            k, v, cache, slots, k_signs, v_signs, fmt.kernel_code
+        )
+
+
+def _fill(cache, block_ids, k, v, k_signs, v_signs, fmt, kernel=None):
     n = k.shape[0]
     slots = (
         block_ids.long().repeat_interleave(BLOCK)[:n] * BLOCK
         + torch.arange(n, device=k.device) % BLOCK
     )
-    torch.ops._C.octave_cache_store(
-        k, v, cache, slots, k_signs, v_signs, fmt.kernel_code
-    )
+    _store(k, v, cache, slots, k_signs, v_signs, fmt, kernel)
     return slots
 
 
 @pytest.mark.parametrize("cache_dtype", CACHE_DTYPES)
-def test_store_matches_reference(cache_dtype):
+def test_store_matches_reference(cache_dtype, kernel):
     torch.manual_seed(0)
     dev, fmt = "cuda", _format(cache_dtype)
     ksg = vsg = sq.sign_bits(HEAD).to(dev)
@@ -72,7 +94,7 @@ def test_store_matches_reference(cache_dtype):
     v = torch.randn(t, hkv, HEAD, device=dev).bfloat16()
     nblk = t // BLOCK + 4
     cache = torch.zeros(nblk, hkv, BLOCK, fmt.slot_bytes, dtype=torch.uint8, device=dev)
-    slots = _fill(cache, torch.randperm(nblk, device=dev), k, v, ksg, vsg, fmt)
+    slots = _fill(cache, torch.randperm(nblk, device=dev), k, v, ksg, vsg, fmt, kernel)
 
     k_got, v_got = sq.reference_dequantize(_token_slots(cache, slots), fmt)
     ref = sq.reference_quantize(k.float(), v.float(), fmt)
@@ -96,7 +118,7 @@ def test_slot_bytes_match_kernel_layout(cache_dtype, slot_bytes):
 
 
 @pytest.mark.parametrize("cache_dtype", CACHE_DTYPES)
-def test_store_skips_padding_slots(cache_dtype):
+def test_store_skips_padding_slots(cache_dtype, kernel):
     """Tokens with slot -1 (cudagraph padding) leave every byte unchanged."""
     torch.manual_seed(0)
     dev, fmt = "cuda", _format(cache_dtype)
@@ -110,7 +132,7 @@ def test_store_skips_padding_slots(cache_dtype):
     before = cache.clone()
     slots = torch.full((t,), -1, dtype=torch.long, device=dev)
     slots[3] = 21
-    torch.ops._C.octave_cache_store(k, v, cache, slots, ksg, vsg, fmt.kernel_code)
+    _store(k, v, cache, slots, ksg, vsg, fmt, kernel)
     written = torch.zeros_like(cache, dtype=torch.bool)
     written[1, :, 5] = True
     assert torch.equal(cache[~written], before[~written])
@@ -121,13 +143,14 @@ def test_store_skips_padding_slots(cache_dtype):
 @pytest.mark.parametrize("query_group", [1, 4])
 @pytest.mark.parametrize("num_splits", [1, 7, 64])
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
-@pytest.mark.parametrize("use_wmma", [True, False])
+@pytest.mark.parametrize("use_wmma", [True] if _arch() == "rdna4" else [True, False])
 def test_decode_matches_reference(
-    cache_dtype, query_group, num_splits, dtype, use_wmma
+    cache_dtype, query_group, num_splits, dtype, use_wmma, kernel
 ):
     """Covers MTP verification: up to 4 consecutive query tokens per request,
     each with its own causal length, plus a padded query with no request.
-    ``use_wmma=False`` forces the portable kernel every architecture runs."""
+    ``use_wmma=False`` checks the portable RDNA3/CDNA3 tier. RDNA4 uses
+    its independent native runtime."""
     torch.manual_seed(1)
     dev, fmt = "cuda", _format(cache_dtype)
     ksg = vsg = sq.sign_bits(HEAD).to(dev)
@@ -144,7 +167,7 @@ def test_decode_matches_reference(
         used += nb
         k = torch.randn(n, hkv, HEAD, device=dev).bfloat16()
         v = torch.randn(n, hkv, HEAD, device=dev).bfloat16()
-        _fill(cache, block_table[i, :nb], k, v, ksg, vsg, fmt)
+        _fill(cache, block_table[i, :nb], k, v, ksg, vsg, fmt, kernel)
         nq = min(query_group, n)
         for j in range(nq):
             q_to_req.append(i)
@@ -156,25 +179,18 @@ def test_decode_matches_reference(
 
     num_q = q_to_req.numel()
     q = (torch.randn(num_q, hkv * group, HEAD, device=dev) * 2).to(dtype)
-    out = torch.zeros_like(q)
-    mid = torch.empty(
-        num_q, hkv * group, num_splits, HEAD + 2, dtype=torch.float32, device=dev
-    )
-    torch.ops._C.octave_decode(
-        out,
-        q,
+    out = _decode(
         cache,
+        q,
         block_table,
         q_to_req,
         q_to_klen,
-        mid,
         ksg,
-        vsg,
-        1 / 16,
-        num_splits,
-        fmt.kernel_code,
-        query_group,
+        fmt,
         use_wmma,
+        kernel,
+        num_splits=num_splits,
+        query_group=query_group,
     )
     ref = sq.reference_attention(
         q.float(),
@@ -192,7 +208,7 @@ def test_decode_matches_reference(
 
 @pytest.mark.parametrize("cache_dtype", CACHE_DTYPES)
 @pytest.mark.parametrize("query_lens", [[300], [129, 1, 517]])
-def test_prefill_matches_reference(cache_dtype, query_lens):
+def test_prefill_matches_reference(cache_dtype, query_lens, kernel):
     """Chunked prefill: each request's chunk attends causally to itself
     (unquantized K/V) and to its cached prefix (packed cache), in the rotated
     space the backend runs it in."""
@@ -214,7 +230,7 @@ def test_prefill_matches_reference(cache_dtype, query_lens):
         used += nb
         k = torch.randn(n, hkv, HEAD, device=dev).half()
         v = torch.randn(n, hkv, HEAD, device=dev).half()
-        _fill(cache, block_table[i, :nb], k, v, ksg, vsg, fmt)
+        _fill(cache, block_table[i, :nb], k, v, ksg, vsg, fmt, kernel)
         ks.append(k)
         vs.append(v)
 
@@ -223,25 +239,18 @@ def test_prefill_matches_reference(cache_dtype, query_lens):
     q = (torch.randn(total, hkv * group, HEAD, device=dev) * 2).half()
     k_new = torch.cat([k[c:] for k, c in zip(ks, ctx_lens)])
     v_new = torch.cat([v[c:] for v, c in zip(vs, ctx_lens)])
-    q_rot, k_rot, v_rot = q.clone(), k_new.clone(), v_new.clone()
-    torch.ops._C.octave_rotate(q_rot, ksg, not fmt.compact, False)
-    torch.ops._C.octave_rotate(k_rot, ksg, not fmt.compact, False)
-    torch.ops._C.octave_rotate(v_rot, vsg, False, False)
-    out = torch.empty_like(q_rot)
-    torch.ops._C.octave_prefill(
-        out,
-        q_rot,
-        k_rot,
-        v_rot,
+    out = _prefill(
         cache,
+        q,
+        k_new,
+        v_new,
         block_table,
         qsl,
         torch.tensor(seq_lens, dtype=torch.int32, device=dev),
-        max(query_lens),
-        1 / 16,
-        fmt.kernel_code,
+        ksg,
+        fmt,
+        kernel,
     )
-    torch.ops._C.octave_rotate(out, vsg, False, True)
 
     ref = torch.empty(total, hkv * group, HEAD, device=dev)
     for i, (c, n) in enumerate(zip(ctx_lens, query_lens)):
@@ -265,9 +274,37 @@ def test_prefill_matches_reference(cache_dtype, query_lens):
     assert _rel(out, ref) < 2e-2
 
 
-def _decode(cache, q, block_table, q_to_req, q_to_klen, signs, fmt, use_wmma):
+def _decode(
+    cache,
+    q,
+    block_table,
+    q_to_req,
+    q_to_klen,
+    signs,
+    fmt,
+    use_wmma,
+    kernel=None,
+    *,
+    num_splits=8,
+    query_group=1,
+):
     out = torch.zeros_like(q)
-    mid = torch.empty(*q.shape[:2], 8, HEAD + 2, dtype=torch.float32, device=q.device)
+    mid = torch.empty(
+        *q.shape[:2], num_splits, HEAD + 2, dtype=torch.float32, device=q.device
+    )
+    if kernel is not None:
+        return kernel.decode(
+            q,
+            cache,
+            block_table,
+            q_to_req,
+            q_to_klen,
+            signs,
+            _cache_dtype(fmt),
+            scale=1 / 16,
+            splits=num_splits,
+            scratch=mid,
+        ).to(q.dtype)
     torch.ops._C.octave_decode(
         out,
         q,
@@ -279,15 +316,32 @@ def _decode(cache, q, block_table, q_to_req, q_to_klen, signs, fmt, use_wmma):
         signs,
         signs,
         1 / 16,
-        8,
+        num_splits,
         fmt.kernel_code,
-        1,
+        query_group,
         use_wmma,
     )
     return out
 
 
-def _prefill(cache, q, k, v, block_table, qsl, seq_lens, signs, fmt):
+def _prefill(cache, q, k, v, block_table, qsl, seq_lens, signs, fmt, kernel=None):
+    if kernel is not None:
+        return kernel.prefill(
+            q,
+            k,
+            v,
+            cache,
+            block_table,
+            qsl,
+            seq_lens,
+            signs,
+            _cache_dtype(fmt),
+            scale=1 / 16,
+        ).to(q.dtype)
+    q, k, v = q.clone(), k.clone(), v.clone()
+    torch.ops._C.octave_rotate(q, signs, not fmt.compact, False)
+    torch.ops._C.octave_rotate(k, signs, not fmt.compact, False)
+    torch.ops._C.octave_rotate(v, signs, False, False)
     out = torch.empty_like(q)
     torch.ops._C.octave_prefill(
         out,
@@ -302,13 +356,14 @@ def _prefill(cache, q, k, v, block_table, qsl, seq_lens, signs, fmt):
         1 / 16,
         fmt.kernel_code,
     )
+    torch.ops._C.octave_rotate(out, signs, False, True)
     return out
 
 
 @pytest.mark.parametrize(
     "layout", RocmOctaveAttentionBackend.supported_kv_cache_layouts()
 )
-def test_kernels_follow_declared_cache_layouts(layout):
+def test_kernels_follow_declared_cache_layouts(layout, kernel):
     """Store, decode and prefill on the cache view vLLM allocates for each
     declared layout match a contiguous cache bit for bit. Two KV heads, so the
     head and token strides differ between layouts."""
@@ -342,15 +397,17 @@ def test_kernels_follow_declared_cache_layouts(layout):
         ks.append(torch.randn(n, hkv, HEAD, device=dev).half())
         vs.append(torch.randn(n, hkv, HEAD, device=dev).half())
         for c in (cache, dense):
-            _fill(c, block_table[i, :nb], ks[i], vs[i], signs, signs, fmt)
+            _fill(c, block_table[i, :nb], ks[i], vs[i], signs, signs, fmt, kernel)
     assert torch.equal(cache, dense)
 
     q_to_req = torch.arange(len(seq_lens), dtype=torch.int32, device=dev)
     q_to_klen = torch.tensor(seq_lens, dtype=torch.int32, device=dev)
     q = torch.randn(len(seq_lens), hkv * group, HEAD, device=dev).half()
-    for use_wmma in (True, False):
+    for use_wmma in (True,) if kernel is not None else (True, False):
         out, ref = (
-            _decode(c, q, block_table, q_to_req, q_to_klen, signs, fmt, use_wmma)
+            _decode(
+                c, q, block_table, q_to_req, q_to_klen, signs, fmt, use_wmma, kernel
+            )
             for c in (cache, dense)
         )
         assert out.abs().sum() > 0
@@ -362,7 +419,7 @@ def test_kernels_follow_declared_cache_layouts(layout):
     k = torch.cat([x[c:] for x, c in zip(ks, ctx)])
     v = torch.cat([x[c:] for x, c in zip(vs, ctx)])
     out, ref = (
-        _prefill(c, q, k, v, block_table, qsl, q_to_klen, signs, fmt)
+        _prefill(c, q, k, v, block_table, qsl, q_to_klen, signs, fmt, kernel)
         for c in (cache, dense)
     )
     assert torch.equal(out, ref)

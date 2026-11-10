@@ -9,15 +9,15 @@ codes: each one indexes an eight-level codebook.
 
 ## RDNA4 serving
 
-RDNA4 uses the independent `ROCM_OCTAVE_RDNA4` backend on `gfx1200`/`gfx1201`.
-Selecting an `octave_*` cache dtype picks it automatically on these devices;
-`--attention-backend ROCM_OCTAVE_RDNA4` selects it explicitly. The existing
-`ROCM_OCTAVE` backend retains its RDNA3/CDNA3 architecture contract.
+`ROCM_OCTAVE` dispatches to independent RDNA4 kernels on `gfx1200`/`gfx1201`.
+Selecting an `octave_*` cache dtype picks the backend automatically;
+`--attention-backend ROCM_OCTAVE` selects it explicitly. RDNA3 and CDNA3
+continue to use their existing native kernel tiers.
 
 ```bash
 HIP_VISIBLE_DEVICES=0,1 vllm serve Qwen/Qwen3.8-27B-FP8 \
     --tensor-parallel-size 2 --dtype bfloat16 \
-    --attention-backend ROCM_OCTAVE_RDNA4 --kv-cache-dtype octave_k3v4 \
+    --attention-backend ROCM_OCTAVE --kv-cache-dtype octave_k3v4 \
     --max-model-len 32768 --max-num-batched-tokens 8192 --max-num-seqs 4
 ```
 
@@ -46,7 +46,7 @@ output quantization are rejected. Kernel measurements were made on `gfx1201`;
 basic execution and recall, not broad model task accuracy or serving throughput.
 
 ```bash
-pytest -q tests/kernels/attention/test_rocm_octave_rdna4.py
+pytest -q tests/kernels/attention/test_rocm_octave.py
 ```
 
 The remaining sections describe the original D256/RoPE64 RDNA3/CDNA3 kernels
@@ -68,10 +68,10 @@ the AMD matrix instructions (WMMA on RDNA3, MFMA on CDNA as a contract slot),
 reading the packed cache directly in both decode and prefill, and with
 multi-token verification (MTP / speculative decoding) as a first-class case.
 
-## Supported models
+## Supported models on RDNA3/CDNA3
 
 The format exploits *partial rotary embeddings*: models whose attention heads
-apply RoPE to a fraction of the head dims. Today the kernels are built for
+apply RoPE to a fraction of the head dims. The RDNA3/CDNA3 kernels are built for
 head size 256 with 64 rotary dims (`partial_rotary_factor = 0.25`), the
 attention shape of the Qwen3-Next / Qwen3.5 / Qwen3.6 / Qwen3.8 family (dense
 and MoE, e.g. Qwen3.8-27B, Qwen3.6-35B-A3B, Qwen3.5-122B-A10B). Like the MLA
@@ -79,7 +79,8 @@ backends, which serve only models with multi-head latent attention, Octave KV is
 tied to an attention shape, not to a model.
 
 Models with full RoPE (Llama, Qwen3, Mistral, ...) or other head sizes are
-rejected at startup with an explicit error. Sliding window, ALiBi, attention
+rejected by these tiers with an explicit error. RDNA4 supports the wider
+geometry described above. Sliding window, ALiBi, attention
 sinks, soft-capping and encoder attention are not supported.
 
 The decode kernels cover GQA groups of 1, 2, 4, 6 or 8 query heads per KV
@@ -172,11 +173,11 @@ naming what is missing. The kernels in this tree are HIP; a FlyDSL kernel
 (for example a CDNA prefill) must keep the same signature and semantics, pass
 the same tests, and report a clear error when `flydsl` is not installed.
 
-Octave is enabled only on RDNA3 and CDNA3, validated on gfx1100 and gfx942
-(MI300). The backend rejects any other family at selection
-(`supports_compute_capability`, via `get_rdna_version()` and
-`get_cdna_version()`), and the kernel tests skip elsewhere. CMake builds the
-Octave sources and registers the ops only when the target list includes
+`ROCM_OCTAVE` selects the native implementation for RDNA3, RDNA4 or CDNA3;
+other families are rejected at selection. The RDNA3/CDNA3 tiers are validated
+on gfx1100 and gfx942 (MI300). RDNA4 uses the separate HIP runtime described
+above. CMake builds the RDNA3/CDNA3 sources and registers their ops only when
+the target list includes
 gfx1100 or gfx942; other targets in the same build compile the
 architecture-specific kernels as empty stubs, and the kernel dispatch reports
 any other RDNA3 chip as not validated.

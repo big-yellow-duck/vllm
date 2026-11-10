@@ -167,10 +167,6 @@ class AttentionBackendEnum(Enum, metaclass=_AttentionBackendEnumMeta):
     ROCM_OCTAVE = (
         "vllm.v1.attention.backends.rocm_octave_attn.RocmOctaveAttentionBackend"
     )
-    ROCM_OCTAVE_RDNA4 = (
-        "vllm.v1.attention.backends.rocm_octave_rdna4_attn."
-        "RocmOctaveRdna4AttentionBackend"
-    )
     ULTRAQUANT = "vllm.v1.attention.backends.ultraquant_attn.UltraQuantAttentionBackend"
     # Placeholder for third-party/custom backends - must be registered before use
     # set to None to avoid alias with other backend, whose value is an empty string

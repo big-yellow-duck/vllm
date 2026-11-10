@@ -2,23 +2,15 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Independent gfx1200/gfx1201 Octave kernels and vLLM serving adapter."""
 
-from dataclasses import replace
 from functools import lru_cache
-from typing import ClassVar
 
 import torch
 
 from vllm.config import VllmConfig, get_current_vllm_config
-from vllm.config.cache import CacheDType
 from vllm.logger import init_logger
-from vllm.platforms import current_platform
-from vllm.platforms.interface import DeviceCapability
 from vllm.v1.attention.backend import (
-    AttentionBackend,
     AttentionImpl,
     AttentionLayer,
-    AttentionType,
-    MultipleOf,
 )
 from vllm.v1.attention.backends.rocm_octave_attn import (
     _DECODE_MAX_QUERY_LEN,
@@ -28,8 +20,6 @@ from vllm.v1.attention.backends.rocm_octave_attn import (
 from vllm.v1.attention.ops import rocm_octave as sq
 from vllm.v1.attention.ops.rocm_octave_rdna4 import OctaveGeometry, TunedHipOctave
 from vllm.v1.attention.ops.rocm_octave_rdna4.splits import DEFAULT_WORKSPACE_BYTES
-from vllm.v1.kv_cache_interface import AttentionSpec
-from vllm.v1.kv_cache_layout import KVCacheLayout
 from vllm.v1.worker.workspace import (
     current_workspace_manager,
     is_workspace_manager_initialized,
@@ -55,64 +45,6 @@ def _reserve_workspace(config: VllmConfig, head_size: int) -> None:
         ((tokens, heads, head_size), torch.float32),
         ((scratch_bytes // 4,), torch.float32),
     )
-
-
-class RocmOctaveRdna4AttentionBackend(AttentionBackend):
-    """Share the wire/metadata contract, with an independent native runtime."""
-
-    accept_output_buffer: bool = True
-    forward_includes_kv_cache_update: bool = False
-    supported_dtypes: ClassVar[list[torch.dtype]] = [torch.float16, torch.bfloat16]
-    supported_kv_cache_dtypes: ClassVar[list[CacheDType]] = [
-        "octave_k3v3",
-        "octave_k3v4",
-        "octave_k3v3_compact",
-    ]
-
-    @staticmethod
-    def get_supported_kernel_block_sizes(kv_cache_spec=None) -> list[int | MultipleOf]:
-        return [MultipleOf(16)]
-
-    @classmethod
-    def supports_attn_type(cls, attn_type: str) -> bool:
-        return attn_type == AttentionType.DECODER
-
-    @classmethod
-    def supported_kv_cache_layouts(cls) -> tuple[KVCacheLayout, ...]:
-        return (KVCacheLayout.LBHNC, KVCacheLayout.LBNHC)
-
-    @staticmethod
-    def get_name() -> str:
-        return "ROCM_OCTAVE_RDNA4"
-
-    @staticmethod
-    def get_impl_cls() -> type["RocmOctaveRdna4AttentionImpl"]:
-        return RocmOctaveRdna4AttentionImpl
-
-    @staticmethod
-    def get_builder_cls() -> type["RocmOctaveRdna4MetadataBuilder"]:
-        return RocmOctaveRdna4MetadataBuilder
-
-    @classmethod
-    def supports_compute_capability(cls, capability: DeviceCapability) -> bool:
-        if not current_platform.is_rocm():
-            return False
-        from vllm.platforms.rocm import on_rdna4
-
-        return on_rdna4()
-
-    @classmethod
-    def get_supported_head_sizes(cls) -> list[int]:
-        return list(range(1, 1025))
-
-    @classmethod
-    def customize_spec(cls, spec: AttentionSpec) -> AttentionSpec:
-        if spec.state_content_bytes is not None or not spec.kv_quant_mode.is_octave:
-            return spec
-        layout = OctaveGeometry(
-            spec.head_size, sq.registered_rope_dim(spec.head_size)
-        ).layout(spec.kv_quant_mode.name.lower())
-        return replace(spec, state_content_bytes=layout.slot_bytes)
 
 
 class RocmOctaveRdna4MetadataBuilder(RocmOctaveMetadataBuilder):
@@ -145,13 +77,13 @@ class RocmOctaveRdna4AttentionImpl(AttentionImpl):
             or attn_type != "decoder"
         ):
             raise NotImplementedError(
-                "ROCM_OCTAVE_RDNA4 supports dense causal decoder attention "
+                "ROCM_OCTAVE (RDNA4) supports dense causal decoder attention "
                 "without sliding windows, ALiBi, sinks or soft caps"
             )
         self.num_heads = num_heads
         self.num_kv_heads = num_kv_heads or num_heads
         if num_heads <= 0 or self.num_kv_heads <= 0 or num_heads % self.num_kv_heads:
-            raise ValueError("ROCM_OCTAVE_RDNA4 requires an integer GQA ratio")
+            raise ValueError("ROCM_OCTAVE (RDNA4) requires an integer GQA ratio")
         self.head_size, self.scale = head_size, float(scale)
         self.kv_cache_dtype = kv_cache_dtype
         self.kv_sharing_target_layer_name = kv_sharing_target_layer_name
@@ -165,11 +97,11 @@ class RocmOctaveRdna4AttentionImpl(AttentionImpl):
             torch.accelerator.current_device_index()
         ).gcnArchName.split(":")[0]
         if arch not in ("gfx1200", "gfx1201"):
-            raise NotImplementedError(f"ROCM_OCTAVE_RDNA4 requires gfx1200/1: {arch}")
+            raise NotImplementedError(f"ROCM_OCTAVE (RDNA4) requires gfx1200/1: {arch}")
         self.engine = _engine(head_size, rope_dim, arch)
         self._sign_words: torch.Tensor | None = None
         logger.info_once(
-            "ROCM_OCTAVE_RDNA4: native HIP %s, D=%d RoPE=%d, Q=%d KV=%d, %s",
+            "ROCM_OCTAVE (RDNA4): native HIP %s, D=%d RoPE=%d, Q=%d KV=%d, %s",
             arch,
             head_size,
             rope_dim,
@@ -264,7 +196,7 @@ class RocmOctaveRdna4AttentionImpl(AttentionImpl):
     ) -> torch.Tensor:
         assert output is not None
         if output_scale is not None or output_block_scale is not None:
-            raise NotImplementedError("ROCM_OCTAVE_RDNA4 does not fuse output quant")
+            raise NotImplementedError("ROCM_OCTAVE (RDNA4) does not fuse output quant")
         if attn_metadata is None:
             _reserve_workspace(self.config, self.head_size)
             self._signs(query.device)
