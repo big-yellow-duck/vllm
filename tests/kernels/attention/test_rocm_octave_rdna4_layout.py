@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""CPU contracts for geometry embedding, wire layouts and bounded scheduling."""
+"""CPU contracts for RDNA4 Octave layouts and bounded split scheduling."""
 
 import pytest
 import torch
-from octave_geometry import OctaveGeometry
-from octave_splits import recommend_splits
+
+from vllm.v1.attention.ops import rocm_octave as sq
+from vllm.v1.attention.ops.rocm_octave_rdna4.geometry import OctaveGeometry
+from vllm.v1.attention.ops.rocm_octave_rdna4.splits import recommend_splits
 
 
 @pytest.mark.parametrize(
@@ -59,35 +61,9 @@ def test_invalid_geometry_rejected(dim, rope):
 
 
 @pytest.mark.parametrize("dim", range(64, 1025, 64))
-def test_standalone_sign_words_match_wire_format(dim):
-    from octave_reference import format_ops
-
+def test_sign_words_match_wire_format(dim):
     layout = OctaveGeometry(dim, 0).layout("octave_k3v4")
-    assert torch.equal(layout.sign_bits(), format_ops.sign_bits(dim))
-
-
-def test_runtime_metadata_does_not_require_reference_checkout(tmp_path):
-    import os
-    import subprocess
-    import sys
-    from pathlib import Path
-
-    code = (
-        "from octave_tuned import TunedHipOctave; "
-        "from octave_geometry import OctaveGeometry; "
-        "assert OctaveGeometry(127,63).layout('octave_k3v4')"
-        ".sign_bits().shape == (4,)"
-    )
-    subprocess.run(
-        [sys.executable, "-c", code],
-        check=True,
-        cwd=tmp_path,
-        env=dict(
-            os.environ,
-            OCTAVE_VLLM_ROOT=str(tmp_path / "missing"),
-            PYTHONPATH=str(Path(__file__).resolve().parent),
-        ),
-    )
+    assert torch.equal(layout.sign_bits(), sq.sign_bits(dim))
 
 
 @pytest.mark.parametrize("dim", [32, 80, 128, 192, 256, 384, 512, 1024])
@@ -113,3 +89,63 @@ def test_general_geometry_scratch_budget(dim, group, prefill):
         assert (
             8192 * group * 2 * splits * (dim + 2) * 4 if splits > 1 else 0
         ) <= budget
+
+
+@pytest.mark.parametrize(
+    "tokens,heads,kv,requests,prefill",
+    [
+        (1, 8, 2, 1, False),
+        (16, 12, 2, 16, False),
+        (8192, 12, 2, 8192, False),
+        (257, 8, 8, 7, True),
+        (8192, 12, 2, 1, True),
+        (8192, 48, 8, 128, True),
+    ],
+)
+@pytest.mark.parametrize("budget", [0, 1000, 3 << 20, 1 << 30])
+def test_automatic_workspace_never_exceeds_budget(
+    tokens, heads, kv, requests, prefill, budget
+):
+    splits = recommend_splits(
+        tokens=tokens,
+        heads=heads,
+        kv_heads=kv,
+        requests=requests,
+        capacity=270336,
+        page_size=16,
+        cache_dtype="octave_k3v4",
+        prefill=prefill,
+        workspace_limit_bytes=budget,
+    )
+    assert 1 <= splits <= 256 and splits & (splits - 1) == 0
+    allocated = tokens * heads * splits * 258 * 4 if splits > 1 else 0
+    assert allocated <= budget
+
+
+@pytest.mark.parametrize("heads,kv", [(8, 8), (8, 2), (16, 2)])
+def test_long_context_other_gqa_ratios_are_split(heads, kv):
+    splits = recommend_splits(
+        tokens=1,
+        heads=heads,
+        kv_heads=kv,
+        requests=1,
+        capacity=262144,
+        page_size=16,
+        cache_dtype="octave_k3v4",
+    )
+    assert splits >= 128
+
+
+@pytest.mark.parametrize("bad", [-1, 1.5, None])
+def test_invalid_workspace_budget_is_rejected(bad):
+    with pytest.raises(ValueError):
+        recommend_splits(
+            tokens=1,
+            heads=12,
+            kv_heads=2,
+            requests=1,
+            capacity=1024,
+            page_size=16,
+            cache_dtype="octave_k3v4",
+            workspace_limit_bytes=bad,
+        )

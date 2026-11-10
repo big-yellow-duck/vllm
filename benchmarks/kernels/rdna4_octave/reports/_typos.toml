@@ -1,3 +1,0 @@
-[default]
-# The validation fixture IDs are 16-digit hexadecimal hashes.
-extend-ignore-re = ['\b[0-9a-f]{16}\b']
