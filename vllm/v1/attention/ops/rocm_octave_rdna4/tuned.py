@@ -157,6 +157,16 @@ class TunedHipOctave(HipOctave):
     def decode(self, *args, splits="auto", **kwargs):
         return super().decode(*args, splits=splits, **kwargs)
 
+    def window_store(self, *args, **kwargs):
+        if self._geometry_backend is not None:
+            return self._geometry_backend.window_store(*args, **kwargs)
+        return super().window_store(*args, **kwargs)
+
+    def decode_sparse(self, *args, **kwargs):
+        if self._geometry_backend is not None:
+            return self._geometry_backend.decode_sparse(*args, **kwargs)
+        return super().decode_sparse(*args, **kwargs)
+
     def prefill(self, *args, splits="auto", **kwargs):
         return super().prefill(*args, splits=splits, **kwargs)
 

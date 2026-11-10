@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""AMD ROCm QSA owner with Triton kernels."""
+"""AMD ROCm QSA owner with Triton and native Octave HIP kernels."""
 
 from __future__ import annotations
 
-from typing import ClassVar, cast
+from typing import TYPE_CHECKING, ClassVar, cast
 
 import torch
 from torch import nn
@@ -40,6 +40,7 @@ from vllm.v1.attention.backend import (
     AttentionType,
     MultipleOf,
 )
+from vllm.v1.attention.backends.rocm_octave_attn import _on_rdna4
 from vllm.v1.attention.ops import rocm_octave
 from vllm.v1.kv_cache_interface import (
     AttentionSpec,
@@ -51,6 +52,9 @@ from vllm.v1.worker.workspace import (
     current_workspace_manager,
     is_workspace_manager_initialized,
 )
+
+if TYPE_CHECKING:
+    from vllm.v1.attention.ops.rocm_octave_rdna4 import TunedHipOctave
 
 from ..common.qsa import Qwen4ExpQSAMetadata, Qwen4ExpQSAMetadataBuilder
 from ..common.qsa_indexer import QSAIndexerMetadata, qsa_kv_cache_dtype
@@ -97,7 +101,17 @@ class Qwen4ExpROCmQSAMetadataBuilder(Qwen4ExpQSAMetadataBuilder):
                 * num_heads
                 * (kv_cache_spec.head_size + 2)
             )
-            current_workspace_manager().get_simultaneous(((numel,), torch.float32))
+            if _on_rdna4():
+                output_shape = (
+                    vllm_config.scheduler_config.max_num_batched_tokens,
+                    num_heads,
+                    kv_cache_spec.head_size,
+                )
+                current_workspace_manager().get_simultaneous(
+                    ((numel,), torch.float32), (output_shape, torch.float32)
+                )
+            else:
+                current_workspace_manager().get_simultaneous(((numel,), torch.float32))
 
 
 _OCTAVE_CACHE_DTYPES: tuple[CacheDType, ...] = (
@@ -164,7 +178,7 @@ class Qwen4ExpQSABackend(AttentionBackend):
 
 
 class Qwen4ExpQSAImpl(AttentionImplBase[Qwen4ExpQSAMetadata]):
-    """Run paged sparse GQA with the QSA Triton kernel."""
+    """Run paged sparse GQA with Triton or native Octave HIP kernels."""
 
     def __init__(
         self,
@@ -189,15 +203,30 @@ class Qwen4ExpQSAImpl(AttentionImplBase[Qwen4ExpQSAMetadata]):
         self.num_kv_heads = num_kv_heads
         self.kv_cache_dtype = kv_cache_dtype
         self.octave_fmt: rocm_octave.OctaveFormat | None = None
+        self._octave_rdna4: TunedHipOctave | None = None
         if self.kv_cache_dtype in _OCTAVE_CACHE_DTYPES:
-            self.octave_fmt = rocm_octave.OctaveFormat.from_cache_dtype(
-                self.kv_cache_dtype,
-                self.head_size,
-                rocm_octave.registered_rope_dim(self.head_size),
-            )
+            rope_dim = rocm_octave.registered_rope_dim(self.head_size)
+            if _on_rdna4():
+                from vllm.v1.attention.backends.rocm_octave_rdna4_attn import _engine
+
+                arch = torch.cuda.get_device_properties(
+                    torch.accelerator.current_device_index()
+                ).gcnArchName.split(":")[0]
+                self._octave_rdna4 = _engine(self.head_size, rope_dim, arch)
+                self.octave_fmt = self._octave_rdna4.layout(
+                    self.kv_cache_dtype
+                ).reference_format()
+            else:
+                self.octave_fmt = rocm_octave.OctaveFormat.from_cache_dtype(
+                    self.kv_cache_dtype, self.head_size, rope_dim
+                )
             self._octave_signs: torch.Tensor | None = None
             self._octave_mid_o: torch.Tensor | None = None
+            self._octave_output: torch.Tensor | None = None
             vllm_config = get_current_vllm_config()
+            self._octave_max_tokens = (
+                vllm_config.scheduler_config.max_num_batched_tokens
+            )
             self._octave_splits = (
                 vllm_config.attention_config.tq_max_kv_splits_for_cuda_graph
             )
@@ -219,17 +248,27 @@ class Qwen4ExpQSAImpl(AttentionImplBase[Qwen4ExpQSAMetadata]):
 
     def _octave_buffers(
         self, num_q: int, device: torch.device
-    ) -> tuple[torch.Tensor, torch.Tensor, int]:
+    ) -> tuple[torch.Tensor, torch.Tensor, int, torch.Tensor | None]:
         """Sign bits and split-KV partials, from the workspace every layer
         shares (without one, a buffer allocated once, since captured graphs
         hold its address). Larger batches use fewer splits so they fit."""
         if self._octave_signs is None or self._octave_signs.device != device:
-            self._octave_signs = rocm_octave.sign_bits(self.head_size).to(device)
+            self._octave_signs = (
+                self._octave_rdna4.layout(self.kv_cache_dtype).sign_bits()
+                if self._octave_rdna4 is not None
+                else rocm_octave.sign_bits(self.head_size)
+            ).to(device)
         capacity = self._octave_capacity
         splits = max(2, min(self._octave_splits, capacity // max(num_q, 1)))
         row = self.head_size + 2
         numel = capacity * self.num_heads * row
-        if is_workspace_manager_initialized():
+        output = None
+        if is_workspace_manager_initialized() and self._octave_rdna4 is not None:
+            buf, output = current_workspace_manager().get_simultaneous(
+                ((numel,), torch.float32),
+                ((num_q, self.num_heads, self.head_size), torch.float32),
+            )
+        elif is_workspace_manager_initialized():
             (buf,) = current_workspace_manager().get_simultaneous(
                 ((numel,), torch.float32)
             )
@@ -239,11 +278,22 @@ class Qwen4ExpQSAImpl(AttentionImplBase[Qwen4ExpQSAMetadata]):
                     numel, dtype=torch.float32, device=device
                 )
             buf = self._octave_mid_o
+            if self._octave_rdna4 is not None:
+                if self._octave_output is None:
+                    self._octave_output = torch.empty(
+                        self._octave_max_tokens,
+                        self.num_heads,
+                        self.head_size,
+                        dtype=torch.float32,
+                        device=device,
+                    )
+                output = self._octave_output[:num_q]
         mid_o = buf[: num_q * self.num_heads * splits * row]
         return (
             self._octave_signs,
             mid_o.view(num_q, self.num_heads, splits, row),
             splits,
+            output,
         )
 
     def do_kv_cache_update(
@@ -253,6 +303,8 @@ class Qwen4ExpQSAImpl(AttentionImplBase[Qwen4ExpQSAMetadata]):
         value: torch.Tensor,
         kv_cache: torch.Tensor,
         slot_mapping: torch.Tensor,
+        *,
+        positions: torch.Tensor | None = None,
     ) -> None:
         """Store BF16 K/V directly or use the existing Octave cache writer."""
         if self.octave_fmt is None:
@@ -273,18 +325,27 @@ class Qwen4ExpQSAImpl(AttentionImplBase[Qwen4ExpQSAMetadata]):
         n = slot_mapping.shape[0]
         if n == 0:
             return
-        signs, _, _ = self._octave_buffers(1, key.device)
-        torch.ops._C.octave_cache_store(
-            key[:n],
-            value[:n],
-            kv_cache,
-            slot_mapping,
-            signs,
-            signs,
-            self.octave_fmt.kernel_code,
-        )
+        if positions is not None:
+            self._octave_positions = positions[:n].to(torch.int32)
+        signs, _, _, _ = self._octave_buffers(1, key.device)
+        if self._octave_rdna4 is not None:
+            self._octave_rdna4.store(
+                key[:n], value[:n], kv_cache, slot_mapping, signs, self.kv_cache_dtype
+            )
+            window_store = self._octave_rdna4.window_store
+        else:
+            torch.ops._C.octave_cache_store(
+                key[:n],
+                value[:n],
+                kv_cache,
+                slot_mapping,
+                signs,
+                signs,
+                self.octave_fmt.kernel_code,
+            )
+            window_store = torch.ops._C.octave_window_store
         assert self._octave_positions is not None
-        torch.ops._C.octave_window_store(
+        window_store(
             key[:n],
             value[:n],
             slot_mapping,
@@ -320,7 +381,31 @@ class Qwen4ExpQSAImpl(AttentionImplBase[Qwen4ExpQSAMetadata]):
         token_to_req = token_to_req[:num_tokens]
         if self.octave_fmt is not None:
             assert self._octave_positions is not None
-            signs, mid_o, splits = self._octave_buffers(num_tokens, query.device)
+            signs, mid_o, splits, fp32_output = self._octave_buffers(
+                num_tokens, query.device
+            )
+            if self._octave_rdna4 is not None:
+                assert fp32_output is not None
+                self._octave_rdna4.decode_sparse(
+                    query[:num_tokens],
+                    kv_cache,
+                    attn_metadata.block_table,
+                    token_to_req,
+                    logical_indices,
+                    signs,
+                    self.kv_cache_dtype,
+                    positions=self._octave_positions[:num_tokens],
+                    wtab=self._wtab,
+                    wtags=self._wtags,
+                    stab=self._stab,
+                    stags=self._stags,
+                    scale=self.scale,
+                    splits=splits,
+                    out=fp32_output,
+                    scratch=mid_o,
+                )
+                output[:num_tokens].copy_(fp32_output)
+                return output
             torch.ops._C.octave_decode_sparse(
                 output[:num_tokens],
                 query[:num_tokens],
@@ -600,15 +685,13 @@ class Qwen4ExpQSAAttention(Qwen3NextAttention, AttentionLayerBase):
         impl = self.impl
         if main_outputs is None:
             assert key is not None and value is not None
-            if impl.octave_fmt is not None:
-                flat = positions[0] if positions.dim() == 2 else positions
-                impl._octave_positions = flat.to(torch.int32)
             impl.do_kv_cache_update(
                 self,
                 key,
                 value,
                 self.kv_cache,
                 main_metadata.slot_mapping,
+                positions=positions[0] if positions.dim() == 2 else positions,
             )
         else:
             query, _ = main_outputs

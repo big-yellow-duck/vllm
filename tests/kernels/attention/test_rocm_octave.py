@@ -425,22 +425,27 @@ def test_kernels_follow_declared_cache_layouts(layout, kernel):
     assert torch.equal(out, ref)
 
 
-def _window_tables(entries, hkv, dev):
+def _window_tables(entries, hkv, dev, dtype=torch.float16):
     return (
-        torch.zeros(entries, hkv, 2 * HEAD, dtype=torch.float16, device=dev),
+        torch.zeros(entries, hkv, 2 * HEAD, dtype=dtype, device=dev),
         torch.full((entries,), -1, dtype=torch.int32, device=dev),
         torch.zeros(entries, dtype=torch.int32, device=dev),
     )
 
 
-@pytest.mark.skipif(_arch() != "rdna3", reason="sparse decode is RDNA3-only")
+@pytest.mark.skipif(
+    _arch() not in ("rdna3", "rdna4"), reason="sparse decode needs RDNA3 or RDNA4"
+)
 @pytest.mark.parametrize("cache_dtype", CACHE_DTYPES)
 @pytest.mark.parametrize("hkv,group", [(1, 6), (2, 6)])
 @pytest.mark.parametrize("window", ["off", "on", "evicted"])
-def test_sparse_decode_matches_reference(cache_dtype, hkv, group, window):
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+def test_sparse_decode_matches_reference(
+    cache_dtype, hkv, group, window, dtype, kernel
+):
     """Sparse (top-k) decode as qwen4_exp QSA runs it: each query reads the
     logical positions in its index row, -1 entries are holes. With the window
-    on, the first 4 and the last 64 positions come from the fp16 tables;
+    on, the first 4 and the last 64 positions come from FP16/BF16 tables;
     an entry whose tag was overwritten falls back to the packed cache."""
     torch.manual_seed(4)
     dev, fmt = "cuda", _format(cache_dtype)
@@ -452,22 +457,26 @@ def test_sparse_decode_matches_reference(cache_dtype, hkv, group, window):
         .view(len(lens), max_blocks)
         .int()
     )
-    wtab, wtags, wlocks = _window_tables(4096, hkv, dev)
-    stab, stags, slocks = _window_tables(256, hkv, dev)
+    wtab, wtags, wlocks = _window_tables(4096, hkv, dev, dtype)
+    stab, stags, slocks = _window_tables(256, hkv, dev, dtype)
     ks, vs = [], []
     for r, n in enumerate(lens):
-        k = torch.randn(n, hkv, HEAD, device=dev).half()
+        k = torch.randn(n, hkv, HEAD, device=dev).to(dtype)
         v = torch.randn_like(k)
         pos = torch.arange(n, device=dev)
         slots = block_table[r, pos // BLOCK].long() * BLOCK + pos % BLOCK
-        torch.ops._C.octave_cache_store(
-            k, v, cache, slots, signs, signs, fmt.kernel_code
+        _store(k, v, cache, slots, signs, signs, fmt, kernel)
+        window_store = (
+            kernel.window_store
+            if kernel is not None
+            else torch.ops._C.octave_window_store
         )
-        torch.ops._C.octave_window_store(
-            k, v, slots, pos.int(), wtab, wtags, wlocks, stab, stags, slocks
-        )
+        window_store(k, v, slots, pos.int(), wtab, wtags, wlocks, stab, stags, slocks)
         ks.append(k)
         vs.append(v)
+    assert (wtags >= 0).any() and (stags >= 0).any()
+    assert torch.count_nonzero(wlocks).item() == 0
+    assert torch.count_nonzero(slocks).item() == 0
     if window == "evicted":
         wtags[::2] = -7
         stags[::2] = -7
@@ -492,28 +501,59 @@ def test_sparse_decode_matches_reference(cache_dtype, hkv, group, window):
         indices[i, : cand.numel()] = cand.int()
         indices[i] = indices[i][torch.randperm(topk, device=dev)]
 
-    q = torch.randn(num_q, hkv * group, HEAD, device=dev).half()
+    q = torch.randn(num_q, hkv * group, HEAD, device=dev).to(dtype)
     out = torch.empty_like(q)
     mid = torch.empty(num_q, hkv * group, 64, HEAD + 2, dtype=torch.float32, device=dev)
     scale = HEAD**-0.5
     window_args = () if window == "off" else (qpos, wtab, wtags, stab, stags)
-    torch.ops._C.octave_decode_sparse(
-        out,
-        q,
-        cache,
-        block_table,
-        q_to_req,
-        indices,
-        mid,
-        signs,
-        signs,
-        scale,
-        64,
-        fmt.kernel_code,
-        *window_args,
-    )
+    fp32_out = torch.empty_like(q, dtype=torch.float32)
+
+    def call():
+        if kernel is None:
+            torch.ops._C.octave_decode_sparse(
+                out,
+                q,
+                cache,
+                block_table,
+                q_to_req,
+                indices,
+                mid,
+                signs,
+                signs,
+                scale,
+                64,
+                fmt.kernel_code,
+                *window_args,
+            )
+        else:
+            exact = (
+                {}
+                if window == "off"
+                else dict(
+                    positions=qpos, wtab=wtab, wtags=wtags, stab=stab, stags=stags
+                )
+            )
+            out.copy_(
+                kernel.decode_sparse(
+                    q,
+                    cache,
+                    block_table,
+                    q_to_req,
+                    indices,
+                    signs,
+                    cache_dtype,
+                    scale=scale,
+                    splits=64,
+                    out=fp32_out,
+                    scratch=mid,
+                    **exact,
+                )
+            )
+
+    call()
 
     ref = torch.zeros(num_q, hkv * group, HEAD, device=dev)
+    exact_hits = 0
     for i in range(num_q):
         r, p = int(q_to_req[i]), int(qpos[i])
         sel = indices[i][indices[i] >= 0].long()
@@ -523,6 +563,7 @@ def test_sparse_decode_matches_reference(cache_dtype, hkv, group, window):
             slot = blocks * BLOCK + sel % BLOCK
             exact = ((p - sel) < 64) & (wtags[slot % 4096].long() == slot)
             exact |= (sel < 4) & (stags[slot % 256].long() == slot)
+            exact_hits += exact.sum().item()
             k[exact] = ks[r][sel[exact]].float()
             v[exact] = vs[r][sel[exact]].float()
         k = k.repeat_interleave(group, 1)
@@ -530,3 +571,16 @@ def test_sparse_decode_matches_reference(cache_dtype, hkv, group, window):
         p_attn = torch.softmax(torch.einsum("hd,thd->ht", q[i].float(), k) * scale, -1)
         ref[i] = torch.einsum("ht,thd->hd", p_attn, v)
     assert _rel(out, ref) < 2e-2
+    if window != "off":
+        assert exact_hits > 0
+    if kernel is not None:
+        eager = out.clone()
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph):
+            call()
+        out.fill_(float("nan"))
+        graph.replay()
+        assert torch.equal(out, eager)
+        indices.fill_(-1)
+        graph.replay()
+        assert torch.count_nonzero(out).item() == 0

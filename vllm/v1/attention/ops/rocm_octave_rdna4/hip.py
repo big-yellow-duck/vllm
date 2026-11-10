@@ -84,6 +84,34 @@ class _PagedCache(ct.Structure):
     ]
 
 
+class _Shadow(ct.Structure):
+    _fields_ = [
+        ("data", ct.c_void_p),
+        ("tags", ct.c_void_p),
+        ("locks", ct.c_void_p),
+        ("entries", ct.c_int),
+    ]
+
+
+def _shadow(table, tags, locks, device, dtype, heads, head_dim):
+    entries = table.shape[0]
+    if (
+        entries <= 0
+        or entries & (entries - 1)
+        or table.shape != (entries, heads, 2 * head_dim)
+        or table.dtype != dtype
+        or table.device != device
+        or not table.is_contiguous()
+    ):
+        raise ValueError("Expected a contiguous power-of-two exact K/V table")
+    return _Shadow(
+        table.data_ptr(),
+        _vector(tags, entries, torch.int32, device),
+        _vector(locks, entries, torch.int32, device) if locks is not None else None,
+        entries,
+    )
+
+
 def _activation(x, device, dtype, head_dim=HEAD):
     if (
         x.ndim != 3
@@ -145,7 +173,7 @@ def _check_buffer(tensor, shape, device):
 
 
 class HipOctave:
-    """Dense paged Octave on gfx1200/gfx1201, with FP32 attention output.
+    """Paged Octave on gfx1200/gfx1201, with FP32 attention output.
 
     Callers supply valid page indices and unique live write slots. Q and K are
     post-RoPE. The contiguous int32 sign words follow the Octave format.
@@ -176,6 +204,44 @@ class HipOctave:
         self._prefill = self._bind(
             "prefill", common + [_Activation, _Activation] + meta + [i32] + tail
         )
+        self._window_store = self._sparse = None
+        if self.geometry_version:
+            self._window_store = self._bind(
+                "window_store",
+                [
+                    _Activation,
+                    _Activation,
+                    ptr,
+                    ptr,
+                    _Shadow,
+                    _Shadow,
+                    i32,
+                    i32,
+                    i32,
+                    ptr,
+                ],
+            )
+            self._sparse = self._bind(
+                "decode_sparse",
+                common
+                + [
+                    _PagedCache,
+                    ptr,
+                    i64,
+                    i32,
+                    i32,
+                    i32,
+                    ptr,
+                    ptr,
+                    i64,
+                    i32,
+                    ptr,
+                    ptr,
+                    _Shadow,
+                    _Shadow,
+                ]
+                + tail[1:],
+            )
 
     def layout(self, cache_dtype):
         """Wire layout, logical/storage dimensions and CPU sign words."""
@@ -227,6 +293,171 @@ class HipOctave:
             DTYPES[dtype],
             code,
         )
+
+    def window_store(
+        self, key, value, slots, positions, wtab, wtags, wlocks, stab, stags, slocks
+    ):
+        """Keep exact K/V for selected recent and leading QSA positions.
+
+        Direct-mapped tables use physical-slot tags. Collisions evict complete
+        rows, so sparse attention can safely fall back to packed KV.
+        """
+        if self._window_store is None:
+            raise RuntimeError("Sparse Octave requires the geometry runtime")
+        if wlocks is None or slocks is None:
+            raise ValueError("Exact K/V stores require both entry-lock tables")
+        device, dtype = key.device, key.dtype
+        k, v = (_activation(x, device, dtype, self.head_dim) for x in (key, value))
+        n, heads = slots.numel(), key.shape[1]
+        if key.shape != value.shape or n > key.shape[0]:
+            raise ValueError("Exact K/V rows and slot counts must match")
+        recent = _shadow(wtab, wtags, wlocks, device, dtype, heads, self.head_dim)
+        sinks = _shadow(stab, stags, slocks, device, dtype, heads, self.head_dim)
+        self._launch(
+            self._window_store,
+            device,
+            k,
+            v,
+            _vector(slots, n, torch.int64, device),
+            _vector(positions, n, torch.int32, device),
+            recent,
+            sinks,
+            n,
+            heads,
+            DTYPES[dtype],
+        )
+        stream = torch.cuda.current_stream(device)
+        for tensor in (
+            key,
+            value,
+            slots,
+            positions,
+            wtab,
+            wtags,
+            wlocks,
+            stab,
+            stags,
+            slocks,
+        ):
+            tensor.record_stream(stream)
+
+    def decode_sparse(
+        self,
+        query,
+        cache,
+        block_table,
+        q_to_req,
+        indices,
+        signs,
+        cache_dtype,
+        *,
+        positions=None,
+        wtab=None,
+        wtags=None,
+        stab=None,
+        stags=None,
+        scale=None,
+        splits=1,
+        out=None,
+        scratch=None,
+    ):
+        """FP32 sparse attention over selected logical positions and holes.
+
+        Optional exact tables preserve the first four and last 64 selected
+        positions. Missing or evicted tags use the packed cache. No prefix is
+        expanded to a dense K/V tensor. All buffers may be supplied for capture.
+        """
+        if self._sparse is None:
+            raise RuntimeError("Sparse Octave requires the geometry runtime")
+        device, dtype = query.device, query.dtype
+        q = _activation(query, device, dtype, self.head_dim)
+        tokens, heads, _ = query.shape
+        pages, code = _cache_view(cache, cache_dtype, device, self.layout(cache_dtype))
+        if heads <= 0 or heads % pages.heads or not 1 <= splits <= 1024:
+            raise ValueError("Invalid sparse GQA group or split count")
+        if (
+            block_table.ndim != 2
+            or block_table.stride(1) != 1
+            or block_table.dtype != torch.int32
+            or block_table.device != device
+            or indices.ndim != 2
+            or indices.shape[0] != tokens
+            or indices.stride(1) != 1
+            or indices.dtype != torch.int32
+            or indices.device != device
+        ):
+            raise ValueError("Expected int32 page tables and sparse index rows")
+        position_ptr, recent, sinks = None, _Shadow(), _Shadow()
+        if positions is not None:
+            if any(x is None for x in (wtab, wtags, stab, stags)):
+                raise ValueError("Exact sparse attention requires both tagged tables")
+            position_ptr = _vector(positions, tokens, torch.int32, device)
+            recent = _shadow(
+                wtab, wtags, None, device, dtype, pages.heads, self.head_dim
+            )
+            sinks = _shadow(
+                stab, stags, None, device, dtype, pages.heads, self.head_dim
+            )
+        if out is None:
+            out = torch.empty_like(query, dtype=torch.float32)
+        output_ptr = _check_buffer(out, query.shape, device)
+        partial_ptr = None
+        if splits > 1:
+            shape = (tokens, heads, splits, self.head_dim + 2)
+            if scratch is None:
+                scratch = torch.empty(shape, dtype=torch.float32, device=device)
+            partial_ptr = _check_buffer(scratch, shape, device)
+        self._launch(
+            self._sparse,
+            device,
+            output_ptr,
+            partial_ptr,
+            q,
+            pages,
+            block_table.data_ptr(),
+            block_table.stride(0),
+            block_table.shape[1],
+            block_table.shape[0],
+            cache.shape[0],
+            _vector(q_to_req, tokens, torch.int32, device),
+            indices.data_ptr(),
+            indices.stride(0),
+            indices.shape[1],
+            _vector(
+                signs,
+                self.layout(cache_dtype).storage_head_dim // 32,
+                torch.int32,
+                device,
+            ),
+            position_ptr,
+            recent,
+            sinks,
+            tokens,
+            heads,
+            splits,
+            self.head_dim**-0.5 if scale is None else scale,
+            DTYPES[dtype],
+            code,
+        )
+        stream = torch.cuda.current_stream(device)
+        for tensor in (
+            query,
+            cache,
+            block_table,
+            q_to_req,
+            indices,
+            signs,
+            positions,
+            wtab,
+            wtags,
+            stab,
+            stags,
+            out,
+            scratch,
+        ):
+            if tensor is not None:
+                tensor.record_stream(stream)
+        return out
 
     def decode(
         self,

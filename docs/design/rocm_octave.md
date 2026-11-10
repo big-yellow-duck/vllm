@@ -40,6 +40,14 @@ largest FP32 output before graph capture and memory budgeting.
 The adapter shares causal metadata construction with the original backend.
 Decode/MTP chunks of at most 128 query tokens per request read packed KV;
 larger prefills read packed prefixes and unquantized current-chunk K/V.
+
+RDNA4 also supports the model's sparse QSA path, including RDNA3's tagged
+exact K/V tables for selected recent (last 64) and leading (first 4) tokens.
+Missing or evicted table entries use the packed cache. These exact-token
+overlays preserve the sparse selection; they do not implement a general
+sliding-window mask or learned attention sinks. The sparse path uses native
+HIP with FP32 accumulation; dense attention retains its tuned WMMA dispatch.
+
 Sliding windows, ALiBi, attention sinks, soft caps, unequal QK/V MLA and fused
 output quantization are rejected. Kernel measurements were made on `gfx1201`;
 `gfx1200` has compilation coverage only. A serving smoke test establishes

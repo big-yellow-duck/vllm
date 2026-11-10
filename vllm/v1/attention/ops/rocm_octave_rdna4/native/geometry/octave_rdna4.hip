@@ -977,3 +977,175 @@ extern "C" int octave_rdna4_prefill(float *out, float *partial, Activation q,
                          lengths, requests, signs, tokens, heads, splits, scale,
                          dtype, format, stream);
 }
+
+namespace {
+struct Shadow {
+  void *data;
+  int32_t *tags;
+  int32_t *locks;
+  int entries;
+};
+
+// One wave owns a complete shadow row while holding its entry lock. A
+// collision evicts a whole row; the tag makes readers fall back to packed KV.
+template <class T>
+__global__ __launch_bounds__(32) void window_store(
+    Activation key, Activation value, const int64_t *slots,
+    const int32_t *positions, Shadow recent, Shadow sinks, int heads) {
+  const int token = blockIdx.x, lane = threadIdx.x;
+  const int64_t slot = slots[token];
+  if (slot < 0)
+    return;
+  auto put = [&](Shadow table) {
+    const int entry = slot & (table.entries - 1);
+    if (lane == 0) {
+      while (atomicCAS(table.locks + entry, 0, 1) != 0) {}
+      atomicExch(table.tags + entry, -1);
+    }
+    __threadfence();
+    for (int head = 0; head < heads; ++head) {
+      T *row = static_cast<T *>(table.data) +
+               (int64_t(entry) * heads + head) * (2 * LD);
+      const T *k = static_cast<const T *>(key.data) +
+                   token * key.token_stride + head * key.head_stride;
+      const T *v = static_cast<const T *>(value.data) +
+                   token * value.token_stride + head * value.head_stride;
+      for (int d = lane; d < LD; d += 32) {
+        row[d] = k[d];
+        row[LD + d] = v[d];
+      }
+    }
+    __threadfence();
+    if (lane == 0) {
+      atomicExch(table.tags + entry, int(slot));
+      __threadfence();
+      atomicExch(table.locks + entry, 0);
+    }
+  };
+  put(recent);
+  if (positions[token] >= 0 && positions[token] < 4)
+    put(sinks);
+}
+
+// QSA selects logical positions, including holes. Exact recent/sink hits
+// share one online softmax with packed KV; an evicted tag uses packed KV.
+template <class F, class T>
+__global__ __launch_bounds__(32) void sparse(
+    float *out, float *partial, Activation query, PagedCache cache,
+    const int32_t *table, int64_t table_stride, int columns, int requests, int pages,
+    const int32_t *mapping, const int32_t *indices, int64_t index_stride,
+    int topk, const uint32_t *sgn, const int32_t *positions,
+    Shadow recent, Shadow sinks, int heads, float scale) {
+  const int q = blockIdx.x, head = blockIdx.y, split = blockIdx.z,
+            splits = gridDim.z, lane = threadIdx.x,
+            req = mapping[q], kv = head / (heads / cache.heads),
+            width = (topk + splits - 1) / splits,
+            begin = split * width, end = min(topk, begin + width);
+  float qr[F::VL], qt[F::VL], packed[F::VL] = {}, raw[F::VL] = {};
+  float m = -INFINITY, mass = 0;
+  load<F, T>(qr, query, q, head, lane);
+#pragma unroll
+  for (int i = 0; i < F::VL; ++i)
+    qt[i] = qr[i];
+  signs<F>(qt, sgn, lane);
+  transform<F, F::compact>(qt, lane);
+  if (req >= 0 && req < requests) {
+    for (int index = begin; index < end; ++index) {
+      const int pos = indices[int64_t(q) * index_stride + index];
+      if (pos < 0 || pos / cache.page_size >= columns)
+        continue;
+      const int page = table[int64_t(req) * table_stride + pos / cache.page_size];
+      if (page < 0 || page >= pages)
+        continue;
+      const int slot_id = page * cache.page_size + pos % cache.page_size;
+      const uint8_t *slot = cache.at(page, kv, pos % cache.page_size);
+      const T *exact = nullptr;
+      if (positions && positions[q] >= pos) {
+        const int r = slot_id & (recent.entries - 1),
+                  s = slot_id & (sinks.entries - 1);
+        if (positions[q] - pos < 64 && recent.tags[r] == slot_id)
+          exact = static_cast<const T *>(recent.data) +
+                  (int64_t(r) * cache.heads + kv) * (2 * LD);
+        else if (pos < 4 && sinks.tags[s] == slot_id)
+          exact = static_cast<const T *>(sinks.data) +
+                  (int64_t(s) * cache.heads + kv) * (2 * LD);
+      }
+      float dot = 0;
+#pragma unroll
+      for (int i = 0; i < F::VL; ++i) {
+        const int d = lane + 32 * i, logical = F::logical(d);
+        const float k = exact ? (logical >= 0 ? float(exact[logical]) : 0.f)
+                              : kval<F>(slot, d);
+        dot = fmaf(exact ? qr[i] : qt[i], k, dot);
+      }
+      const float score = sum(dot) * scale, nm = fmaxf(m, score),
+                  rescale = mass > 0 ? __expf(m - nm) : 0.f,
+                  weight = __expf(score - nm);
+      mass = fmaf(mass, rescale, weight);
+      m = nm;
+#pragma unroll
+      for (int i = 0; i < F::VL; ++i) {
+        const int d = lane + 32 * i, logical = F::logical(d);
+        packed[i] *= rescale;
+        raw[i] *= rescale;
+        if (exact) {
+          if (logical >= 0)
+            raw[i] = fmaf(weight, float(exact[LD + logical]), raw[i]);
+        } else
+          packed[i] = fmaf(weight, vval<F>(slot, d), packed[i]);
+      }
+    }
+  }
+  transform<F, F::VWhole>(packed, lane);
+  signs<F>(packed, sgn, lane);
+  float *dst = splits == 1
+                   ? out + (int64_t(q) * heads + head) * LD
+                   : partial + ((int64_t(q) * heads + head) * splits + split) * Partial;
+#pragma unroll
+  for (int i = 0; i < F::VL; ++i) {
+    const int logical = F::logical(lane + 32 * i);
+    if (logical >= 0)
+      dst[logical] = (packed[i] + raw[i]) *
+                     (splits == 1 ? (mass > 0 ? 1.f / mass : 0.f) : 1.f);
+  }
+  if (splits > 1 && lane == 0) {
+    dst[LD] = m;
+    dst[LD + 1] = mass;
+  }
+}
+} // namespace
+
+extern "C" int octave_rdna4_window_store(
+    Activation key, Activation value, const int64_t *slots,
+    const int32_t *positions, Shadow recent, Shadow sinks, int tokens,
+    int heads, int dtype, hipStream_t stream) {
+  if (tokens == 0)
+    return hipSuccess;
+  if (dtype == 0)
+    window_store<__half><<<tokens, 32, 0, stream>>>(key, value, slots, positions, recent, sinks, heads);
+  else if (dtype == 1)
+    window_store<hip_bfloat16><<<tokens, 32, 0, stream>>>(key, value, slots, positions, recent, sinks, heads);
+  else
+    return hipErrorInvalidValue;
+  return hipGetLastError();
+}
+
+extern "C" int octave_rdna4_decode_sparse(
+    float *out, float *partial, Activation q, PagedCache cache,
+    const int32_t *table, int64_t table_stride, int columns, int requests, int pages,
+    const int32_t *mapping, const int32_t *indices, int64_t index_stride,
+    int topk, const uint32_t *sgn, const int32_t *positions,
+    Shadow recent, Shadow sinks, int tokens, int heads, int splits,
+    float scale, int dtype, int format, hipStream_t stream) {
+  if (tokens == 0)
+    return hipSuccess;
+  int rc = dispatch(dtype, format, [&](auto t, auto f) {
+    sparse<decltype(f), decltype(t)><<<dim3(tokens, heads, splits), 32, 0, stream>>>(
+        out, partial, q, cache, table, table_stride, columns, requests, pages, mapping,
+        indices, index_stride, topk, sgn, positions, recent, sinks, heads, scale);
+  });
+  if (rc != hipSuccess || splits == 1)
+    return rc;
+  merge<<<dim3(tokens, heads), 32, 0, stream>>>(out, partial, splits);
+  return hipGetLastError();
+}
