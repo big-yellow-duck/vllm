@@ -23,8 +23,7 @@ HIP_VISIBLE_DEVICES=0,1 vllm serve Qwen/Qwen3.8-27B-FP8 \
 
 FP8 here describes model weights; the KV cache uses the selected Octave format.
 The default configuration uses Torch compilation and `FULL_AND_PIECEWISE`
-graphs with the vision encoder enabled. The serving regression checks PNG/JPEG
-image content, multiple images, concurrent image requests and cached text.
+graphs with the vision encoder enabled.
 The native HIP sources ship with the Python package. A ROCm `hipcc` compiler
 must be on `PATH` for the first build. Libraries are cached under
 `VLLM_CACHE_ROOT/octave_rdna4`, with a process lock for concurrent TP workers,
@@ -47,7 +46,7 @@ output quantization are rejected. Kernel measurements were made on `gfx1201`;
 basic execution and recall, not broad model task accuracy or serving throughput.
 
 ```bash
-pytest -q tests/v1/attention/test_rocm_octave_rdna4.py
+pytest -q tests/kernels/attention/test_rocm_octave_rdna4.py
 ```
 
 The remaining sections describe the original D256/RoPE64 RDNA3/CDNA3 kernels
