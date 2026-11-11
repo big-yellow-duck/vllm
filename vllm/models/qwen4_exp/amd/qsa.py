@@ -685,13 +685,15 @@ class Qwen4ExpQSAAttention(Qwen3NextAttention, AttentionLayerBase):
         impl = self.impl
         if main_outputs is None:
             assert key is not None and value is not None
+            # Shadow rows use the same logical positions as the selected KV
+            # indices. Multimodal RoPE coordinates can differ from them.
             impl.do_kv_cache_update(
                 self,
                 key,
                 value,
                 self.kv_cache,
                 main_metadata.slot_mapping,
-                positions=positions[0] if positions.dim() == 2 else positions,
+                positions=indexer_metadata.logical_positions,
             )
         else:
             query, _ = main_outputs
