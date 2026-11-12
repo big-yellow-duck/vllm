@@ -20,18 +20,40 @@ def _arch() -> str | None:
         return None
     from vllm.platforms.rocm import get_cdna_version, get_rdna_version
 
-    if get_rdna_version() == 3:
-        return "rdna3"
+    rdna = get_rdna_version()
+    if rdna in (3, 4):
+        return f"rdna{rdna}"
     return "cdna3" if get_cdna_version() == 3 else None
 
 
+ARCH = _arch()
 pytestmark = pytest.mark.skipif(
-    _arch() is None or not hasattr(torch.ops._C, "octave_decode"),
-    reason="Octave kernels need RDNA3 or CDNA3",
+    ARCH is None or (ARCH != "rdna4" and not hasattr(torch.ops._C, "octave_decode")),
+    reason="Octave kernels need RDNA3, RDNA4 or CDNA3",
 )
 
 HEAD, ROPE, BLOCK = 256, 64, 16
 CACHE_DTYPES = ["octave_k3v4", "octave_k3v3", "octave_k3v3_compact"]
+
+
+@pytest.fixture(scope="module")
+def kernel():
+    if ARCH != "rdna4":
+        return None
+    from vllm.v1.attention.ops.rocm_octave_rdna4 import TunedHipOctave
+
+    arch = torch.cuda.get_device_properties(0).gcnArchName.split(":")[0]
+    return TunedHipOctave(HEAD, ROPE, arch)
+
+
+@pytest.fixture(scope="module")
+def sparse_kernel():
+    if ARCH != "rdna4":
+        return None
+    from vllm.v1.attention.ops.rocm_octave_rdna4.hip import get_geometry_engine
+
+    arch = torch.cuda.get_device_properties(0).gcnArchName.split(":")[0]
+    return get_geometry_engine(HEAD, ROPE, arch)
 
 
 def _format(cache_dtype: str) -> sq.OctaveFormat:
@@ -48,20 +70,31 @@ def _token_slots(cache: torch.Tensor, slots: torch.Tensor) -> torch.Tensor:
     return flat[slots]
 
 
-def _fill(cache, block_ids, k, v, k_signs, v_signs, fmt):
+def _cache_dtype(fmt):
+    return "octave_k3v3_compact" if fmt.compact else f"octave_k3v{fmt.v_bits}"
+
+
+def _store(k, v, cache, slots, k_signs, v_signs, fmt, kernel):
+    if kernel is not None:
+        kernel.store(k, v, cache, slots, k_signs, _cache_dtype(fmt))
+    else:
+        torch.ops._C.octave_cache_store(
+            k, v, cache, slots, k_signs, v_signs, fmt.kernel_code
+        )
+
+
+def _fill(cache, block_ids, k, v, k_signs, v_signs, fmt, kernel=None):
     n = k.shape[0]
     slots = (
         block_ids.long().repeat_interleave(BLOCK)[:n] * BLOCK
         + torch.arange(n, device=k.device) % BLOCK
     )
-    torch.ops._C.octave_cache_store(
-        k, v, cache, slots, k_signs, v_signs, fmt.kernel_code
-    )
+    _store(k, v, cache, slots, k_signs, v_signs, fmt, kernel)
     return slots
 
 
 @pytest.mark.parametrize("cache_dtype", CACHE_DTYPES)
-def test_store_matches_reference(cache_dtype):
+def test_store_matches_reference(cache_dtype, kernel):
     torch.manual_seed(0)
     dev, fmt = "cuda", _format(cache_dtype)
     ksg = vsg = sq.sign_bits(HEAD).to(dev)
@@ -72,7 +105,7 @@ def test_store_matches_reference(cache_dtype):
     v = torch.randn(t, hkv, HEAD, device=dev).bfloat16()
     nblk = t // BLOCK + 4
     cache = torch.zeros(nblk, hkv, BLOCK, fmt.slot_bytes, dtype=torch.uint8, device=dev)
-    slots = _fill(cache, torch.randperm(nblk, device=dev), k, v, ksg, vsg, fmt)
+    slots = _fill(cache, torch.randperm(nblk, device=dev), k, v, ksg, vsg, fmt, kernel)
 
     k_got, v_got = sq.reference_dequantize(_token_slots(cache, slots), fmt)
     ref = sq.reference_quantize(k.float(), v.float(), fmt)
@@ -96,7 +129,7 @@ def test_slot_bytes_match_kernel_layout(cache_dtype, slot_bytes):
 
 
 @pytest.mark.parametrize("cache_dtype", CACHE_DTYPES)
-def test_store_skips_padding_slots(cache_dtype):
+def test_store_skips_padding_slots(cache_dtype, kernel):
     """Tokens with slot -1 (cudagraph padding) leave every byte unchanged."""
     torch.manual_seed(0)
     dev, fmt = "cuda", _format(cache_dtype)
@@ -110,7 +143,7 @@ def test_store_skips_padding_slots(cache_dtype):
     before = cache.clone()
     slots = torch.full((t,), -1, dtype=torch.long, device=dev)
     slots[3] = 21
-    torch.ops._C.octave_cache_store(k, v, cache, slots, ksg, vsg, fmt.kernel_code)
+    _store(k, v, cache, slots, ksg, vsg, fmt, kernel)
     written = torch.zeros_like(cache, dtype=torch.bool)
     written[1, :, 5] = True
     assert torch.equal(cache[~written], before[~written])
@@ -121,13 +154,14 @@ def test_store_skips_padding_slots(cache_dtype):
 @pytest.mark.parametrize("query_group", [1, 4])
 @pytest.mark.parametrize("num_splits", [1, 7, 64])
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
-@pytest.mark.parametrize("use_wmma", [True, False])
+@pytest.mark.parametrize("use_wmma", [True] if ARCH == "rdna4" else [True, False])
 def test_decode_matches_reference(
-    cache_dtype, query_group, num_splits, dtype, use_wmma
+    cache_dtype, query_group, num_splits, dtype, use_wmma, kernel
 ):
     """Covers MTP verification: up to 4 consecutive query tokens per request,
     each with its own causal length, plus a padded query with no request.
-    `use_wmma=False` forces the portable kernel every architecture runs."""
+    `use_wmma=False` checks the portable RDNA3/CDNA3 tier. RDNA4 uses
+    its independent native runtime."""
     torch.manual_seed(1)
     dev, fmt = "cuda", _format(cache_dtype)
     ksg = vsg = sq.sign_bits(HEAD).to(dev)
@@ -144,7 +178,7 @@ def test_decode_matches_reference(
         used += nb
         k = torch.randn(n, hkv, HEAD, device=dev).bfloat16()
         v = torch.randn(n, hkv, HEAD, device=dev).bfloat16()
-        _fill(cache, block_table[i, :nb], k, v, ksg, vsg, fmt)
+        _fill(cache, block_table[i, :nb], k, v, ksg, vsg, fmt, kernel)
         nq = min(query_group, n)
         for j in range(nq):
             q_to_req.append(i)
@@ -156,25 +190,18 @@ def test_decode_matches_reference(
 
     num_q = q_to_req.numel()
     q = (torch.randn(num_q, hkv * group, HEAD, device=dev) * 2).to(dtype)
-    out = torch.zeros_like(q)
-    mid = torch.empty(
-        num_q, hkv * group, num_splits, HEAD + 2, dtype=torch.float32, device=dev
-    )
-    torch.ops._C.octave_decode(
-        out,
-        q,
+    out = _decode(
         cache,
+        q,
         block_table,
         q_to_req,
         q_to_klen,
-        mid,
         ksg,
-        vsg,
-        1 / 16,
-        num_splits,
-        fmt.kernel_code,
-        query_group,
+        fmt,
         use_wmma,
+        kernel,
+        num_splits=num_splits,
+        query_group=query_group,
     )
     ref = sq.reference_attention(
         q.float(),
@@ -190,9 +217,49 @@ def test_decode_matches_reference(
     assert out[-1].abs().max().item() == 0
 
 
+@pytest.mark.skipif(ARCH != "rdna4", reason="padded heads require RDNA4 Octave")
+def test_padded_head_matches_reference():
+    """The packed layout pads RoPE and NoPE independently of the query."""
+    from vllm.v1.attention.ops.rocm_octave_rdna4 import TunedHipOctave
+
+    torch.manual_seed(2)
+    dev, dtype, cache_dtype = "cuda", torch.bfloat16, "octave_k3v4"
+    arch = torch.cuda.get_device_properties(0).gcnArchName.split(":")[0]
+    kernel = TunedHipOctave(96, 24, arch)
+    fmt = sq.OctaveFormat.from_cache_dtype(cache_dtype, 192, 64)
+    dims = torch.cat((torch.arange(24, device=dev), torch.arange(64, 136, device=dev)))
+
+    def pad(x):
+        padded = x.new_zeros((*x.shape[:-1], fmt.head_size))
+        padded[..., dims] = x
+        return padded
+
+    key, value = (
+        torch.randn(2 * BLOCK, 1, 96, dtype=dtype, device=dev) for _ in range(2)
+    )
+    query = torch.randn(2, 8, 96, dtype=dtype, device=dev)
+    signs = sq.sign_bits(fmt.head_size).to(dev)
+    cache = torch.empty(2, 1, BLOCK, fmt.slot_bytes, dtype=torch.uint8, device=dev)
+    table = torch.tensor([[0, 1]], dtype=torch.int32, device=dev)
+    requests = torch.zeros(2, dtype=torch.int32, device=dev)
+    lengths = torch.tensor([17, 32], dtype=torch.int32, device=dev)
+    kernel.store(
+        key, value, cache, torch.arange(2 * BLOCK, device=dev), signs, cache_dtype
+    )
+    out = kernel.decode(
+        query, cache, table, requests, lengths, signs, cache_dtype, splits=2
+    )
+    packed = sq.reference_quantize(pad(key).float(), pad(value).float(), fmt)
+    ref_cache = packed.view(2, BLOCK, 1, -1).transpose(1, 2).contiguous()
+    ref = sq.reference_attention(
+        pad(query).float(), ref_cache, table, requests, lengths, fmt, 96**-0.5
+    )
+    assert _rel(out, ref[..., dims]) < 2e-2
+
+
 @pytest.mark.parametrize("cache_dtype", CACHE_DTYPES)
 @pytest.mark.parametrize("query_lens", [[300], [129, 1, 517]])
-def test_prefill_matches_reference(cache_dtype, query_lens):
+def test_prefill_matches_reference(cache_dtype, query_lens, kernel):
     """Chunked prefill: each request's chunk attends causally to itself
     (unquantized K/V) and to its cached prefix (packed cache), in the rotated
     space the backend runs it in."""
@@ -214,7 +281,7 @@ def test_prefill_matches_reference(cache_dtype, query_lens):
         used += nb
         k = torch.randn(n, hkv, HEAD, device=dev).half()
         v = torch.randn(n, hkv, HEAD, device=dev).half()
-        _fill(cache, block_table[i, :nb], k, v, ksg, vsg, fmt)
+        _fill(cache, block_table[i, :nb], k, v, ksg, vsg, fmt, kernel)
         ks.append(k)
         vs.append(v)
 
@@ -223,25 +290,18 @@ def test_prefill_matches_reference(cache_dtype, query_lens):
     q = (torch.randn(total, hkv * group, HEAD, device=dev) * 2).half()
     k_new = torch.cat([k[c:] for k, c in zip(ks, ctx_lens)])
     v_new = torch.cat([v[c:] for v, c in zip(vs, ctx_lens)])
-    q_rot, k_rot, v_rot = q.clone(), k_new.clone(), v_new.clone()
-    torch.ops._C.octave_rotate(q_rot, ksg, not fmt.compact, False)
-    torch.ops._C.octave_rotate(k_rot, ksg, not fmt.compact, False)
-    torch.ops._C.octave_rotate(v_rot, vsg, False, False)
-    out = torch.empty_like(q_rot)
-    torch.ops._C.octave_prefill(
-        out,
-        q_rot,
-        k_rot,
-        v_rot,
+    out = _prefill(
         cache,
+        q,
+        k_new,
+        v_new,
         block_table,
         qsl,
         torch.tensor(seq_lens, dtype=torch.int32, device=dev),
-        max(query_lens),
-        1 / 16,
-        fmt.kernel_code,
+        ksg,
+        fmt,
+        kernel,
     )
-    torch.ops._C.octave_rotate(out, vsg, False, True)
 
     ref = torch.empty(total, hkv * group, HEAD, device=dev)
     for i, (c, n) in enumerate(zip(ctx_lens, query_lens)):
@@ -265,9 +325,37 @@ def test_prefill_matches_reference(cache_dtype, query_lens):
     assert _rel(out, ref) < 2e-2
 
 
-def _decode(cache, q, block_table, q_to_req, q_to_klen, signs, fmt, use_wmma):
+def _decode(
+    cache,
+    q,
+    block_table,
+    q_to_req,
+    q_to_klen,
+    signs,
+    fmt,
+    use_wmma,
+    kernel=None,
+    *,
+    num_splits=8,
+    query_group=1,
+):
     out = torch.zeros_like(q)
-    mid = torch.empty(*q.shape[:2], 8, HEAD + 2, dtype=torch.float32, device=q.device)
+    mid = torch.empty(
+        *q.shape[:2], num_splits, HEAD + 2, dtype=torch.float32, device=q.device
+    )
+    if kernel is not None:
+        return kernel.decode(
+            q,
+            cache,
+            block_table,
+            q_to_req,
+            q_to_klen,
+            signs,
+            _cache_dtype(fmt),
+            scale=1 / 16,
+            splits=num_splits,
+            scratch=mid,
+        ).to(q.dtype)
     torch.ops._C.octave_decode(
         out,
         q,
@@ -279,15 +367,36 @@ def _decode(cache, q, block_table, q_to_req, q_to_klen, signs, fmt, use_wmma):
         signs,
         signs,
         1 / 16,
-        8,
+        num_splits,
         fmt.kernel_code,
-        1,
+        query_group,
         use_wmma,
     )
     return out
 
 
-def _prefill(cache, q, k, v, block_table, qsl, seq_lens, signs, fmt):
+def _prefill(cache, q, k, v, block_table, qsl, seq_lens, signs, fmt, kernel=None):
+    if kernel is not None:
+        cache_dtype = _cache_dtype(fmt)
+        return kernel.prefill(
+            q,
+            k,
+            v,
+            cache,
+            block_table,
+            qsl,
+            seq_lens,
+            signs,
+            cache_dtype,
+            scale=1 / 16,
+            splits=kernel.suggest_splits(
+                q, cache, block_table, cache_dtype, prefill=True
+            ),
+        ).to(q.dtype)
+    q, k, v = q.clone(), k.clone(), v.clone()
+    torch.ops._C.octave_rotate(q, signs, not fmt.compact, False)
+    torch.ops._C.octave_rotate(k, signs, not fmt.compact, False)
+    torch.ops._C.octave_rotate(v, signs, False, False)
     out = torch.empty_like(q)
     torch.ops._C.octave_prefill(
         out,
@@ -302,13 +411,14 @@ def _prefill(cache, q, k, v, block_table, qsl, seq_lens, signs, fmt):
         1 / 16,
         fmt.kernel_code,
     )
+    torch.ops._C.octave_rotate(out, signs, False, True)
     return out
 
 
 @pytest.mark.parametrize(
     "layout", RocmOctaveAttentionBackend.supported_kv_cache_layouts()
 )
-def test_kernels_follow_declared_cache_layouts(layout):
+def test_kernels_follow_declared_cache_layouts(layout, kernel):
     """Store, decode and prefill on the cache view vLLM allocates for each
     declared layout match a contiguous cache bit for bit. Two KV heads, so the
     head and token strides differ between layouts."""
@@ -342,15 +452,17 @@ def test_kernels_follow_declared_cache_layouts(layout):
         ks.append(torch.randn(n, hkv, HEAD, device=dev).half())
         vs.append(torch.randn(n, hkv, HEAD, device=dev).half())
         for c in (cache, dense):
-            _fill(c, block_table[i, :nb], ks[i], vs[i], signs, signs, fmt)
+            _fill(c, block_table[i, :nb], ks[i], vs[i], signs, signs, fmt, kernel)
     assert torch.equal(cache, dense)
 
     q_to_req = torch.arange(len(seq_lens), dtype=torch.int32, device=dev)
     q_to_klen = torch.tensor(seq_lens, dtype=torch.int32, device=dev)
     q = torch.randn(len(seq_lens), hkv * group, HEAD, device=dev).half()
-    for use_wmma in (True, False):
+    for use_wmma in (True,) if kernel is not None else (True, False):
         out, ref = (
-            _decode(c, q, block_table, q_to_req, q_to_klen, signs, fmt, use_wmma)
+            _decode(
+                c, q, block_table, q_to_req, q_to_klen, signs, fmt, use_wmma, kernel
+            )
             for c in (cache, dense)
         )
         assert out.abs().sum() > 0
@@ -362,30 +474,46 @@ def test_kernels_follow_declared_cache_layouts(layout):
     k = torch.cat([x[c:] for x, c in zip(ks, ctx)])
     v = torch.cat([x[c:] for x, c in zip(vs, ctx)])
     out, ref = (
-        _prefill(c, q, k, v, block_table, qsl, q_to_klen, signs, fmt)
+        _prefill(c, q, k, v, block_table, qsl, q_to_klen, signs, fmt, kernel)
         for c in (cache, dense)
     )
     assert torch.equal(out, ref)
 
 
-def _window_tables(entries, hkv, dev):
+def _window_tables(entries, hkv, dev, dtype=torch.float16):
     return (
-        torch.zeros(entries, hkv, 2 * HEAD, dtype=torch.float16, device=dev),
+        torch.zeros(entries, hkv, 2 * HEAD, dtype=dtype, device=dev),
         torch.full((entries,), -1, dtype=torch.int32, device=dev),
         torch.zeros(entries, dtype=torch.int32, device=dev),
     )
 
 
-@pytest.mark.skipif(_arch() != "rdna3", reason="sparse decode is RDNA3-only")
+@pytest.mark.skipif(
+    ARCH not in ("rdna3", "rdna4"), reason="sparse decode needs RDNA3 or RDNA4"
+)
 @pytest.mark.parametrize("cache_dtype", CACHE_DTYPES)
-@pytest.mark.parametrize("hkv,group", [(1, 6), (2, 6)])
-@pytest.mark.parametrize("window", ["off", "on", "evicted"])
-def test_sparse_decode_matches_reference(cache_dtype, hkv, group, window):
+@pytest.mark.parametrize(
+    "hkv,group,splits,window,dtype",
+    [
+        (hkv, 6, 64, window, torch.float16)
+        for hkv in (1, 2)
+        for window in ("off", "on", "evicted")
+    ]
+    + (
+        [(1, 12, 32, "on", torch.bfloat16), (1, 12, 1, "evicted", torch.bfloat16)]
+        if ARCH == "rdna4"
+        else []
+    ),
+)
+def test_sparse_decode_matches_reference(
+    cache_dtype, hkv, group, splits, window, dtype, sparse_kernel
+):
     """Sparse (top-k) decode as qwen4_exp QSA runs it: each query reads the
     logical positions in its index row, -1 entries are holes. With the window
-    on, the first 4 and the last 64 positions come from the fp16 tables;
+    on, the first 4 and the last 64 positions come from FP16/BF16 tables;
     an entry whose tag was overwritten falls back to the packed cache."""
     torch.manual_seed(4)
+    kernel = sparse_kernel
     dev, fmt = "cuda", _format(cache_dtype)
     signs = sq.sign_bits(HEAD).to(dev)
     lens, max_blocks, nblk = [1500, 2600, 777], 192, 1024
@@ -395,20 +523,21 @@ def test_sparse_decode_matches_reference(cache_dtype, hkv, group, window):
         .view(len(lens), max_blocks)
         .int()
     )
-    wtab, wtags, wlocks = _window_tables(4096, hkv, dev)
-    stab, stags, slocks = _window_tables(256, hkv, dev)
+    wtab, wtags, wlocks = _window_tables(4096, hkv, dev, dtype)
+    stab, stags, slocks = _window_tables(256, hkv, dev, dtype)
     ks, vs = [], []
     for r, n in enumerate(lens):
-        k = torch.randn(n, hkv, HEAD, device=dev).half()
+        k = torch.randn(n, hkv, HEAD, device=dev).to(dtype)
         v = torch.randn_like(k)
         pos = torch.arange(n, device=dev)
         slots = block_table[r, pos // BLOCK].long() * BLOCK + pos % BLOCK
-        torch.ops._C.octave_cache_store(
-            k, v, cache, slots, signs, signs, fmt.kernel_code
+        _store(k, v, cache, slots, signs, signs, fmt, kernel)
+        window_store = (
+            kernel.window_store
+            if kernel is not None
+            else torch.ops._C.octave_window_store
         )
-        torch.ops._C.octave_window_store(
-            k, v, slots, pos.int(), wtab, wtags, wlocks, stab, stags, slocks
-        )
+        window_store(k, v, slots, pos.int(), wtab, wtags, wlocks, stab, stags, slocks)
         ks.append(k)
         vs.append(v)
     if window == "evicted":
@@ -435,28 +564,62 @@ def test_sparse_decode_matches_reference(cache_dtype, hkv, group, window):
         indices[i, : cand.numel()] = cand.int()
         indices[i] = indices[i][torch.randperm(topk, device=dev)]
 
-    q = torch.randn(num_q, hkv * group, HEAD, device=dev).half()
+    q = torch.randn(num_q, hkv * group, HEAD, device=dev).to(dtype)
+    if group == 12 and window == "on":
+        # Mix a row outside the WMMA input range with ordinary rows.
+        q[0].mul_(48)
     out = torch.empty_like(q)
-    mid = torch.empty(num_q, hkv * group, 64, HEAD + 2, dtype=torch.float32, device=dev)
+    mid = torch.empty(
+        num_q, hkv * group, splits, HEAD + 2, dtype=torch.float32, device=dev
+    )
     scale = HEAD**-0.5
     window_args = () if window == "off" else (qpos, wtab, wtags, stab, stags)
-    torch.ops._C.octave_decode_sparse(
-        out,
-        q,
-        cache,
-        block_table,
-        q_to_req,
-        indices,
-        mid,
-        signs,
-        signs,
-        scale,
-        64,
-        fmt.kernel_code,
-        *window_args,
-    )
+    if kernel is None:
+        torch.ops._C.octave_decode_sparse(
+            out,
+            q,
+            cache,
+            block_table,
+            q_to_req,
+            indices,
+            mid,
+            signs,
+            signs,
+            scale,
+            splits,
+            fmt.kernel_code,
+            *window_args,
+        )
+    else:
+        fp32_out = torch.empty_like(q, dtype=torch.float32)
+        exact_kwargs = (
+            {}
+            if window == "off"
+            else dict(positions=qpos, wtab=wtab, wtags=wtags, stab=stab, stags=stags)
+        )
+
+        def call():
+            out.copy_(
+                kernel.decode_sparse(
+                    q,
+                    cache,
+                    block_table,
+                    q_to_req,
+                    indices,
+                    signs,
+                    cache_dtype,
+                    scale=scale,
+                    splits=splits,
+                    out=fp32_out,
+                    scratch=mid,
+                    **exact_kwargs,
+                )
+            )
+
+        call()
 
     ref = torch.zeros(num_q, hkv * group, HEAD, device=dev)
+    exact_hits = 0
     for i in range(num_q):
         r, p = int(q_to_req[i]), int(qpos[i])
         sel = indices[i][indices[i] >= 0].long()
@@ -466,6 +629,7 @@ def test_sparse_decode_matches_reference(cache_dtype, hkv, group, window):
             slot = blocks * BLOCK + sel % BLOCK
             exact = ((p - sel) < 64) & (wtags[slot % 4096].long() == slot)
             exact |= (sel < 4) & (stags[slot % 256].long() == slot)
+            exact_hits += exact.sum().item()
             k[exact] = ks[r][sel[exact]].float()
             v[exact] = vs[r][sel[exact]].float()
         k = k.repeat_interleave(group, 1)
@@ -473,3 +637,32 @@ def test_sparse_decode_matches_reference(cache_dtype, hkv, group, window):
         p_attn = torch.softmax(torch.einsum("hd,thd->ht", q[i].float(), k) * scale, -1)
         ref[i] = torch.einsum("ht,thd->hd", p_attn, v)
     assert _rel(out, ref) < 2e-2
+    if window != "off":
+        assert exact_hits > 0
+    if (
+        kernel is not None
+        and group == 12
+        and window == "on"
+        and cache_dtype == "octave_k3v4"
+    ):
+        eager = out.clone()
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph):
+            call()
+        out.fill_(float("nan"))
+        graph.replay()
+        assert torch.equal(out, eager)
+        indices.fill_(-1)
+        graph.replay()
+        assert torch.count_nonzero(out).item() == 0
+        # The only selected value is exact BF16, outside the FP16 tile range.
+        r, p = int(q_to_req[1]), int(qpos[1])
+        slot = int(block_table[r, p // BLOCK]) * BLOCK + p % BLOCK
+        entry = slot % wtab.shape[0]
+        exact_v = wtab[entry, :, HEAD:]
+        exact_v.zero_()
+        exact_v[:, 0] = 2**21
+        wtags[entry] = slot
+        indices[1, 0] = p
+        graph.replay()
+        torch.testing.assert_close(out[1], exact_v.expand_as(out[1]), rtol=0, atol=0)
