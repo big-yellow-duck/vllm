@@ -1,0 +1,929 @@
+{
+  "model": "qsa-flash-next",
+  "endpoint": "http://127.0.0.1:8064/v1/chat/completions",
+  "dataset_sha256": {
+    "train.jsonl": "17f347dc51477c50d4efb83959dbb7c56297aba886e5544ee2aaed3024813465",
+    "test.jsonl": "3730d312f6e3440559ace48831e51066acaca737f6eabec99bccb9e4b3c39d14"
+  },
+  "first_prompt_sha256": "ea821015b5b035b5699391cb903e1dc2ba0bfff20e99caa72f169af47609249e",
+  "labels_sha256": "34b26b1ed380d62a8550504923f519dfe3a44280dcd6d8aded0be77a89d27380",
+  "started_at_utc": "2026-11-12T06:48:02.175084+00:00",
+  "finished_at_utc": "2026-11-12T06:50:54.206442+00:00",
+  "num_questions_requested": 128,
+  "num_questions_scored": 128,
+  "num_shots": 5,
+  "max_tokens": 1024,
+  "temperature": 0.0,
+  "seed": 42,
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
+  "concurrency": 4,
+  "correct": 124,
+  "accuracy": 0.96875,
+  "invalid_extraction_count": 0,
+  "length_finish_count": 0,
+  "api_error_count": 0,
+  "finish_reason_counts": {
+    "stop": 128
+  },
+  "latency_seconds": 172.03133440203965,
+  "predictions": [
+    {
+      "index": 0,
+      "label": 18,
+      "prediction": 18,
+      "finish_reason": "stop",
+      "completion_tokens": 120
+    },
+    {
+      "index": 1,
+      "label": 3,
+      "prediction": 3,
+      "finish_reason": "stop",
+      "completion_tokens": 50
+    },
+    {
+      "index": 2,
+      "label": 70000,
+      "prediction": 70000,
+      "finish_reason": "stop",
+      "completion_tokens": 257
+    },
+    {
+      "index": 3,
+      "label": 540,
+      "prediction": 540,
+      "finish_reason": "stop",
+      "completion_tokens": 82
+    },
+    {
+      "index": 4,
+      "label": 20,
+      "prediction": 20,
+      "finish_reason": "stop",
+      "completion_tokens": 148
+    },
+    {
+      "index": 5,
+      "label": 64,
+      "prediction": 64,
+      "finish_reason": "stop",
+      "completion_tokens": 138
+    },
+    {
+      "index": 6,
+      "label": 260,
+      "prediction": 260,
+      "finish_reason": "stop",
+      "completion_tokens": 94
+    },
+    {
+      "index": 7,
+      "label": 160,
+      "prediction": 160,
+      "finish_reason": "stop",
+      "completion_tokens": 233
+    },
+    {
+      "index": 8,
+      "label": 45,
+      "prediction": 45,
+      "finish_reason": "stop",
+      "completion_tokens": 264
+    },
+    {
+      "index": 9,
+      "label": 460,
+      "prediction": 460,
+      "finish_reason": "stop",
+      "completion_tokens": 168
+    },
+    {
+      "index": 10,
+      "label": 366,
+      "prediction": 366,
+      "finish_reason": "stop",
+      "completion_tokens": 134
+    },
+    {
+      "index": 11,
+      "label": 694,
+      "prediction": 694,
+      "finish_reason": "stop",
+      "completion_tokens": 140
+    },
+    {
+      "index": 12,
+      "label": 13,
+      "prediction": 12,
+      "finish_reason": "stop",
+      "completion_tokens": 124
+    },
+    {
+      "index": 13,
+      "label": 18,
+      "prediction": 18,
+      "finish_reason": "stop",
+      "completion_tokens": 320
+    },
+    {
+      "index": 14,
+      "label": 60,
+      "prediction": 60,
+      "finish_reason": "stop",
+      "completion_tokens": 185
+    },
+    {
+      "index": 15,
+      "label": 125,
+      "prediction": 125,
+      "finish_reason": "stop",
+      "completion_tokens": 120
+    },
+    {
+      "index": 16,
+      "label": 230,
+      "prediction": 230,
+      "finish_reason": "stop",
+      "completion_tokens": 68
+    },
+    {
+      "index": 17,
+      "label": 57500,
+      "prediction": 57500,
+      "finish_reason": "stop",
+      "completion_tokens": 187
+    },
+    {
+      "index": 18,
+      "label": 7,
+      "prediction": 7,
+      "finish_reason": "stop",
+      "completion_tokens": 103
+    },
+    {
+      "index": 19,
+      "label": 6,
+      "prediction": 6,
+      "finish_reason": "stop",
+      "completion_tokens": 165
+    },
+    {
+      "index": 20,
+      "label": 15,
+      "prediction": 15,
+      "finish_reason": "stop",
+      "completion_tokens": 190
+    },
+    {
+      "index": 21,
+      "label": 14,
+      "prediction": 14,
+      "finish_reason": "stop",
+      "completion_tokens": 83
+    },
+    {
+      "index": 22,
+      "label": 7,
+      "prediction": 7,
+      "finish_reason": "stop",
+      "completion_tokens": 89
+    },
+    {
+      "index": 23,
+      "label": 8,
+      "prediction": 8,
+      "finish_reason": "stop",
+      "completion_tokens": 79
+    },
+    {
+      "index": 24,
+      "label": 26,
+      "prediction": 26,
+      "finish_reason": "stop",
+      "completion_tokens": 111
+    },
+    {
+      "index": 25,
+      "label": 2,
+      "prediction": 2,
+      "finish_reason": "stop",
+      "completion_tokens": 189
+    },
+    {
+      "index": 26,
+      "label": 243,
+      "prediction": 243,
+      "finish_reason": "stop",
+      "completion_tokens": 194
+    },
+    {
+      "index": 27,
+      "label": 16,
+      "prediction": 16,
+      "finish_reason": "stop",
+      "completion_tokens": 89
+    },
+    {
+      "index": 28,
+      "label": 25,
+      "prediction": 25,
+      "finish_reason": "stop",
+      "completion_tokens": 64
+    },
+    {
+      "index": 29,
+      "label": 104,
+      "prediction": 104,
+      "finish_reason": "stop",
+      "completion_tokens": 104
+    },
+    {
+      "index": 30,
+      "label": 109,
+      "prediction": 109,
+      "finish_reason": "stop",
+      "completion_tokens": 122
+    },
+    {
+      "index": 31,
+      "label": 80,
+      "prediction": 80,
+      "finish_reason": "stop",
+      "completion_tokens": 174
+    },
+    {
+      "index": 32,
+      "label": 35,
+      "prediction": 35,
+      "finish_reason": "stop",
+      "completion_tokens": 70
+    },
+    {
+      "index": 33,
+      "label": 70,
+      "prediction": 70,
+      "finish_reason": "stop",
+      "completion_tokens": 233
+    },
+    {
+      "index": 34,
+      "label": 23,
+      "prediction": 23,
+      "finish_reason": "stop",
+      "completion_tokens": 100
+    },
+    {
+      "index": 35,
+      "label": 9,
+      "prediction": 9,
+      "finish_reason": "stop",
+      "completion_tokens": 97
+    },
+    {
+      "index": 36,
+      "label": 75,
+      "prediction": 75,
+      "finish_reason": "stop",
+      "completion_tokens": 104
+    },
+    {
+      "index": 37,
+      "label": 2,
+      "prediction": 2,
+      "finish_reason": "stop",
+      "completion_tokens": 350
+    },
+    {
+      "index": 38,
+      "label": 10,
+      "prediction": 10,
+      "finish_reason": "stop",
+      "completion_tokens": 98
+    },
+    {
+      "index": 39,
+      "label": 18,
+      "prediction": 18,
+      "finish_reason": "stop",
+      "completion_tokens": 216
+    },
+    {
+      "index": 40,
+      "label": 8,
+      "prediction": 8,
+      "finish_reason": "stop",
+      "completion_tokens": 85
+    },
+    {
+      "index": 41,
+      "label": 200,
+      "prediction": 200,
+      "finish_reason": "stop",
+      "completion_tokens": 104
+    },
+    {
+      "index": 42,
+      "label": 26,
+      "prediction": 26,
+      "finish_reason": "stop",
+      "completion_tokens": 91
+    },
+    {
+      "index": 43,
+      "label": 48,
+      "prediction": 48,
+      "finish_reason": "stop",
+      "completion_tokens": 157
+    },
+    {
+      "index": 44,
+      "label": 20,
+      "prediction": 20,
+      "finish_reason": "stop",
+      "completion_tokens": 231
+    },
+    {
+      "index": 45,
+      "label": 104,
+      "prediction": 104,
+      "finish_reason": "stop",
+      "completion_tokens": 181
+    },
+    {
+      "index": 46,
+      "label": 163,
+      "prediction": 163,
+      "finish_reason": "stop",
+      "completion_tokens": 117
+    },
+    {
+      "index": 47,
+      "label": 800,
+      "prediction": 800,
+      "finish_reason": "stop",
+      "completion_tokens": 177
+    },
+    {
+      "index": 48,
+      "label": 8,
+      "prediction": 8,
+      "finish_reason": "stop",
+      "completion_tokens": 96
+    },
+    {
+      "index": 49,
+      "label": 30,
+      "prediction": 30,
+      "finish_reason": "stop",
+      "completion_tokens": 106
+    },
+    {
+      "index": 50,
+      "label": 294,
+      "prediction": 294,
+      "finish_reason": "stop",
+      "completion_tokens": 128
+    },
+    {
+      "index": 51,
+      "label": 5,
+      "prediction": 5,
+      "finish_reason": "stop",
+      "completion_tokens": 111
+    },
+    {
+      "index": 52,
+      "label": 15,
+      "prediction": 15,
+      "finish_reason": "stop",
+      "completion_tokens": 130
+    },
+    {
+      "index": 53,
+      "label": 40,
+      "prediction": 40,
+      "finish_reason": "stop",
+      "completion_tokens": 211
+    },
+    {
+      "index": 54,
+      "label": 40,
+      "prediction": 40,
+      "finish_reason": "stop",
+      "completion_tokens": 120
+    },
+    {
+      "index": 55,
+      "label": 14,
+      "prediction": 14,
+      "finish_reason": "stop",
+      "completion_tokens": 56
+    },
+    {
+      "index": 56,
+      "label": 3,
+      "prediction": 3,
+      "finish_reason": "stop",
+      "completion_tokens": 64
+    },
+    {
+      "index": 57,
+      "label": 83,
+      "prediction": 83,
+      "finish_reason": "stop",
+      "completion_tokens": 102
+    },
+    {
+      "index": 58,
+      "label": 57,
+      "prediction": 57,
+      "finish_reason": "stop",
+      "completion_tokens": 160
+    },
+    {
+      "index": 59,
+      "label": 187,
+      "prediction": 187,
+      "finish_reason": "stop",
+      "completion_tokens": 88
+    },
+    {
+      "index": 60,
+      "label": 17,
+      "prediction": 17,
+      "finish_reason": "stop",
+      "completion_tokens": 96
+    },
+    {
+      "index": 61,
+      "label": 1430,
+      "prediction": 1430,
+      "finish_reason": "stop",
+      "completion_tokens": 150
+    },
+    {
+      "index": 62,
+      "label": 25000,
+      "prediction": 52500,
+      "finish_reason": "stop",
+      "completion_tokens": 150
+    },
+    {
+      "index": 63,
+      "label": 1596,
+      "prediction": 1596,
+      "finish_reason": "stop",
+      "completion_tokens": 235
+    },
+    {
+      "index": 64,
+      "label": 300,
+      "prediction": 300,
+      "finish_reason": "stop",
+      "completion_tokens": 108
+    },
+    {
+      "index": 65,
+      "label": 36,
+      "prediction": 36,
+      "finish_reason": "stop",
+      "completion_tokens": 109
+    },
+    {
+      "index": 66,
+      "label": 48,
+      "prediction": 48,
+      "finish_reason": "stop",
+      "completion_tokens": 132
+    },
+    {
+      "index": 67,
+      "label": 595,
+      "prediction": 595,
+      "finish_reason": "stop",
+      "completion_tokens": 108
+    },
+    {
+      "index": 68,
+      "label": 36,
+      "prediction": 36,
+      "finish_reason": "stop",
+      "completion_tokens": 102
+    },
+    {
+      "index": 69,
+      "label": 60,
+      "prediction": 60,
+      "finish_reason": "stop",
+      "completion_tokens": 71
+    },
+    {
+      "index": 70,
+      "label": 7425,
+      "prediction": 7425,
+      "finish_reason": "stop",
+      "completion_tokens": 154
+    },
+    {
+      "index": 71,
+      "label": 60,
+      "prediction": 60,
+      "finish_reason": "stop",
+      "completion_tokens": 63
+    },
+    {
+      "index": 72,
+      "label": 221,
+      "prediction": 221,
+      "finish_reason": "stop",
+      "completion_tokens": 97
+    },
+    {
+      "index": 73,
+      "label": 255,
+      "prediction": 255,
+      "finish_reason": "stop",
+      "completion_tokens": 173
+    },
+    {
+      "index": 74,
+      "label": 88,
+      "prediction": 88,
+      "finish_reason": "stop",
+      "completion_tokens": 205
+    },
+    {
+      "index": 75,
+      "label": 60,
+      "prediction": 60,
+      "finish_reason": "stop",
+      "completion_tokens": 236
+    },
+    {
+      "index": 76,
+      "label": 5,
+      "prediction": 5,
+      "finish_reason": "stop",
+      "completion_tokens": 227
+    },
+    {
+      "index": 77,
+      "label": 100,
+      "prediction": 100,
+      "finish_reason": "stop",
+      "completion_tokens": 139
+    },
+    {
+      "index": 78,
+      "label": 6,
+      "prediction": 6,
+      "finish_reason": "stop",
+      "completion_tokens": 259
+    },
+    {
+      "index": 79,
+      "label": 70,
+      "prediction": 70,
+      "finish_reason": "stop",
+      "completion_tokens": 66
+    },
+    {
+      "index": 80,
+      "label": 10,
+      "prediction": 10,
+      "finish_reason": "stop",
+      "completion_tokens": 122
+    },
+    {
+      "index": 81,
+      "label": 17,
+      "prediction": 17,
+      "finish_reason": "stop",
+      "completion_tokens": 93
+    },
+    {
+      "index": 82,
+      "label": 623,
+      "prediction": 623,
+      "finish_reason": "stop",
+      "completion_tokens": 71
+    },
+    {
+      "index": 83,
+      "label": 600,
+      "prediction": 600,
+      "finish_reason": "stop",
+      "completion_tokens": 86
+    },
+    {
+      "index": 84,
+      "label": 15,
+      "prediction": 15,
+      "finish_reason": "stop",
+      "completion_tokens": 213
+    },
+    {
+      "index": 85,
+      "label": 44,
+      "prediction": 44,
+      "finish_reason": "stop",
+      "completion_tokens": 86
+    },
+    {
+      "index": 86,
+      "label": 22,
+      "prediction": 22,
+      "finish_reason": "stop",
+      "completion_tokens": 127
+    },
+    {
+      "index": 87,
+      "label": 9360,
+      "prediction": 9360,
+      "finish_reason": "stop",
+      "completion_tokens": 137
+    },
+    {
+      "index": 88,
+      "label": 8000,
+      "prediction": 8000,
+      "finish_reason": "stop",
+      "completion_tokens": 136
+    },
+    {
+      "index": 89,
+      "label": 24,
+      "prediction": 24,
+      "finish_reason": "stop",
+      "completion_tokens": 68
+    },
+    {
+      "index": 90,
+      "label": 225,
+      "prediction": 225,
+      "finish_reason": "stop",
+      "completion_tokens": 151
+    },
+    {
+      "index": 91,
+      "label": 28,
+      "prediction": 28,
+      "finish_reason": "stop",
+      "completion_tokens": 85
+    },
+    {
+      "index": 92,
+      "label": 4,
+      "prediction": 4,
+      "finish_reason": "stop",
+      "completion_tokens": 107
+    },
+    {
+      "index": 93,
+      "label": 36,
+      "prediction": 36,
+      "finish_reason": "stop",
+      "completion_tokens": 154
+    },
+    {
+      "index": 94,
+      "label": 348,
+      "prediction": 348,
+      "finish_reason": "stop",
+      "completion_tokens": 140
+    },
+    {
+      "index": 95,
+      "label": 40,
+      "prediction": 40,
+      "finish_reason": "stop",
+      "completion_tokens": 134
+    },
+    {
+      "index": 96,
+      "label": 3,
+      "prediction": 3,
+      "finish_reason": "stop",
+      "completion_tokens": 50
+    },
+    {
+      "index": 97,
+      "label": 12,
+      "prediction": 12,
+      "finish_reason": "stop",
+      "completion_tokens": 126
+    },
+    {
+      "index": 98,
+      "label": 5,
+      "prediction": 5,
+      "finish_reason": "stop",
+      "completion_tokens": 108
+    },
+    {
+      "index": 99,
+      "label": 58,
+      "prediction": 58,
+      "finish_reason": "stop",
+      "completion_tokens": 136
+    },
+    {
+      "index": 100,
+      "label": 175,
+      "prediction": 175,
+      "finish_reason": "stop",
+      "completion_tokens": 193
+    },
+    {
+      "index": 101,
+      "label": 6,
+      "prediction": 6,
+      "finish_reason": "stop",
+      "completion_tokens": 119
+    },
+    {
+      "index": 102,
+      "label": 26,
+      "prediction": 26,
+      "finish_reason": "stop",
+      "completion_tokens": 162
+    },
+    {
+      "index": 103,
+      "label": 140,
+      "prediction": 140,
+      "finish_reason": "stop",
+      "completion_tokens": 99
+    },
+    {
+      "index": 104,
+      "label": 500,
+      "prediction": 500,
+      "finish_reason": "stop",
+      "completion_tokens": 140
+    },
+    {
+      "index": 105,
+      "label": 20,
+      "prediction": 20,
+      "finish_reason": "stop",
+      "completion_tokens": 52
+    },
+    {
+      "index": 106,
+      "label": 72,
+      "prediction": 72,
+      "finish_reason": "stop",
+      "completion_tokens": 138
+    },
+    {
+      "index": 107,
+      "label": 3,
+      "prediction": 3,
+      "finish_reason": "stop",
+      "completion_tokens": 208
+    },
+    {
+      "index": 108,
+      "label": 50,
+      "prediction": 50,
+      "finish_reason": "stop",
+      "completion_tokens": 181
+    },
+    {
+      "index": 109,
+      "label": 28,
+      "prediction": 28,
+      "finish_reason": "stop",
+      "completion_tokens": 101
+    },
+    {
+      "index": 110,
+      "label": 45,
+      "prediction": 45,
+      "finish_reason": "stop",
+      "completion_tokens": 110
+    },
+    {
+      "index": 111,
+      "label": 16,
+      "prediction": 16,
+      "finish_reason": "stop",
+      "completion_tokens": 127
+    },
+    {
+      "index": 112,
+      "label": 24,
+      "prediction": 24,
+      "finish_reason": "stop",
+      "completion_tokens": 81
+    },
+    {
+      "index": 113,
+      "label": 25,
+      "prediction": 25,
+      "finish_reason": "stop",
+      "completion_tokens": 77
+    },
+    {
+      "index": 114,
+      "label": 6,
+      "prediction": 6,
+      "finish_reason": "stop",
+      "completion_tokens": 127
+    },
+    {
+      "index": 115,
+      "label": 90,
+      "prediction": 90,
+      "finish_reason": "stop",
+      "completion_tokens": 371
+    },
+    {
+      "index": 116,
+      "label": 42,
+      "prediction": 42,
+      "finish_reason": "stop",
+      "completion_tokens": 126
+    },
+    {
+      "index": 117,
+      "label": 360,
+      "prediction": 360,
+      "finish_reason": "stop",
+      "completion_tokens": 81
+    },
+    {
+      "index": 118,
+      "label": 4,
+      "prediction": 4,
+      "finish_reason": "stop",
+      "completion_tokens": 125
+    },
+    {
+      "index": 119,
+      "label": 95200,
+      "prediction": 92,
+      "finish_reason": "stop",
+      "completion_tokens": 324
+    },
+    {
+      "index": 120,
+      "label": 240,
+      "prediction": 240,
+      "finish_reason": "stop",
+      "completion_tokens": 84
+    },
+    {
+      "index": 121,
+      "label": 27,
+      "prediction": 27,
+      "finish_reason": "stop",
+      "completion_tokens": 123
+    },
+    {
+      "index": 122,
+      "label": 48,
+      "prediction": 43,
+      "finish_reason": "stop",
+      "completion_tokens": 149
+    },
+    {
+      "index": 123,
+      "label": 50,
+      "prediction": 50,
+      "finish_reason": "stop",
+      "completion_tokens": 110
+    },
+    {
+      "index": 124,
+      "label": 10,
+      "prediction": 10,
+      "finish_reason": "stop",
+      "completion_tokens": 95
+    },
+    {
+      "index": 125,
+      "label": 10,
+      "prediction": 10,
+      "finish_reason": "stop",
+      "completion_tokens": 84
+    },
+    {
+      "index": 126,
+      "label": 82,
+      "prediction": 82,
+      "finish_reason": "stop",
+      "completion_tokens": 60
+    },
+    {
+      "index": 127,
+      "label": 120,
+      "prediction": 120,
+      "finish_reason": "stop",
+      "completion_tokens": 80
+    }
+  ]
+}

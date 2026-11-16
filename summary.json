@@ -1,0 +1,33 @@
+{
+  "head": "362b0485e827d872e4b263340ca68de2bd05dfc8",
+  "branch": "rocm/rdna4-octave-kv-pr",
+  "base": "be47189f37f6162991366ff6b91539f6e9d1f432",
+  "upstream_merge_checked": "0067b98f7e62c774ea4acd300eea743aed832aaf",
+  "runtime": "gfx1201",
+  "gfx1200": "build only",
+  "serving_validation_date": "2026-11-12",
+  "serving": {
+    "dense": {
+      "kv_tokens": 300980,
+      "head": "362b0485e827d872e4b263340ca68de2bd05dfc8"
+    },
+    "qsa-octave": {
+      "kv_tokens": 498801,
+      "head": "362b0485e827d872e4b263340ca68de2bd05dfc8",
+      "correct": 124,
+      "num_questions_scored": 128,
+      "length_finish_count": 0,
+      "api_error_count": 0
+    },
+    "qsa-bf16": {
+      "kv_tokens": 201850,
+      "head": "362b0485e827d872e4b263340ca68de2bd05dfc8",
+      "correct": 124,
+      "num_questions_scored": 128,
+      "length_finish_count": 0,
+      "api_error_count": 0
+    }
+  },
+  "qsa_matching_predictions": 126,
+  "qsa_capacity_ratio": 2.471146891255883
+}

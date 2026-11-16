@@ -1,0 +1,334 @@
+[
+  {
+    "rank": 0,
+    "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/vllm-rdna4-octave-kv-pr/vllm/__init__.py",
+    "gfx": "gfx1201",
+    "graph_mode": "FULL_AND_PIECEWISE",
+    "vision": true,
+    "cache": "bfloat16",
+    "layers": [
+      {
+        "name": "language_model.model.layers.3.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.7.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.11.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.15.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.19.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.23.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.27.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.31.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.35.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.39.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.43.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.47.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      }
+    ]
+  },
+  {
+    "rank": 1,
+    "source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/vllm-rdna4-octave-kv-pr/vllm/__init__.py",
+    "gfx": "gfx1201",
+    "graph_mode": "FULL_AND_PIECEWISE",
+    "vision": true,
+    "cache": "bfloat16",
+    "layers": [
+      {
+        "name": "language_model.model.layers.3.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.7.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.11.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.15.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.19.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.23.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.27.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.31.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.35.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.39.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.43.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      },
+      {
+        "name": "language_model.model.layers.47.self_attn.attn",
+        "impl": "Qwen4ExpQSAImpl",
+        "backend": "QWEN4_EXP_QSA_TRITON",
+        "cache_dtype": "torch.bfloat16",
+        "cache_shape": [
+          154,
+          1,
+          1600,
+          512
+        ],
+        "native": null
+      }
+    ]
+  }
+]

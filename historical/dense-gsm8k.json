@@ -1,0 +1,73 @@
+{
+  "questions": 1319,
+  "arms": {
+    "bf16": {
+      "correct": 1273,
+      "total": 1319,
+      "accuracy": 0.9651250947687642,
+      "invalid_extraction_count": 0,
+      "api_error_count": 0,
+      "length_finish_count": 3,
+      "finish_reason_counts": {
+        "length": 3,
+        "stop": 1316
+      },
+      "started_at_utc": "2026-11-10T07:20:24.031637+00:00",
+      "finished_at_utc": "2026-11-10T07:42:06.778586+00:00",
+      "max_tokens": 1024,
+      "run_accuracy_sha256": "76376eca7366b9334f5a44b35451202c7ae54e05c50ef7075a88ae4005108c13"
+    },
+    "fp8": {
+      "correct": 1275,
+      "total": 1319,
+      "accuracy": 0.9666413949962093,
+      "invalid_extraction_count": 0,
+      "api_error_count": 0,
+      "length_finish_count": 5,
+      "finish_reason_counts": {
+        "length": 5,
+        "stop": 1314
+      },
+      "started_at_utc": "2026-11-10T06:22:34.891098+00:00",
+      "finished_at_utc": "2026-11-10T06:40:49.726197+00:00",
+      "max_tokens": 1024,
+      "run_accuracy_sha256": "76376eca7366b9334f5a44b35451202c7ae54e05c50ef7075a88ae4005108c13"
+    },
+    "octave": {
+      "correct": 1275,
+      "total": 1319,
+      "accuracy": 0.9666413949962093,
+      "invalid_extraction_count": 0,
+      "api_error_count": 0,
+      "length_finish_count": 5,
+      "finish_reason_counts": {
+        "length": 5,
+        "stop": 1314
+      },
+      "started_at_utc": "2026-11-10T06:51:47.030556+00:00",
+      "finished_at_utc": "2026-11-10T07:15:00.245263+00:00",
+      "max_tokens": 1024,
+      "run_accuracy_sha256": "76376eca7366b9334f5a44b35451202c7ae54e05c50ef7075a88ae4005108c13"
+    }
+  },
+  "paired_vs_bf16": {
+    "fp8": {
+      "bf16_correct_to_arm_wrong": 3,
+      "bf16_wrong_to_arm_correct": 5,
+      "same_correctness": 1311,
+      "prediction_disagreements": 11
+    },
+    "octave": {
+      "bf16_correct_to_arm_wrong": 6,
+      "bf16_wrong_to_arm_correct": 8,
+      "same_correctness": 1305,
+      "prediction_disagreements": 21
+    }
+  },
+  "paired_fp8_vs_octave": {
+    "fp8_correct_to_octave_wrong": 8,
+    "fp8_wrong_to_octave_correct": 8,
+    "same_correctness": 1303,
+    "prediction_disagreements": 21
+  }
+}

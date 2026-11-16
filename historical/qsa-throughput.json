@@ -1,0 +1,981 @@
+{
+  "model": {
+    "id": "ranxianglei/Qwen3.8-Flash-Next-W4A16-Modular",
+    "revision": "1e7b246d7185a7f725b9e1a74f3bd252a97cff0a",
+    "local_path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/reports/rdna4-octave-qsa-serving-20261111/model"
+  },
+  "source_commit": "e36f0ca0d353ffa6c4c4ae0e039d91472e032474",
+  "benchmark_collection_commit": "45da0715cd419757c9c0f85a4d5b104f59ad6842",
+  "workload": "simple-agent-multiturn-prefix-cache; static seed 20260715; 8 turns; 2048 synthetic prompt tokens/turn; 512 output tokens/turn; streams 1/2/4/8; max requests 8/16/32/64",
+  "method": "TP2 BF16 activations; vision enabled; PLE CPU offload; default FULL_AND_PIECEWISE graphs; identical 3 GiB/GPU manual KV budget; brief matched primer and 8-way aggregate 8K prefill stress before each measured sweep; reset prefix cache before measurement. No profiler or extra timing instrumentation.",
+  "arms": {
+    "baseline": {
+      "folder": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/reports/rdna4-octave-qsa-agent-bench-20261111/baseline",
+      "report_sha256": "6099cff1a546c2b43b4d0788bead83f848fa1e3ecb74a7ca7ac9f1dab0a34ed8",
+      "settings": {
+        "kv_cache_memory_bytes_per_gpu": 3221225472,
+        "max_model_len": 65536,
+        "max_num_batched_tokens": 8192,
+        "max_num_seqs": 8,
+        "dtype": "bfloat16",
+        "engram_config": "{\"cpu_offload\":true}",
+        "attention_backend_flag": "auto/default",
+        "kv_cache_dtype_flag": "bfloat16",
+        "vision_enabled": true,
+        "cudagraph_mode": "FULL_AND_PIECEWISE"
+      },
+      "startup": {
+        "reported_kv_cache_tokens": 201850,
+        "reported_max_concurrency_at_65536": 3.08,
+        "attention_block_size": 1600,
+        "group_layout": [
+          1600,
+          1600,
+          1600,
+          1600,
+          4,
+          1600
+        ],
+        "lcm_block_size": 1600,
+        "cache_groups": [
+          {
+            "layers": [
+              "language_model.model.layers.0.linear_attn",
+              "language_model.model.layers.4.linear_attn",
+              "language_model.model.layers.8.linear_attn",
+              "language_model.model.layers.12.linear_attn",
+              "language_model.model.layers.16.linear_attn",
+              "language_model.model.layers.20.linear_attn",
+              "language_model.model.layers.24.linear_attn",
+              "language_model.model.layers.28.linear_attn",
+              "language_model.model.layers.32.linear_attn",
+              "language_model.model.layers.36.linear_attn",
+              "language_model.model.layers.40.linear_attn",
+              "language_model.model.layers.44.linear_attn"
+            ],
+            "spec": "UniformTypeKVCacheSpecs(block_size=1600, dcp_sharded=False, block_stride_alignment=None, is_draft=False, kv_cache_specs={'language_model.model.layers.0.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.4.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.8.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.12.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.16.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.20.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.24.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.28.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.32.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.36.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.40.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.44.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False)})"
+          },
+          {
+            "layers": [
+              "language_model.model.layers.1.linear_attn",
+              "language_model.model.layers.5.linear_attn",
+              "language_model.model.layers.9.linear_attn",
+              "language_model.model.layers.13.linear_attn",
+              "language_model.model.layers.17.linear_attn",
+              "language_model.model.layers.21.linear_attn",
+              "language_model.model.layers.25.linear_attn",
+              "language_model.model.layers.29.linear_attn",
+              "language_model.model.layers.33.linear_attn",
+              "language_model.model.layers.37.linear_attn",
+              "language_model.model.layers.41.linear_attn",
+              "language_model.model.layers.45.linear_attn"
+            ],
+            "spec": "UniformTypeKVCacheSpecs(block_size=1600, dcp_sharded=False, block_stride_alignment=None, is_draft=False, kv_cache_specs={'language_model.model.layers.1.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.5.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.9.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.13.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.17.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.21.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.25.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.29.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.33.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.37.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.41.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.45.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False)})"
+          },
+          {
+            "layers": [
+              "language_model.model.layers.2.linear_attn",
+              "language_model.model.layers.6.linear_attn",
+              "language_model.model.layers.10.linear_attn",
+              "language_model.model.layers.14.linear_attn",
+              "language_model.model.layers.18.linear_attn",
+              "language_model.model.layers.22.linear_attn",
+              "language_model.model.layers.26.linear_attn",
+              "language_model.model.layers.30.linear_attn",
+              "language_model.model.layers.34.linear_attn",
+              "language_model.model.layers.38.linear_attn",
+              "language_model.model.layers.42.linear_attn",
+              "language_model.model.layers.46.linear_attn"
+            ],
+            "spec": "UniformTypeKVCacheSpecs(block_size=1600, dcp_sharded=False, block_stride_alignment=None, is_draft=False, kv_cache_specs={'language_model.model.layers.2.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.6.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.10.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.14.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.18.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.22.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.26.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.30.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.34.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.38.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.42.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.46.linear_attn': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False)})"
+          },
+          {
+            "layers": [
+              "language_model.model.layers.1.ple"
+            ],
+            "spec": "UniformTypeKVCacheSpecs(block_size=1600, dcp_sharded=False, block_stride_alignment=None, is_draft=False, kv_cache_specs={'language_model.model.layers.1.ple': MambaSpec(block_size=1600, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((9, 10240),), dtypes=(torch.bfloat16,), state_alignment=1, page_size_padded=1638400, mamba_type=<MambaAttentionBackendEnum.SHORT_CONV: 'vllm.v1.attention.backends.short_conv_attn.ShortConvAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=True)})"
+          },
+          {
+            "layers": [
+              "language_model.model.layers.3.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.7.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.11.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.15.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.19.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.23.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.27.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.31.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.35.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.39.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.43.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.47.self_attn.indexer.raw_key_cache"
+            ],
+            "spec": "UniformTypeKVCacheSpecs(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, kv_cache_specs={'language_model.model.layers.3.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.7.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.11.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.15.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.19.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.23.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.27.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.31.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.35.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.39.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.43.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.47.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1)})"
+          },
+          {
+            "layers": [
+              "language_model.model.layers.3.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.3.self_attn.attn",
+              "language_model.model.layers.7.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.7.self_attn.attn",
+              "language_model.model.layers.11.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.11.self_attn.attn",
+              "language_model.model.layers.15.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.15.self_attn.attn",
+              "language_model.model.layers.19.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.19.self_attn.attn",
+              "language_model.model.layers.23.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.23.self_attn.attn",
+              "language_model.model.layers.27.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.27.self_attn.attn",
+              "language_model.model.layers.31.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.31.self_attn.attn",
+              "language_model.model.layers.35.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.35.self_attn.attn",
+              "language_model.model.layers.39.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.39.self_attn.attn",
+              "language_model.model.layers.43.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.43.self_attn.attn",
+              "language_model.model.layers.47.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.47.self_attn.attn"
+            ],
+            "spec": "UniformTypeKVCacheSpecs(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, kv_cache_specs={'language_model.model.layers.3.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.3.self_attn.attn': FullAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.bfloat16, head_size_v=256, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.7.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.7.self_attn.attn': FullAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.bfloat16, head_size_v=256, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.11.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.11.self_attn.attn': FullAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.bfloat16, head_size_v=256, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.15.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.15.self_attn.attn': FullAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.bfloat16, head_size_v=256, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.19.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.19.self_attn.attn': FullAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.bfloat16, head_size_v=256, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.23.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.23.self_attn.attn': FullAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.bfloat16, head_size_v=256, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.27.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.27.self_attn.attn': FullAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.bfloat16, head_size_v=256, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.31.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.31.self_attn.attn': FullAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.bfloat16, head_size_v=256, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.35.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.35.self_attn.attn': FullAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.bfloat16, head_size_v=256, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.39.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.39.self_attn.attn': FullAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.bfloat16, head_size_v=256, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.43.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.43.self_attn.attn': FullAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.bfloat16, head_size_v=256, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.47.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.47.self_attn.attn': FullAttentionSpec(block_size=1600, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.bfloat16, head_size_v=256, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False)})"
+          }
+        ]
+      },
+      "workers": [
+        {
+          "rank": 0,
+          "device": "cuda:0",
+          "gfx": "gfx1201",
+          "vram_bytes": 34208743424,
+          "vllm_source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/vllm-rdna4-octave-kv/vllm/__init__.py",
+          "torch_version": "2.13.0+rocm10.0.0",
+          "rocm_version": "7.15.26333",
+          "dtype": "torch.bfloat16",
+          "kv_cache_dtype": "bfloat16",
+          "kv_cache_memory_bytes": 3221225472,
+          "max_model_len": 65536,
+          "max_num_batched_tokens": 8192,
+          "max_num_seqs": 8,
+          "language_model_only": false,
+          "compilation_mode": "VLLM_COMPILE",
+          "cudagraph_mode": "FULL_AND_PIECEWISE",
+          "num_kv_blocks": 154,
+          "qsa_layer_count": 12,
+          "qsa_backend": [
+            "QWEN4_EXP_QSA_TRITON"
+          ],
+          "qsa_implementation": [
+            "Qwen4ExpQSAImpl"
+          ],
+          "qsa_native_engine": [
+            null
+          ],
+          "qsa_tensor_dtype": [
+            "torch.bfloat16"
+          ],
+          "qsa_tensor_shapes": [
+            "[154, 1, 1600, 512]"
+          ]
+        },
+        {
+          "rank": 1,
+          "device": "cuda:1",
+          "gfx": "gfx1201",
+          "vram_bytes": 34208743424,
+          "vllm_source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/vllm-rdna4-octave-kv/vllm/__init__.py",
+          "torch_version": "2.13.0+rocm10.0.0",
+          "rocm_version": "7.15.26333",
+          "dtype": "torch.bfloat16",
+          "kv_cache_dtype": "bfloat16",
+          "kv_cache_memory_bytes": 3221225472,
+          "max_model_len": 65536,
+          "max_num_batched_tokens": 8192,
+          "max_num_seqs": 8,
+          "language_model_only": false,
+          "compilation_mode": "VLLM_COMPILE",
+          "cudagraph_mode": "FULL_AND_PIECEWISE",
+          "num_kv_blocks": 154,
+          "qsa_layer_count": 12,
+          "qsa_backend": [
+            "QWEN4_EXP_QSA_TRITON"
+          ],
+          "qsa_implementation": [
+            "Qwen4ExpQSAImpl"
+          ],
+          "qsa_native_engine": [
+            null
+          ],
+          "qsa_tensor_dtype": [
+            "torch.bfloat16"
+          ],
+          "qsa_tensor_shapes": [
+            "[154, 1, 1600, 512]"
+          ]
+        }
+      ],
+      "stress_8way_8k": {
+        "successes": 8,
+        "errors": 0,
+        "incomplete": 0,
+        "prompt_tokens_min": 1076,
+        "prompt_tokens_max": 1076
+      },
+      "primer": [
+        {
+          "streams": 1,
+          "successes": 1,
+          "errors": 0,
+          "incomplete": 0,
+          "min_prompt_tokens": 2100,
+          "max_prompt_tokens": 2100
+        },
+        {
+          "streams": 2,
+          "successes": 2,
+          "errors": 0,
+          "incomplete": 0,
+          "min_prompt_tokens": 2100,
+          "max_prompt_tokens": 4674
+        },
+        {
+          "streams": 4,
+          "successes": 4,
+          "errors": 0,
+          "incomplete": 0,
+          "min_prompt_tokens": 2100,
+          "max_prompt_tokens": 9822
+        },
+        {
+          "streams": 8,
+          "successes": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "min_prompt_tokens": 2100,
+          "max_prompt_tokens": 19743
+        }
+      ],
+      "measured": {
+        "benchmark_levels": {
+          "1": {
+            "streams": 1,
+            "requests": 8,
+            "successes": 8,
+            "errors": 0,
+            "incomplete": 0,
+            "peak_concurrency": 1,
+            "mean_concurrency": 0.999926695347163,
+            "window_s": 146.3302788734436,
+            "input_tokens": 88022,
+            "output_tokens": 4096,
+            "aggregate_output_tps": 27.99147265715594,
+            "prompt_min": 2100,
+            "prompt_max": 19858,
+            "prompt_mean": 11002.75,
+            "ttft_ms": {
+              "p50": 1046.3770627975464,
+              "p95": 1327.2875547409058,
+              "mean": 1021.042674779892
+            },
+            "tpot_ms": {
+              "p50": 35.74922890402377,
+              "p95": 36.32804693188518,
+              "mean": 35.704121575690806
+            },
+            "itl_ms": {
+              "p50": 33.77577050091469,
+              "p95": 33.80265849443798,
+              "mean": 33.7758660899683
+            },
+            "e2e_s": {
+              "p50": 18.304454565048218,
+              "p95": 18.600944352149963,
+              "mean": 18.289944022893906
+            }
+          },
+          "2": {
+            "streams": 2,
+            "requests": 16,
+            "successes": 16,
+            "errors": 0,
+            "incomplete": 0,
+            "peak_concurrency": 2,
+            "mean_concurrency": 1.9994561337039374,
+            "window_s": 162.36351370811462,
+            "input_tokens": 175186,
+            "output_tokens": 8192,
+            "aggregate_output_tps": 50.45468537178239,
+            "prompt_min": 2100,
+            "prompt_max": 19833,
+            "prompt_mean": 10949.125,
+            "ttft_ms": {
+              "p50": 1392.7583694458008,
+              "p95": 2626.593768596649,
+              "mean": 1552.5798052549362
+            },
+            "tpot_ms": {
+              "p50": 39.69602892175317,
+              "p95": 40.73062294628471,
+              "mean": 36.64446066250093
+            },
+            "itl_ms": {
+              "p50": 35.68611756229587,
+              "p95": 38.87658938036506,
+              "mean": 33.67785529147855
+            },
+            "e2e_s": {
+              "p50": 20.350956082344055,
+              "p95": 20.855116546154022,
+              "mean": 20.289920210838318
+            }
+          },
+          "4": {
+            "streams": 4,
+            "requests": 32,
+            "successes": 32,
+            "errors": 0,
+            "incomplete": 0,
+            "peak_concurrency": 4,
+            "mean_concurrency": 3.9984136078337595,
+            "window_s": 145.28531074523926,
+            "input_tokens": 351573,
+            "output_tokens": 16384,
+            "aggregate_output_tps": 112.77120801792327,
+            "prompt_min": 2100,
+            "prompt_max": 19835,
+            "prompt_mean": 10986.65625,
+            "ttft_ms": {
+              "p50": 3167.162537574768,
+              "p95": 4251.444208621979,
+              "mean": 2828.744702041149
+            },
+            "tpot_ms": {
+              "p50": 34.65281007811427,
+              "p95": 38.0293392110616,
+              "mean": 34.59750168258324
+            },
+            "itl_ms": {
+              "p50": 28.55602519152916,
+              "p95": 34.39146779521337,
+              "mean": 29.129503247439278
+            },
+            "e2e_s": {
+              "p50": 18.05773627758026,
+              "p95": 19.47302714586258,
+              "mean": 18.15346135944128
+            }
+          },
+          "8": {
+            "streams": 8,
+            "requests": 64,
+            "successes": 64,
+            "errors": 0,
+            "incomplete": 0,
+            "peak_concurrency": 8,
+            "mean_concurrency": 7.991947058941796,
+            "window_s": 321.4006631374359,
+            "input_tokens": 705632,
+            "output_tokens": 32768,
+            "aggregate_output_tps": 101.95374110347711,
+            "prompt_min": 2100,
+            "prompt_max": 20118,
+            "prompt_mean": 11025.5,
+            "ttft_ms": {
+              "p50": 6169.111728668213,
+              "p95": 25708.433926105496,
+              "mean": 10175.703577697277
+            },
+            "tpot_ms": {
+              "p50": 63.426826847717166,
+              "p95": 125.82165128551422,
+              "mean": 77.56493391934782
+            },
+            "itl_ms": {
+              "p50": 52.75186447248067,
+              "p95": 88.72307168061019,
+              "mean": 57.80341015461606
+            },
+            "e2e_s": {
+              "p50": 32.47600209712982,
+              "p95": 64.61975003480912,
+              "mean": 40.13464194536209
+            }
+          }
+        },
+        "total_requests": 120,
+        "errors": 0,
+        "incomplete": 0,
+        "metrics_delta": {
+          "vllm:prefix_cache_queries_total": 1320413.0,
+          "vllm:prefix_cache_hits_total": 595200.0,
+          "vllm:num_preemptions_total": 0.0,
+          "vllm:request_success_total": 120.0,
+          "vllm:prompt_tokens_total": 1320413.0,
+          "vllm:generation_tokens_total": 61440.0
+        },
+        "measurement_jit_warnings": [
+          "(Worker_TP0 pid=1748724) WARNING 11-11 14:50:59 [jit_monitor.py:143] Triton kernel JIT compilation during inference: fused_sigmoid_gating_delta_rule_update_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.",
+          "(Worker_TP0 pid=1748724) WARNING 11-11 14:50:59 [jit_monitor.py:143] Triton kernel JIT compilation during inference: _gather_initial_states_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.",
+          "(Worker_TP0 pid=1748724) WARNING 11-11 14:50:59 [jit_monitor.py:143] Triton kernel JIT compilation during inference: _scatter_states_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.",
+          "(Worker_TP0 pid=1748724) WARNING 11-11 14:50:59 [jit_monitor.py:143] Triton kernel JIT compilation during inference: _ple_conv_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.",
+          "(Worker_TP0 pid=1748724) WARNING 11-11 14:50:59 [jit_monitor.py:143] Triton kernel JIT compilation during inference: _ple_conv_writeback_kernel. This causes a latency spike; consider extending warmup to cover this shape/config."
+        ],
+        "measured_local_window": [
+          "11-11 14:48:30",
+          "11-11 15:01:30"
+        ]
+      }
+    },
+    "octave": {
+      "folder": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/reports/rdna4-octave-qsa-agent-bench-20261111/octave",
+      "report_sha256": "ec0a4692cd11c4ebff25015b07b3821815173657610b0c18eeb5bac076c53809",
+      "settings": {
+        "kv_cache_memory_bytes_per_gpu": 3221225472,
+        "max_model_len": 65536,
+        "max_num_batched_tokens": 8192,
+        "max_num_seqs": 8,
+        "dtype": "bfloat16",
+        "engram_config": "{\"cpu_offload\":true}",
+        "attention_backend_flag": "ROCM_OCTAVE",
+        "kv_cache_dtype_flag": "octave_k3v4",
+        "vision_enabled": true,
+        "cudagraph_mode": "FULL_AND_PIECEWISE"
+      },
+      "startup": {
+        "reported_kv_cache_tokens": 498801,
+        "reported_max_concurrency_at_65536": 7.61,
+        "attention_block_size": 3136,
+        "group_layout": [
+          3136,
+          3136,
+          3136,
+          3136,
+          3136,
+          3136,
+          3136,
+          4,
+          3136
+        ],
+        "lcm_block_size": 3136,
+        "cache_groups": [
+          {
+            "layers": [
+              "language_model.model.layers.0.linear_attn",
+              "language_model.model.layers.8.linear_attn",
+              "language_model.model.layers.16.linear_attn",
+              "language_model.model.layers.24.linear_attn",
+              "language_model.model.layers.32.linear_attn",
+              "language_model.model.layers.40.linear_attn"
+            ],
+            "spec": "UniformTypeKVCacheSpecs(block_size=3136, dcp_sharded=False, block_stride_alignment=None, is_draft=False, kv_cache_specs={'language_model.model.layers.0.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.8.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.16.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.24.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.32.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.40.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False)})"
+          },
+          {
+            "layers": [
+              "language_model.model.layers.1.linear_attn",
+              "language_model.model.layers.9.linear_attn",
+              "language_model.model.layers.17.linear_attn",
+              "language_model.model.layers.25.linear_attn",
+              "language_model.model.layers.33.linear_attn",
+              "language_model.model.layers.41.linear_attn"
+            ],
+            "spec": "UniformTypeKVCacheSpecs(block_size=3136, dcp_sharded=False, block_stride_alignment=None, is_draft=False, kv_cache_specs={'language_model.model.layers.1.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.9.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.17.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.25.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.33.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.41.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False)})"
+          },
+          {
+            "layers": [
+              "language_model.model.layers.2.linear_attn",
+              "language_model.model.layers.10.linear_attn",
+              "language_model.model.layers.18.linear_attn",
+              "language_model.model.layers.26.linear_attn",
+              "language_model.model.layers.34.linear_attn",
+              "language_model.model.layers.42.linear_attn"
+            ],
+            "spec": "UniformTypeKVCacheSpecs(block_size=3136, dcp_sharded=False, block_stride_alignment=None, is_draft=False, kv_cache_specs={'language_model.model.layers.2.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.10.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.18.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.26.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.34.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.42.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False)})"
+          },
+          {
+            "layers": [
+              "language_model.model.layers.4.linear_attn",
+              "language_model.model.layers.12.linear_attn",
+              "language_model.model.layers.20.linear_attn",
+              "language_model.model.layers.28.linear_attn",
+              "language_model.model.layers.36.linear_attn",
+              "language_model.model.layers.44.linear_attn"
+            ],
+            "spec": "UniformTypeKVCacheSpecs(block_size=3136, dcp_sharded=False, block_stride_alignment=None, is_draft=False, kv_cache_specs={'language_model.model.layers.4.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.12.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.20.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.28.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.36.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.44.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False)})"
+          },
+          {
+            "layers": [
+              "language_model.model.layers.5.linear_attn",
+              "language_model.model.layers.13.linear_attn",
+              "language_model.model.layers.21.linear_attn",
+              "language_model.model.layers.29.linear_attn",
+              "language_model.model.layers.37.linear_attn",
+              "language_model.model.layers.45.linear_attn"
+            ],
+            "spec": "UniformTypeKVCacheSpecs(block_size=3136, dcp_sharded=False, block_stride_alignment=None, is_draft=False, kv_cache_specs={'language_model.model.layers.5.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.13.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.21.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.29.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.37.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.45.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False)})"
+          },
+          {
+            "layers": [
+              "language_model.model.layers.6.linear_attn",
+              "language_model.model.layers.14.linear_attn",
+              "language_model.model.layers.22.linear_attn",
+              "language_model.model.layers.30.linear_attn",
+              "language_model.model.layers.38.linear_attn",
+              "language_model.model.layers.46.linear_attn"
+            ],
+            "spec": "UniformTypeKVCacheSpecs(block_size=3136, dcp_sharded=False, block_stride_alignment=None, is_draft=False, kv_cache_specs={'language_model.model.layers.6.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.14.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.22.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.30.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.38.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False), 'language_model.model.layers.46.linear_attn': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((3, 5120), (24, 128, 128)), dtypes=(torch.bfloat16, torch.float32), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.GDN_ATTN: 'vllm.v1.attention.backends.gdn_attn.GDNAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=False)})"
+          },
+          {
+            "layers": [
+              "language_model.model.layers.1.ple"
+            ],
+            "spec": "UniformTypeKVCacheSpecs(block_size=3136, dcp_sharded=False, block_stride_alignment=None, is_draft=False, kv_cache_specs={'language_model.model.layers.1.ple': MambaSpec(block_size=3136, dcp_sharded=False, block_stride_alignment=1, is_draft=False, shapes=((9, 10240),), dtypes=(torch.bfloat16,), state_alignment=1, page_size_padded=1605632, mamba_type=<MambaAttentionBackendEnum.SHORT_CONV: 'vllm.v1.attention.backends.short_conv_attn.ShortConvAttentionBackend'>, mamba_cache_mode='align', num_speculative_blocks=0, num_prefill_checkpoint_blocks=0, prefill_checkpoint_alignment=None, num_heads=1, tokens_per_state=-1, tp_replicated=True)})"
+          },
+          {
+            "layers": [
+              "language_model.model.layers.3.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.7.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.11.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.15.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.19.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.23.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.27.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.31.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.35.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.39.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.43.self_attn.indexer.raw_key_cache",
+              "language_model.model.layers.47.self_attn.indexer.raw_key_cache"
+            ],
+            "spec": "UniformTypeKVCacheSpecs(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, kv_cache_specs={'language_model.model.layers.3.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.7.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.11.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.15.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.19.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.23.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.27.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.31.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.35.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.39.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.43.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1), 'language_model.model.layers.47.self_attn.indexer.raw_key_cache': CircularBufferSpec(block_size=4, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=140, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=1)})"
+          },
+          {
+            "layers": [
+              "language_model.model.layers.3.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.3.self_attn.attn",
+              "language_model.model.layers.7.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.7.self_attn.attn",
+              "language_model.model.layers.11.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.11.self_attn.attn",
+              "language_model.model.layers.15.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.15.self_attn.attn",
+              "language_model.model.layers.19.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.19.self_attn.attn",
+              "language_model.model.layers.23.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.23.self_attn.attn",
+              "language_model.model.layers.27.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.27.self_attn.attn",
+              "language_model.model.layers.31.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.31.self_attn.attn",
+              "language_model.model.layers.35.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.35.self_attn.attn",
+              "language_model.model.layers.39.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.39.self_attn.attn",
+              "language_model.model.layers.43.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.43.self_attn.attn",
+              "language_model.model.layers.47.self_attn.indexer.compressed_key_cache",
+              "language_model.model.layers.47.self_attn.attn"
+            ],
+            "spec": "UniformTypeKVCacheSpecs(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, kv_cache_specs={'language_model.model.layers.3.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.3.self_attn.attn': FullAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.uint8, head_size_v=256, kv_quant_mode=<KVQuantMode.OCTAVE_K3V4: 12>, page_size_padded=None, num_head_slots=None, state_content_bytes=248, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.7.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.7.self_attn.attn': FullAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.uint8, head_size_v=256, kv_quant_mode=<KVQuantMode.OCTAVE_K3V4: 12>, page_size_padded=None, num_head_slots=None, state_content_bytes=248, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.11.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.11.self_attn.attn': FullAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.uint8, head_size_v=256, kv_quant_mode=<KVQuantMode.OCTAVE_K3V4: 12>, page_size_padded=None, num_head_slots=None, state_content_bytes=248, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.15.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.15.self_attn.attn': FullAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.uint8, head_size_v=256, kv_quant_mode=<KVQuantMode.OCTAVE_K3V4: 12>, page_size_padded=None, num_head_slots=None, state_content_bytes=248, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.19.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.19.self_attn.attn': FullAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.uint8, head_size_v=256, kv_quant_mode=<KVQuantMode.OCTAVE_K3V4: 12>, page_size_padded=None, num_head_slots=None, state_content_bytes=248, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.23.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.23.self_attn.attn': FullAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.uint8, head_size_v=256, kv_quant_mode=<KVQuantMode.OCTAVE_K3V4: 12>, page_size_padded=None, num_head_slots=None, state_content_bytes=248, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.27.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.27.self_attn.attn': FullAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.uint8, head_size_v=256, kv_quant_mode=<KVQuantMode.OCTAVE_K3V4: 12>, page_size_padded=None, num_head_slots=None, state_content_bytes=248, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.31.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.31.self_attn.attn': FullAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.uint8, head_size_v=256, kv_quant_mode=<KVQuantMode.OCTAVE_K3V4: 12>, page_size_padded=None, num_head_slots=None, state_content_bytes=248, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.35.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.35.self_attn.attn': FullAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.uint8, head_size_v=256, kv_quant_mode=<KVQuantMode.OCTAVE_K3V4: 12>, page_size_padded=None, num_head_slots=None, state_content_bytes=248, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.39.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.39.self_attn.attn': FullAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.uint8, head_size_v=256, kv_quant_mode=<KVQuantMode.OCTAVE_K3V4: 12>, page_size_padded=None, num_head_slots=None, state_content_bytes=248, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.43.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.43.self_attn.attn': FullAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.uint8, head_size_v=256, kv_quant_mode=<KVQuantMode.OCTAVE_K3V4: 12>, page_size_padded=None, num_head_slots=None, state_content_bytes=248, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False), 'language_model.model.layers.47.self_attn.indexer.compressed_key_cache': MLAAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=128, dtype=torch.bfloat16, head_size_v=0, kv_quant_mode=<KVQuantMode.NONE: 0>, page_size_padded=None, num_head_slots=None, state_content_bytes=None, kv_head_major_slots=False, tokens_per_state=4, sliding_window=None, attention_chunk_size=None, non_causal=False, cache_dtype_str=None, topk_buffer_width=None, alignment=None, model_version=None, cache_role=<SparseCacheRole.SPARSE: 'sparse'>, is_index_group_leader=False, non_causal_multi_token_decode=False), 'language_model.model.layers.47.self_attn.attn': FullAttentionSpec(block_size=3136, dcp_sharded=True, block_stride_alignment=None, is_draft=False, max_tp_shards=None, num_kv_heads=1, head_size=256, dtype=torch.uint8, head_size_v=256, kv_quant_mode=<KVQuantMode.OCTAVE_K3V4: 12>, page_size_padded=None, num_head_slots=None, state_content_bytes=248, kv_head_major_slots=False, tokens_per_state=1, sliding_window=None, attention_chunk_size=None, non_causal=False)})"
+          }
+        ]
+      },
+      "workers": [
+        {
+          "rank": 0,
+          "device": "cuda:0",
+          "gfx": "gfx1201",
+          "vram_bytes": 34208743424,
+          "vllm_source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/vllm-rdna4-octave-kv/vllm/__init__.py",
+          "torch_version": "2.13.0+rocm10.0.0",
+          "rocm_version": "7.15.26333",
+          "dtype": "torch.bfloat16",
+          "kv_cache_dtype": "octave_k3v4",
+          "kv_cache_memory_bytes": 3221225472,
+          "max_model_len": 65536,
+          "max_num_batched_tokens": 8192,
+          "max_num_seqs": 8,
+          "language_model_only": false,
+          "compilation_mode": "VLLM_COMPILE",
+          "cudagraph_mode": "FULL_AND_PIECEWISE",
+          "num_kv_blocks": 274,
+          "qsa_layer_count": 12,
+          "qsa_backend": [
+            "QWEN4_EXP_QSA_TRITON"
+          ],
+          "qsa_implementation": [
+            "Qwen4ExpQSAImpl"
+          ],
+          "qsa_native_engine": [
+            "TunedHipOctave"
+          ],
+          "qsa_tensor_dtype": [
+            "torch.uint8"
+          ],
+          "qsa_tensor_shapes": [
+            "[274, 1, 3136, 248]"
+          ]
+        },
+        {
+          "rank": 1,
+          "device": "cuda:1",
+          "gfx": "gfx1201",
+          "vram_bytes": 34208743424,
+          "vllm_source": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/vllm-rdna4-octave-kv/vllm/__init__.py",
+          "torch_version": "2.13.0+rocm10.0.0",
+          "rocm_version": "7.15.26333",
+          "dtype": "torch.bfloat16",
+          "kv_cache_dtype": "octave_k3v4",
+          "kv_cache_memory_bytes": 3221225472,
+          "max_model_len": 65536,
+          "max_num_batched_tokens": 8192,
+          "max_num_seqs": 8,
+          "language_model_only": false,
+          "compilation_mode": "VLLM_COMPILE",
+          "cudagraph_mode": "FULL_AND_PIECEWISE",
+          "num_kv_blocks": 274,
+          "qsa_layer_count": 12,
+          "qsa_backend": [
+            "QWEN4_EXP_QSA_TRITON"
+          ],
+          "qsa_implementation": [
+            "Qwen4ExpQSAImpl"
+          ],
+          "qsa_native_engine": [
+            "TunedHipOctave"
+          ],
+          "qsa_tensor_dtype": [
+            "torch.uint8"
+          ],
+          "qsa_tensor_shapes": [
+            "[274, 1, 3136, 248]"
+          ]
+        }
+      ],
+      "stress_8way_8k": {
+        "successes": 8,
+        "errors": 0,
+        "incomplete": 0,
+        "prompt_tokens_min": 1076,
+        "prompt_tokens_max": 1076
+      },
+      "primer": [
+        {
+          "streams": 1,
+          "successes": 1,
+          "errors": 0,
+          "incomplete": 0,
+          "min_prompt_tokens": 2100,
+          "max_prompt_tokens": 2100
+        },
+        {
+          "streams": 2,
+          "successes": 2,
+          "errors": 0,
+          "incomplete": 0,
+          "min_prompt_tokens": 2100,
+          "max_prompt_tokens": 4674
+        },
+        {
+          "streams": 4,
+          "successes": 4,
+          "errors": 0,
+          "incomplete": 0,
+          "min_prompt_tokens": 2100,
+          "max_prompt_tokens": 9822
+        },
+        {
+          "streams": 8,
+          "successes": 8,
+          "errors": 0,
+          "incomplete": 0,
+          "min_prompt_tokens": 2100,
+          "max_prompt_tokens": 19904
+        }
+      ],
+      "measured": {
+        "benchmark_levels": {
+          "1": {
+            "streams": 1,
+            "requests": 8,
+            "successes": 8,
+            "errors": 0,
+            "incomplete": 0,
+            "peak_concurrency": 1,
+            "mean_concurrency": 0.999910839866568,
+            "window_s": 116.32916021347046,
+            "input_tokens": 88302,
+            "output_tokens": 4096,
+            "aggregate_output_tps": 35.21043212624945,
+            "prompt_min": 2100,
+            "prompt_max": 19712,
+            "prompt_mean": 11037.75,
+            "ttft_ms": {
+              "p50": 2172.555923461914,
+              "p95": 3073.483419418335,
+              "mean": 2148.18274974823
+            },
+            "tpot_ms": {
+              "p50": 28.214876540005207,
+              "p95": 30.224250140599906,
+              "mean": 28.266402485314757
+            },
+            "itl_ms": {
+              "p50": 24.242268149866753,
+              "p95": 24.296940376147365,
+              "mean": 24.1178382049568
+            },
+            "e2e_s": {
+              "p50": 14.561127662658691,
+              "p95": 15.475830900669097,
+              "mean": 14.539848536252975
+            }
+          },
+          "2": {
+            "streams": 2,
+            "requests": 16,
+            "successes": 16,
+            "errors": 0,
+            "incomplete": 0,
+            "peak_concurrency": 2,
+            "mean_concurrency": 1.9996425628308794,
+            "window_s": 202.27519345283508,
+            "input_tokens": 175580,
+            "output_tokens": 8192,
+            "aggregate_output_tps": 40.499281499439746,
+            "prompt_min": 2100,
+            "prompt_max": 19715,
+            "prompt_mean": 10973.75,
+            "ttft_ms": {
+              "p50": 2913.589835166931,
+              "p95": 5406.184732913971,
+              "mean": 3130.110815167427
+            },
+            "tpot_ms": {
+              "p50": 49.63336791843176,
+              "p95": 51.70528695452958,
+              "mean": 48.41541571659036
+            },
+            "itl_ms": {
+              "p50": 41.43109946801471,
+              "p95": 45.74196259336229,
+              "mean": 42.38470064917189
+            },
+            "e2e_s": {
+              "p50": 25.418693780899048,
+              "p95": 27.098221838474274,
+              "mean": 25.27988038957119
+            }
+          },
+          "4": {
+            "streams": 4,
+            "requests": 32,
+            "successes": 32,
+            "errors": 0,
+            "incomplete": 0,
+            "peak_concurrency": 4,
+            "mean_concurrency": 3.9991144595115693,
+            "window_s": 252.36321020126343,
+            "input_tokens": 350799,
+            "output_tokens": 16384,
+            "aggregate_output_tps": 64.92229983496213,
+            "prompt_min": 2100,
+            "prompt_max": 19785,
+            "prompt_mean": 10962.46875,
+            "ttft_ms": {
+              "p50": 7164.1786098480225,
+              "p95": 10205.624723434448,
+              "mean": 6034.067243337631
+            },
+            "tpot_ms": {
+              "p50": 62.69940547645092,
+              "p95": 68.10895875096321,
+              "mean": 60.609610911342315
+            },
+            "itl_ms": {
+              "p50": 47.80067413053867,
+              "p95": 59.360450821146806,
+              "mean": 48.91986994769009
+            },
+            "e2e_s": {
+              "p50": 32.11861836910248,
+              "p95": 34.89572112560272,
+              "mean": 31.53841759264469
+            }
+          },
+          "8": {
+            "streams": 8,
+            "requests": 64,
+            "successes": 64,
+            "errors": 0,
+            "incomplete": 0,
+            "peak_concurrency": 8,
+            "mean_concurrency": 7.997520969463744,
+            "window_s": 309.0944836139679,
+            "input_tokens": 699853,
+            "output_tokens": 32768,
+            "aggregate_output_tps": 106.01289164682855,
+            "prompt_min": 2100,
+            "prompt_max": 20053,
+            "prompt_mean": 10935.203125,
+            "ttft_ms": {
+              "p50": 9523.179650306702,
+              "p95": 18933.39297771454,
+              "mean": 9905.136980116367
+            },
+            "tpot_ms": {
+              "p50": 74.54389496706426,
+              "p95": 85.35388556774706,
+              "mean": 74.26034034142504
+            },
+            "itl_ms": {
+              "p50": 55.30583485231941,
+              "p95": 69.76303984274368,
+              "mean": 55.02183419705137
+            },
+            "e2e_s": {
+              "p50": 39.21121680736542,
+              "p95": 43.70222851037979,
+              "mean": 38.62483772262931
+            }
+          }
+        },
+        "total_requests": 120,
+        "errors": 0,
+        "incomplete": 0,
+        "metrics_delta": {
+          "vllm:prefix_cache_queries_total": 1314534.0,
+          "vllm:prefix_cache_hits_total": 846720.0,
+          "vllm:num_preemptions_total": 0.0,
+          "vllm:request_success_total": 120.0,
+          "vllm:prompt_tokens_total": 1314534.0,
+          "vllm:generation_tokens_total": 61440.0
+        },
+        "measurement_jit_warnings": [
+          "(Worker_TP0 pid=1758073) WARNING 11-11 15:11:38 [jit_monitor.py:143] Triton kernel JIT compilation during inference: fused_sigmoid_gating_delta_rule_update_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.",
+          "(Worker_TP0 pid=1758073) WARNING 11-11 15:11:38 [jit_monitor.py:143] Triton kernel JIT compilation during inference: _gather_initial_states_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.",
+          "(Worker_TP0 pid=1758073) WARNING 11-11 15:11:38 [jit_monitor.py:143] Triton kernel JIT compilation during inference: _scatter_states_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.",
+          "(Worker_TP0 pid=1758073) WARNING 11-11 15:11:38 [jit_monitor.py:143] Triton kernel JIT compilation during inference: _ple_conv_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.",
+          "(Worker_TP0 pid=1758073) WARNING 11-11 15:11:38 [jit_monitor.py:143] Triton kernel JIT compilation during inference: _ple_conv_writeback_kernel. This causes a latency spike; consider extending warmup to cover this shape/config."
+        ],
+        "measured_local_window": [
+          "11-11 15:09:39",
+          "11-11 15:24:23"
+        ]
+      }
+    }
+  },
+  "comparison": {
+    "1": {
+      "aggregate_output_tps": {
+        "baseline": 27.99147265715594,
+        "octave": 35.21043212624945,
+        "delta_pct": 25.78985235079443
+      },
+      "ttft_ms": {
+        "baseline": 1046.3770627975464,
+        "octave": 2172.555923461914,
+        "delta_pct": 107.62648577688303
+      },
+      "tpot_ms": {
+        "baseline": 35.74922890402377,
+        "octave": 28.214876540005207,
+        "delta_pct": -21.075566089120677
+      },
+      "itl_ms": {
+        "baseline": 33.77577050091469,
+        "octave": 24.242268149866753,
+        "delta_pct": -28.22586194085419
+      },
+      "e2e_s": {
+        "baseline": 18.304454565048218,
+        "octave": 14.561127662658691,
+        "delta_pct": -20.45036026114262
+      }
+    },
+    "2": {
+      "aggregate_output_tps": {
+        "baseline": 50.45468537178239,
+        "octave": 40.499281499439746,
+        "delta_pct": -19.731376380577657
+      },
+      "ttft_ms": {
+        "baseline": 1392.7583694458008,
+        "octave": 2913.589835166931,
+        "delta_pct": 109.19564362957601
+      },
+      "tpot_ms": {
+        "baseline": 39.69602892175317,
+        "octave": 49.63336791843176,
+        "delta_pct": 25.033584634540084
+      },
+      "itl_ms": {
+        "baseline": 35.68611756229587,
+        "octave": 41.43109946801471,
+        "delta_pct": 16.098646471390587
+      },
+      "e2e_s": {
+        "baseline": 20.350956082344055,
+        "octave": 25.418693780899048,
+        "delta_pct": 24.901718022730268
+      }
+    },
+    "4": {
+      "aggregate_output_tps": {
+        "baseline": 112.77120801792327,
+        "octave": 64.92229983496213,
+        "delta_pct": -42.430075037731505
+      },
+      "ttft_ms": {
+        "baseline": 3167.162537574768,
+        "octave": 7164.1786098480225,
+        "delta_pct": 126.20179813486745
+      },
+      "tpot_ms": {
+        "baseline": 34.65281007811427,
+        "octave": 62.69940547645092,
+        "delta_pct": 80.93599143940733
+      },
+      "itl_ms": {
+        "baseline": 28.55602519152916,
+        "octave": 47.80067413053867,
+        "delta_pct": 67.39260387232824
+      },
+      "e2e_s": {
+        "baseline": 18.05773627758026,
+        "octave": 32.11861836910248,
+        "delta_pct": 77.86625009569792
+      }
+    },
+    "8": {
+      "aggregate_output_tps": {
+        "baseline": 101.95374110347711,
+        "octave": 106.01289164682855,
+        "delta_pct": 3.9813649792719508
+      },
+      "ttft_ms": {
+        "baseline": 6169.111728668213,
+        "octave": 9523.179650306702,
+        "delta_pct": 54.36873360636256
+      },
+      "tpot_ms": {
+        "baseline": 63.426826847717166,
+        "octave": 74.54389496706426,
+        "delta_pct": 17.52739128198595
+      },
+      "itl_ms": {
+        "baseline": 52.75186447248067,
+        "octave": 55.30583485231941,
+        "delta_pct": 4.8414788849237445
+      },
+      "e2e_s": {
+        "baseline": 32.47600209712982,
+        "octave": 39.21121680736542,
+        "delta_pct": 20.739051223398096
+      }
+    }
+  },
+  "attempt_01": {
+    "path": "/home/ellm/jeff/rocm_workspaces/10/gfx1201/reports/rdna4-octave-qsa-agent-bench-20261111/attempt-01-baseline-4p5gib-oom",
+    "status": "partial run failed with 158 MiB PLE activation OOM at 4.5 GiB KV during ~8000-token batch prefill; preserved for evidence."
+  }
+}

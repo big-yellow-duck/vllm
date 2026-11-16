@@ -1,0 +1,182 @@
+{
+  "text": {
+    "latency_s": 0.334,
+    "response": {
+      "id": "chatcmpl-93b52ae9eef67d07",
+      "object": "chat.completion",
+      "created": 1794466753,
+      "model": "octave-dense",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "42",
+            "refusal": null,
+            "audio": null,
+            "function_call": null,
+            "reasoning": null
+          },
+          "logprobs": null,
+          "finish_reason": "stop",
+          "stop_reason": null,
+          "token_ids": null,
+          "routed_experts": null,
+          "weight_versions": null
+        }
+      ],
+      "service_tier": null,
+      "system_fingerprint": "vllm-0.33.0rc1.dev1350+g362b0485e-tp2-8240fae3",
+      "usage": {
+        "prompt_tokens": 27,
+        "total_tokens": 30,
+        "completion_tokens": 3,
+        "completion_tokens_details": null
+      },
+      "prompt_logprobs": null,
+      "prompt_token_ids": null,
+      "prompt_text": null,
+      "kv_transfer_params": null,
+      "ec_transfer_params": null,
+      "metrics": null
+    },
+    "text": "42",
+    "prompt_tokens": 27,
+    "completion_tokens": 3
+  },
+  "red": {
+    "latency_s": 0.194,
+    "response": {
+      "id": "chatcmpl-9f6fed94fb07a946",
+      "object": "chat.completion",
+      "created": 1794466753,
+      "model": "octave-dense",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Red",
+            "refusal": null,
+            "audio": null,
+            "function_call": null,
+            "reasoning": null
+          },
+          "logprobs": null,
+          "finish_reason": "stop",
+          "stop_reason": null,
+          "token_ids": null,
+          "routed_experts": null,
+          "weight_versions": null
+        }
+      ],
+      "service_tier": null,
+      "system_fingerprint": "vllm-0.33.0rc1.dev1350+g362b0485e-tp2-8240fae3",
+      "usage": {
+        "prompt_tokens": 89,
+        "total_tokens": 91,
+        "completion_tokens": 2,
+        "completion_tokens_details": null
+      },
+      "prompt_logprobs": null,
+      "prompt_token_ids": null,
+      "prompt_text": null,
+      "kv_transfer_params": null,
+      "ec_transfer_params": null,
+      "metrics": null
+    },
+    "text": "Red",
+    "prompt_tokens": 89,
+    "completion_tokens": 2
+  },
+  "blue": {
+    "latency_s": 0.184,
+    "response": {
+      "id": "chatcmpl-8f89e672028f3577",
+      "object": "chat.completion",
+      "created": 1794466753,
+      "model": "octave-dense",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": " Blue",
+            "refusal": null,
+            "audio": null,
+            "function_call": null,
+            "reasoning": null
+          },
+          "logprobs": null,
+          "finish_reason": "stop",
+          "stop_reason": null,
+          "token_ids": null,
+          "routed_experts": null,
+          "weight_versions": null
+        }
+      ],
+      "service_tier": null,
+      "system_fingerprint": "vllm-0.33.0rc1.dev1350+g362b0485e-tp2-8240fae3",
+      "usage": {
+        "prompt_tokens": 89,
+        "total_tokens": 91,
+        "completion_tokens": 2,
+        "completion_tokens_details": null
+      },
+      "prompt_logprobs": null,
+      "prompt_token_ids": null,
+      "prompt_text": null,
+      "kv_transfer_params": null,
+      "ec_transfer_params": null,
+      "metrics": null
+    },
+    "text": " Blue",
+    "prompt_tokens": 89,
+    "completion_tokens": 2
+  },
+  "long": {
+    "latency_s": 1.528,
+    "response": {
+      "id": "chatcmpl-a5166e49de11a105",
+      "object": "chat.completion",
+      "created": 1794466753,
+      "model": "octave-dense",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "JADE-482",
+            "refusal": null,
+            "audio": null,
+            "function_call": null,
+            "reasoning": null
+          },
+          "logprobs": null,
+          "finish_reason": "stop",
+          "stop_reason": null,
+          "token_ids": null,
+          "routed_experts": null,
+          "weight_versions": null
+        }
+      ],
+      "service_tier": null,
+      "system_fingerprint": "vllm-0.33.0rc1.dev1350+g362b0485e-tp2-8240fae3",
+      "usage": {
+        "prompt_tokens": 3965,
+        "total_tokens": 3972,
+        "completion_tokens": 7,
+        "completion_tokens_details": null
+      },
+      "prompt_logprobs": null,
+      "prompt_token_ids": null,
+      "prompt_text": null,
+      "kv_transfer_params": null,
+      "ec_transfer_params": null,
+      "metrics": null
+    },
+    "text": "JADE-482",
+    "prompt_tokens": 3965,
+    "completion_tokens": 7
+  }
+}
