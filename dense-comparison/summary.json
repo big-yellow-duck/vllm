@@ -1,0 +1,244 @@
+{
+  "historical": true,
+  "new_gpu_measurements": false,
+  "model": "Qwen/Qwen3.8-27B-FP8",
+  "hardware": "2 x Radeon AI PRO R9700 (gfx1201), TP2",
+  "kv_budget_bytes_per_gpu": 8393906176,
+  "kv_budget_gib_per_gpu": 7.817434310913086,
+  "slots_bytes_per_token_per_kv_head": {
+    "bf16": 1024,
+    "fp8": 512,
+    "octave_k3v4": 248,
+    "octave_k3v3": 216,
+    "octave_k3v3_compact": 196
+  },
+  "format_source_sha256": "6a2be0cd7a9a1d946e95211c553e16d317ea7c133176366afe73beb6d91cb98c",
+  "runs": {
+    "bf16": {
+      "backend": [
+        "TRITON_ATTN"
+      ],
+      "capacity_tokens": 236700,
+      "attention_block_size": 832,
+      "prefix_hit_rate": 0.7302768096001873,
+      "vram_gib_after": {
+        "128": 26.45458221435547,
+        "129": 26.411678314208984
+      },
+      "results": {
+        "1": {
+          "requests": 8,
+          "aggregate_tps": 30.771426834695053,
+          "output_tps": 30.79336530450547,
+          "ttft_ms": 986.1782193183899,
+          "e2e_s": 16.63750258088112,
+          "itl_ms": 30.626920746263927,
+          "window_s": 133.11049962043762
+        },
+        "2": {
+          "requests": 16,
+          "aggregate_tps": 54.52507446045933,
+          "output_tps": 27.30778019057013,
+          "ttft_ms": 1415.2731150388718,
+          "e2e_s": 18.77532860636711,
+          "itl_ms": 33.97080652167886,
+          "window_s": 150.24280261993408
+        },
+        "4": {
+          "requests": 32,
+          "aggregate_tps": 93.8209507805906,
+          "output_tps": 23.538930363049577,
+          "ttft_ms": 2890.6567618250847,
+          "e2e_s": 21.82455612719059,
+          "itl_ms": 37.04954992884992,
+          "window_s": 174.63050484657288
+        },
+        "8": {
+          "requests": 64,
+          "aggregate_tps": 147.62637645471722,
+          "output_tps": 18.60112829310039,
+          "ttft_ms": 5448.92917200923,
+          "e2e_s": 27.73644955456257,
+          "itl_ms": 43.612375767963506,
+          "window_s": 221.9657542705536
+        }
+      }
+    },
+    "octave_bf16_pair": {
+      "backend": [
+        "ROCM_OCTAVE_RDNA4"
+      ],
+      "capacity_tokens": 786432,
+      "attention_block_size": 3264,
+      "prefix_hit_rate": 0.6612130793061044,
+      "vram_gib_after": {
+        "128": 28.43343734741211,
+        "129": 28.385894775390625
+      },
+      "results": {
+        "1": {
+          "requests": 8,
+          "aggregate_tps": 27.357467336328636,
+          "output_tps": 27.42775901837581,
+          "ttft_ms": 1851.4927625656128,
+          "e2e_s": 18.71410980820656,
+          "itl_ms": 32.99762428156784,
+          "window_s": 149.7214617729187
+        },
+        "2": {
+          "requests": 16,
+          "aggregate_tps": 44.025830566623235,
+          "output_tps": 22.28880351171585,
+          "ttft_ms": 2716.4393812417984,
+          "e2e_s": 23.25354167819023,
+          "itl_ms": 40.18830381144283,
+          "window_s": 186.0725827217102
+        },
+        "4": {
+          "requests": 32,
+          "aggregate_tps": 68.75548542758362,
+          "output_tps": 17.70585992603703,
+          "ttft_ms": 5479.445271193981,
+          "e2e_s": 29.778509460389614,
+          "itl_ms": 47.549155068724126,
+          "window_s": 238.29371428489685
+        },
+        "8": {
+          "requests": 64,
+          "aggregate_tps": 116.16211807021078,
+          "output_tps": 15.058074216838165,
+          "ttft_ms": 8773.898534476757,
+          "e2e_s": 35.24808219075203,
+          "itl_ms": 51.805203827918156,
+          "window_s": 282.0885202884674
+        }
+      }
+    },
+    "fp8": {
+      "backend": [
+        "ROCM_SEGMENTED_ATTN"
+      ],
+      "capacity_tokens": 445098,
+      "attention_block_size": 1568,
+      "prefix_hit_rate": 0.7058103314787807,
+      "vram_gib_after": {
+        "128": 27.050582885742188,
+        "129": 26.99527359008789
+      },
+      "results": {
+        "1": {
+          "requests": 8,
+          "aggregate_tps": 30.979967421521142,
+          "output_tps": 30.998119789884907,
+          "ttft_ms": 1009.6170604228973,
+          "e2e_s": 16.52558821439743,
+          "itl_ms": 30.36225582755475,
+          "window_s": 132.21447086334229
+        },
+        "2": {
+          "requests": 16,
+          "aggregate_tps": 55.3924752612033,
+          "output_tps": 27.730805317884503,
+          "ttft_ms": 1452.185481786728,
+          "e2e_s": 18.480907648801804,
+          "itl_ms": 33.322439035090916,
+          "window_s": 147.89012336730957
+        },
+        "4": {
+          "requests": 32,
+          "aggregate_tps": 95.90250769341232,
+          "output_tps": 24.036139120173186,
+          "ttft_ms": 2969.739615917206,
+          "e2e_s": 21.350728578865528,
+          "itl_ms": 35.96790175731868,
+          "window_s": 170.84016251564026
+        },
+        "8": {
+          "requests": 64,
+          "aggregate_tps": 152.1912301975018,
+          "output_tps": 19.14002704906693,
+          "ttft_ms": 5504.69908490777,
+          "e2e_s": 26.903624072670937,
+          "itl_ms": 41.87289567084695,
+          "window_s": 215.30806970596313
+        }
+      }
+    },
+    "octave_fp8_pair": {
+      "backend": [
+        "ROCM_OCTAVE_RDNA4"
+      ],
+      "capacity_tokens": 786432,
+      "attention_block_size": 3264,
+      "prefix_hit_rate": 0.6611342088640356,
+      "vram_gib_after": {
+        "128": 28.699054718017578,
+        "129": 28.63983154296875
+      },
+      "results": {
+        "1": {
+          "requests": 8,
+          "aggregate_tps": 27.35215159346522,
+          "output_tps": 27.422260582428933,
+          "ttft_ms": 1849.6540784835815,
+          "e2e_s": 18.717457503080368,
+          "itl_ms": 33.00751492002006,
+          "window_s": 149.75055932998657
+        },
+        "2": {
+          "requests": 16,
+          "aggregate_tps": 44.05579423153297,
+          "output_tps": 22.30573241122739,
+          "ttft_ms": 2716.643810272217,
+          "e2e_s": 23.237762719392776,
+          "itl_ms": 40.15682984704841,
+          "window_s": 185.94602918624878
+        },
+        "4": {
+          "requests": 32,
+          "aggregate_tps": 68.80127105829638,
+          "output_tps": 17.717891369772286,
+          "ttft_ms": 5350.177608430386,
+          "e2e_s": 29.759018436074257,
+          "itl_ms": 47.76427416593828,
+          "window_s": 238.1351354122162
+        },
+        "8": {
+          "requests": 64,
+          "aggregate_tps": 116.09757103380579,
+          "output_tps": 15.062601930501957,
+          "ttft_ms": 8822.024177759886,
+          "e2e_s": 35.26799689978361,
+          "itl_ms": 51.75010242486653,
+          "window_s": 282.24535369873047
+        }
+      }
+    }
+  },
+  "input_checks": [
+    {
+      "run": "bf16",
+      "report_sha256": "a5be4c62c0ff51947e85bcda34e3fba8c2cac8b91b22171aa24343c8e39db808",
+      "comparison_sha256": "ba6d26a8189ebae23345aeadc4fcd7e64ea65062e4feb0e321e5f4e83f4adebe",
+      "requests": 120
+    },
+    {
+      "run": "octave_bf16_pair",
+      "report_sha256": "20a3fc3a774d72d7554d4e3811282d36d33a98f01c2fae3a051aaa29fd91c5d2",
+      "comparison_sha256": "ba6d26a8189ebae23345aeadc4fcd7e64ea65062e4feb0e321e5f4e83f4adebe",
+      "requests": 120
+    },
+    {
+      "run": "fp8",
+      "report_sha256": "ccfe5bc16128c02344de961b94f0adef51022a0c0aae1c8acf7dacd66b52cc44",
+      "comparison_sha256": "79137341201299a50e3e21a604551ba551811063ff624dc5dc1e931ce3b623d5",
+      "requests": 120
+    },
+    {
+      "run": "octave_fp8_pair",
+      "report_sha256": "24b6f483fbfd4ce61872cd5021d61db1b87148bcff8e678a29d0de0bf6bdd11a",
+      "comparison_sha256": "79137341201299a50e3e21a604551ba551811063ff624dc5dc1e931ce3b623d5",
+      "requests": 120
+    }
+  ]
+}

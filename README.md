@@ -125,3 +125,10 @@ overlap without claiming those changes are integrated.
 
 AI assistance: OpenAI Codex assisted with implementation, validation,
 result collection and drafting. No claim of completed human review is made.
+
+## Additional BF16/FP8 serving comparisons
+
+The [dense comparison report](dense-comparison/README.md) adds audited historical
+BF16 Triton and FP8 segmented Triton serving results, packed-cache size calculations,
+ordinary Triton FP8 capacity evidence, per-request measurements and a summary chart.
+These are earlier development measurements; no new GPU benchmark is claimed.
