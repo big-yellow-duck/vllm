@@ -7,6 +7,10 @@ from typing import ClassVar, Self
 
 import torch
 
+from vllm.model_executor.layers.fusion.quant_activation import (
+    QuantizedActivation,
+    as_quantized_activation,
+)
 from vllm.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
 from vllm.model_executor.layers.quantization.utils.fp8_utils import (
     process_fp8_weight_block_strategy,
@@ -100,7 +104,7 @@ class Fp8BlockScaledMMLinearKernel(
     def apply_weights(
         self,
         layer: torch.nn.Module,
-        x: torch.Tensor,
+        x: torch.Tensor | QuantizedActivation,
         bias: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
@@ -111,22 +115,24 @@ class Fp8BlockScaledMMLinearKernel(
         input_scale = params.input_scale
         scale_up = params.input_scale_ub
 
-        # View input as 2D matrix for fp8 methods
-        input_2d = x.view(-1, x.shape[-1])
-        output_shape = [*x.shape[:-1], weight.shape[0]]
-
-        if self.apply_input_quant:
-            q_input, input_scale = self.quant_fp8(
-                input_2d, input_scale, scale_up, use_triton=self.use_triton
-            )
+        if isinstance(x, QuantizedActivation):
+            activation = as_quantized_activation(x, self.input_quant_key())
+            assert activation is not None
+            activation = activation.flatten()
+            q_input, input_scale = activation.data, activation.scale
+            input_shape = x.orig_shape
         else:
-            q_input = input_2d
-            # Provide a concrete placeholder so apply_block_scaled_mm args are
-            # always Tensors. Subclasses with apply_input_quant=False must not
-            # use As in apply_block_scaled_mm.
-            input_scale = (
-                input_scale if input_scale is not None else input_2d.new_empty(1)
-            )
+            input_shape = x.shape
+            input_2d = x.view(-1, input_shape[-1])
+            if self.apply_input_quant:
+                q_input, input_scale = self.quant_fp8(
+                    input_2d, input_scale, scale_up, use_triton=self.use_triton
+                )
+            else:
+                q_input = input_2d
+                # Keep a tensor placeholder for backends that accept BF16.
+                if input_scale is None:
+                    input_scale = input_2d.new_empty(1)
 
         output = self.apply_block_scaled_mm(
             A=q_input,
@@ -137,7 +143,7 @@ class Fp8BlockScaledMMLinearKernel(
 
         if bias is not None:
             output = output + bias
-        return output.to(dtype=out_dtype).view(*output_shape)
+        return output.to(dtype=out_dtype).view(*input_shape[:-1], weight.shape[0])
 
     @abstractmethod
     def apply_block_scaled_mm(

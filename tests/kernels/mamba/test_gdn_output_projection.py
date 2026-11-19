@@ -181,3 +181,125 @@ def test_fused_gated_rms_norm_fp8_matches_chain(
     dist = (codes(q) - codes(ref_q)).abs()
     assert dist.max().item() <= 1
     assert (dist > 0).float().mean().item() <= 1e-4
+
+
+@pytest.mark.parametrize(
+    "num_tokens,key_heads,state_dtype,dim_first",
+    [
+        (1, 8, torch.bfloat16, False),
+        (7, 8, torch.bfloat16, True),
+        (4, 16, torch.float32, False),
+    ],
+)
+@torch.inference_mode()
+def test_flydsl_gdn_decode_cache_and_fp8_output(
+    num_tokens: int, key_heads: int, state_dtype: torch.dtype, dim_first: bool
+) -> None:
+    if not current_platform.is_rocm():
+        pytest.skip("FlyDSL GDN decode requires ROCm")
+    from vllm.platforms.rocm import on_rdna4
+
+    if not on_rdna4():
+        pytest.skip("FlyDSL GDN decode requires RDNA4")
+    pytest.importorskip("flydsl")
+    pytest.importorskip("aiter.ops.flydsl.kernels.buffer_ops")
+
+    from vllm.model_executor.layers.mamba.ops.causal_conv1d import causal_conv1d_update
+    from vllm.model_executor.layers.quantization.utils.fp8_utils import (
+        per_token_group_quant_fp8,
+    )
+    from vllm.models.qwen3_5.amd.flydsl_gdn_decode import flydsl_gdn_decode
+    from vllm.models.qwen3_5.common.fused_gdn_gated_norm import fused_gdn_gated_rms_norm
+    from vllm.third_party.flash_linear_attention.ops.fused_recurrent import (
+        fused_recurrent_gated_delta_rule_packed_decode,
+    )
+
+    head_dim, width = 128, 4
+    value_heads = 3 * key_heads
+    channels = (2 * key_heads + value_heads) * head_dim
+    out_width = value_heads * head_dim
+    generator = torch.Generator(device="cuda").manual_seed(8)
+    slots = num_tokens + 2
+
+    def rand(*shape, dtype=torch.bfloat16, scale=1.0):
+        t = torch.randn(shape, device="cuda", generator=generator)
+        return (t * scale).to(dtype)
+
+    conv = rand(slots, channels, width - 1, scale=0.25)
+    if not dim_first:
+        conv = conv.transpose(1, 2).contiguous().transpose(1, 2)
+    state = rand(slots, value_heads, head_dim, head_dim, dtype=state_dtype, scale=0.03)
+    conv_ref, state_ref = conv.clone(), state.clone()
+    indices = torch.arange(num_tokens, 0, -1, device="cuda", dtype=torch.int32)
+    if num_tokens > 1:
+        indices[-1] = 0
+    conv_weight = rand(channels, width, scale=0.3)
+    a_log = rand(value_heads, dtype=torch.float32, scale=0.2) - 3
+    bias = rand(value_heads, scale=0.2)
+    norm_weight = 1 + rand(head_dim, scale=0.1)
+    q = torch.empty((num_tokens, out_width), device="cuda", dtype=torch.float8_e4m3fn)
+    scales = torch.empty((num_tokens, value_heads), device="cuda", dtype=torch.float32)
+    core = torch.empty_like(q, dtype=torch.bfloat16)
+    eps = 1e-6
+
+    for _ in range(3):
+        qkvz = rand(num_tokens, channels + out_width, scale=0.5)
+        ba = rand(num_tokens, 2 * value_heads, scale=0.2)
+        b, a = ba.chunk(2, dim=-1)
+        qkv, z = qkvz.split((channels, out_width), dim=-1)
+        convolved = causal_conv1d_update(
+            qkv,
+            conv_ref,
+            conv_weight,
+            None,
+            "silu",
+            conv_state_indices=indices,
+            out=torch.empty_like(qkv),
+        )
+        fused_recurrent_gated_delta_rule_packed_decode(
+            mixed_qkv=convolved,
+            a=a,
+            b=b,
+            A_log=a_log,
+            dt_bias=bias,
+            scale=head_dim**-0.5,
+            initial_state=state_ref,
+            out=core.view(num_tokens, 1, value_heads, head_dim),
+            ssm_state_indices=indices,
+            use_qk_l2norm_in_kernel=True,
+        )
+        fused_gdn_gated_rms_norm(
+            core, z, norm_weight, core, eps, value_heads, head_dim, True, "silu"
+        )
+        q_ref, scale_ref = per_token_group_quant_fp8(core, head_dim, use_ue8m0=False)
+        flydsl_gdn_decode(
+            qkvz,
+            ba,
+            conv_weight,
+            conv,
+            state,
+            indices,
+            a_log,
+            bias,
+            norm_weight,
+            q,
+            scales,
+            eps,
+            num_tokens,
+        )
+        torch.testing.assert_close(conv, conv_ref, rtol=0, atol=0)
+        state_error = state.float() - state_ref.float()
+        assert state_error.norm() < 0.003 * state_ref.float().norm()
+        assert state_error.abs().max() < 0.006
+        torch.testing.assert_close(state[0], state_ref[0], rtol=0, atol=0)
+        torch.testing.assert_close(scales, scale_ref, rtol=0.02, atol=1e-10)
+        actual = q.float().view(num_tokens, value_heads, head_dim) * scales.unsqueeze(
+            -1
+        )
+        expected = q_ref.float().view(
+            num_tokens, value_heads, head_dim
+        ) * scale_ref.unsqueeze(-1)
+        # Small differences before quantization can flip an FP8 rounding boundary.
+        assert (actual - expected).norm() < 0.025 * expected.norm()
+        if num_tokens > 1:
+            assert actual[-1].count_nonzero().item() == 0

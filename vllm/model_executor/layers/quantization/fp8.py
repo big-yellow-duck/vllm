@@ -33,6 +33,7 @@ from vllm.model_executor.layers.fused_moe.oracle.fp8 import (
     resolve_fp8_moe_weight_block_shape,
     select_fp8_moe_backend,
 )
+from vllm.model_executor.layers.fusion.quant_activation import QuantizedActivation
 from vllm.model_executor.layers.linear import (
     LinearBase,
     LinearMethodBase,
@@ -420,7 +421,7 @@ class Fp8LinearMethod(LinearMethodBase):
     def apply(
         self,
         layer: torch.nn.Module,
-        x: torch.Tensor,
+        x: torch.Tensor | QuantizedActivation,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
         # if batch invariant mode is enabled, prefer direct FP8 path
@@ -438,6 +439,7 @@ class Fp8LinearMethod(LinearMethodBase):
                     return self.fp8_linear.apply_weights(layer, x, bias)
 
                 # per-tensor/channel: dequant to BF16 and run GEMM
+                assert isinstance(x, torch.Tensor)
                 weight_fp8 = layer.weight.to(torch.bfloat16)
                 weight_scale = layer.weight_scale.to(torch.bfloat16)
                 if weight_scale.numel() == 1:

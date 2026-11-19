@@ -9,6 +9,10 @@ from vllm.model_executor.layers.quantization.compressed_tensors.triton_scaled_mm
     triton_scaled_mm,
 )
 from vllm.model_executor.layers.quantization.utils import replace_parameter
+from vllm.model_executor.layers.quantization.utils.quant_utils import (
+    QuantKey,
+    kFp8Dynamic128Sym,
+)
 from vllm.model_executor.layers.quantization.utils.w8a8_utils import (
     convert_to_channelwise,
 )
@@ -192,6 +196,15 @@ class TritonFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
 
 
 class TritonFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
+    def input_quant_key(self) -> QuantKey | None:
+        # Contiguous FP8 data and row-major FP32 group scales.
+        if (
+            self.config.activation_quant_key == kFp8Dynamic128Sym
+            and self.weight_group_shape.col == 128
+        ):
+            return kFp8Dynamic128Sym
+        return None
+
     @classmethod
     def is_supported(cls, compute_capability=None):
         if not (current_platform.is_cuda_alike() or current_platform.is_xpu()):

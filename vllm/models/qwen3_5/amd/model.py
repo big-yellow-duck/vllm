@@ -27,9 +27,8 @@
 Mirrors `../nvidia/model.py` (eager + breakable CUDA graphs) with the ROCm
 counterparts of its fusions: Triton Gemma RMSNorm instead of FlashInfer's, the
 row-parallel all-reduce deferred into AITER's fused all-reduce + Gemma RMSNorm,
-and the fused QK-norm + RoPE + gate kernel. FlashInfer's FP8 / NVFP4 norm-quant
-fusions have no ROCm counterpart here, so the norms emit unquantized
-activations.
+and the fused QK-norm + RoPE + gate kernel. On RDNA4, eligible GDN decode
+can use FlyDSL to update the states and emit group-quantized FP8 activations.
 """
 
 from collections.abc import Iterable
@@ -45,6 +44,7 @@ from transformers import (
     Qwen3_5TextConfig,
 )
 
+from vllm import envs
 from vllm._aiter_ops import rocm_aiter_ops
 from vllm.config import MultiModalConfig, VllmConfig
 from vllm.distributed import (
@@ -58,6 +58,10 @@ from vllm.model_executor.layers.fused_allreduce_gemma_rms_norm import (
     fused_allreduce_gemma_rms_norm,
 )
 from vllm.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
+from vllm.model_executor.layers.fusion.quant_activation import (
+    expose_input_quant_key,
+    get_input_quant_key,
+)
 from vllm.model_executor.layers.logits_processor import LogitsProcessor
 from vllm.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
     QwenGatedDeltaNetAttention,
@@ -67,6 +71,10 @@ from vllm.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFuncCalculator,
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
+)
+from vllm.model_executor.layers.quantization.fp8 import Fp8Config, Fp8LinearMethod
+from vllm.model_executor.layers.quantization.utils.quant_utils import (
+    kFp8Dynamic128Sym,
 )
 from vllm.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
@@ -220,6 +228,29 @@ class Qwen3_5DecoderLayer(Qwen3NextDecoderLayer):
         )
 
         if self.layer_type == "linear_attention":
+            fused_fp8 = None
+            if (
+                envs.VLLM_ROCM_USE_FLYDSL_QWEN_FP8
+                and not envs.VLLM_ROCM_USE_AITER
+                and not envs.VLLM_BATCH_INVARIANT
+                and vllm_config.lora_config is None
+                and vllm_config.speculative_config is None
+                and model_config.dtype == torch.bfloat16
+                and parallel_config.tensor_parallel_size in (1, 2)
+                and config.model_type == "qwen3_5_text"
+                and config.linear_num_key_heads == 16
+                and config.linear_num_value_heads == 48
+                and config.linear_key_head_dim == config.linear_value_head_dim == 128
+                and config.linear_conv_kernel_dim == 4
+                and isinstance(quant_config, Fp8Config)
+                and quant_config.weight_block_size == [128, 128]
+            ):
+                from vllm.platforms.rocm import on_rdna4
+
+                if on_rdna4():
+                    from .flydsl_gdn_decode import fused_gdn_fp8
+
+                    fused_fp8 = fused_gdn_fp8
             self.linear_attn = QwenGatedDeltaNetAttention(
                 config=config,
                 vllm_config=vllm_config,
@@ -229,7 +260,14 @@ class Qwen3_5DecoderLayer(Qwen3NextDecoderLayer):
                 # Recover the inductor gated-norm fusion (z read strided
                 # from packed qkvz).
                 fused_gdn_gated_rms_norm=_fused_gdn_gated_rms_norm,
+                fused_gdn_fp8=fused_fp8,
             )
+            if fused_fp8 is not None:
+                out_proj = self.linear_attn.out_proj
+                if isinstance(out_proj.quant_method, Fp8LinearMethod):
+                    expose_input_quant_key(out_proj, out_proj.quant_method.fp8_linear)
+                if get_input_quant_key(out_proj) == kFp8Dynamic128Sym:
+                    logger.info_once("Using FlyDSL group-FP8 GDN on RDNA4")
         elif self.layer_type == "full_attention":
             self.self_attn = Qwen3NextAttention(
                 config,

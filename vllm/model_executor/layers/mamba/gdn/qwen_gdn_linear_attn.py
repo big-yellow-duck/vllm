@@ -703,6 +703,7 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
         fused_gdn_gated_rms_norm: (
             Callable[..., torch.Tensor | QuantizedActivation] | None
         ) = None,
+        fused_gdn_fp8: (Callable[..., QuantizedActivation | None] | None) = None,
     ) -> None:
         super().__init__(config, vllm_config, prefix)
 
@@ -868,6 +869,7 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
         # norm that reads z strided from the packed qkvz projection and
         # returns the out_proj input: `out`, or a pre-quantized activation.
         self._fused_gdn_gated_rms_norm = fused_gdn_gated_rms_norm
+        self._fused_gdn_fp8 = fused_gdn_fp8
         self.gdn_decode_kernel = envs.VLLM_GDN_DECODE_KERNEL.strip().lower()
         if self.gdn_decode_kernel == "cuda" and current_platform.is_cuda_alike():
             reason = self._fused_gdn_decode_unsupported_reason(vllm_config)
@@ -1336,6 +1338,12 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
                 enable=num_tokens <= _BA_PROJ_OVERLAP_MAX_TOKENS
                 and torch.cuda.is_current_stream_capturing(),
             )
+
+        if self._fused_gdn_fp8 is not None:
+            quantized = self._fused_gdn_fp8(self, mixed_qkvz, ba)
+            if quantized is not None:
+                output, _ = self.out_proj(quantized)
+                return output
 
         use_fused_gdn_spec_decode = (
             self.enable_fused_gdn_spec_decode
