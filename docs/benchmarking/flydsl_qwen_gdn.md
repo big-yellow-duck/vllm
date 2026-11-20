@@ -176,3 +176,68 @@ Use the serving command above with `--attention-backend ROCM_SEGMENTED_ATTN`,
   "attention_backend": "ROCM_SEGMENTED_ATTN"
 }'
 ```
+
+## Reduction and synchronization profiling
+
+The baseline for this follow-up is `20676974df`. ROCprofiler thread traces
+on the R9700s attributed 75% of sampled stalls at one request and eight
+verification positions to vector-memory load waits. The compiled
+cross-lane reductions already used DPP and VALU permutations. The
+per-lane recurrent dot products used ordered FP32 sums. The workgroup
+fences also emitted global-memory waits and cache invalidation at shared
+memory handoffs.
+[ROCprofiler thread trace](https://rocm.docs.amd.com/projects/rocprofiler-sdk/en/docs-10.0.0/how-to/using-thread-trace.html)
+
+The verifier uses scalar buffer loads for wave-uniform request metadata
+and issues each snapshot-slot load before its dot products. That removes
+the LDS lookup and lets the scheduler overlap the load with recurrence
+arithmetic. Ordinary decode assigns separate producer waves to Q and K and
+reads their LDS fragments as vectors.
+
+Both kernels fence LDS at workgroup handoffs. The release and acquire
+fences carry LLVM's local-address-space annotation, and kernel completion
+orders the global cache stores before the next dispatch. Workgroup
+rendezvous protect the cross-wave LDS dependencies. The gfx1201 ISA keeps
+two workgroup rendezvous in decode and three in verification, with the
+global cache invalidations removed from those handoffs.
+[LLVM AMDGPU fence address spaces](https://llvm.org/docs/AMDGPUUsage.html#fence-and-address-spaces)
+
+The final kernel uses the original FP32 sum order. Reassociation sped up the
+isolated kernel and reduced DFlash2 acceptance from 5.20 to 4.31 tokens per
+verification step on the four-request, 192-token workload. The final kernel
+matched the previous monokernel bit for bit on its convolution history,
+recurrent snapshots, FP8 values, and scales across 64 verification rounds
+per GPU.
+
+The latencies below compare warmed graphs over the same inputs on each GPU
+with AITER absent. Each sample replays each graph 12 times with 128 calls per
+graph. The table reports the median of seven samples per shape.
+
+| Mode | Requests | Positions per request | GPU 0 before → after | GPU 1 before → after |
+| --- | ---: | ---: | ---: | ---: |
+| Decode | 1 | 1 | 6.14 → 6.05 µs | 6.18 → 6.01 µs |
+| Decode | 8 | 1 | 10.30 → 10.26 µs | 10.80 → 10.49 µs |
+| Verify | 1 | 1 | 7.24 → 5.79 µs | 7.29 → 5.80 µs |
+| Verify | 1 | 8 | 24.42 → 20.51 µs | 24.39 → 20.34 µs |
+| Verify | 4 | 8 | 33.27 → 27.38 µs | 33.65 → 27.61 µs |
+| Verify | 8 | 2 | 19.60 → 16.13 µs | 19.75 → 16.34 µs |
+| Verify | 8 | 8 | 58.64 → 47.39 µs | 59.17 → 47.84 µs |
+
+The TP2 DFlash2 serving comparison used the same segmented-attention recipe,
+prompt lengths, and throughput metrics as above.
+
+| Prompt tokens | Concurrent requests | Decode tok/s per request, before → after | Aggregate tok/s, before → after |
+| ---: | ---: | ---: | ---: |
+| 192 | 1 | 159.54 → 157.80 | 137.28 → 135.04 |
+| 192 | 4 | 90.55 → 90.72 | 226.99 → 227.39 |
+| 192 | 8 | 74.88 → 77.63 | 271.55 → 284.56 |
+| 2,048 | 1 | 85.11 → 85.13 | 63.80 → 63.88 |
+| 2,048 | 4 | 73.29 → 73.43 | 133.12 → 133.25 |
+| 2,048 | 8 | 56.06 → 57.17 | 137.38 → 137.38 |
+
+All four 96-token greedy smoke completions matched the preceding
+monokernel. Mean acceptance length was 5.20 tokens in both runs of the
+four-request, 192-token workload. The 96-question GSM8K sample at concurrency
+four scored 61 before and 59 after. The serving trace recorded 192 FlyDSL
+verification launches on each rank, along with segmented attention and the
+DFlash2 selector.

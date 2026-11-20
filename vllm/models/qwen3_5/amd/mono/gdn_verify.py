@@ -8,7 +8,7 @@ from functools import lru_cache
 import flydsl.compiler as flyc
 import flydsl.expr as fx
 import torch
-from flydsl.expr import gpu, range_constexpr
+from flydsl.expr import gpu, range_constexpr, rocdl
 from flydsl.expr import math as fmath
 from flydsl.expr.typing import Float32, Int32, Int64, Stream, T
 
@@ -20,6 +20,7 @@ from .common import (
     buffer_ptr,
     conv_result,
     exp,
+    lds_barrier,
     load_conv_weights,
     load_fp32_vec,
     rsqrt,
@@ -70,7 +71,6 @@ def _build_verify(
         decay: fx.Array[Float32, max_tokens * VALUES_PER_KEY, 16]
         beta: fx.Array[Float32, max_tokens * VALUES_PER_KEY, 16]
         output: fx.Array[Float32, max_tokens * value_channels, 16]
-        dest: fx.Array[Int32, max_tokens, 16]
 
     @flyc.kernel(known_block_size=[threads, 1, 1])
     def qwen_gdn_mono_verify(
@@ -93,15 +93,17 @@ def _build_verify(
     ):
         req, key_head = gpu.block_idx.x, gpu.block_idx.y
         tid = gpu.thread_idx.x
-        start_ptr = buffer_ptr(starts, T.i32) + req
-        begin = fx.ptr_load(start_ptr)
-        count = fx.ptr_load(start_ptr + 1) - begin
-        index_ptr = buffer_ptr(indices, T.i32) + Int64(req) * index_stride
-        conv_slot = Int64(fx.ptr_load(index_ptr))
-        prefix = fx.ptr_load(buffer_ptr(accepted, T.i32) + req)
+        # Every lane in the wave reads the same request metadata.
+        start_buf = buffer_ptr(starts, T.i32)
+        begin = rocdl.s_buffer_load(start_buf, req)
+        count = rocdl.s_buffer_load(start_buf, req + 1) - begin
+        index_buf = buffer_ptr(indices, T.i32)
+        index_row = Int32(req) * Int32(index_stride)
+        conv_slot = Int64(rocdl.s_buffer_load(index_buf, index_row))
+        prefix = rocdl.s_buffer_load(buffer_ptr(accepted, T.i32), req)
         valid_prefix = (prefix > 0) & (prefix <= max_tokens)
         source_column = valid_prefix.select(prefix - 1, Int32(0))
-        source = Int64(fx.ptr_load(index_ptr + source_column))
+        source = Int64(rocdl.s_buffer_load(index_buf, index_row + source_column))
         if (
             (count > 0)
             & (count <= max_tokens)
@@ -146,9 +148,6 @@ def _build_verify(
                     fx.ptr_store(x, conv_buf + cache_offset + (t + 2) * time_stride)
                     yield [h[1], h[2], x]
 
-            if tid < count:
-                dest = fx.ptr_load(index_ptr + tid)
-                fx.ptr_store(dest, shared.dest.ptr + tid)
             if tid < count * VALUES_PER_KEY:
                 t = tid // VALUES_PER_KEY
                 gate_head = key_head * VALUES_PER_KEY + tid % VALUES_PER_KEY
@@ -164,7 +163,7 @@ def _build_verify(
                     softplus = Float32(fmath.log(Float32(1.0) + exp(delta)))
                 fx.ptr_store(exp(-exp(log_rate) * softplus), shared.decay.ptr + tid)
                 fx.ptr_store(sigmoid(b), shared.beta.ptr + tid)
-            gpu.barrier()
+            lds_barrier()
 
             # Normalize each token's Q and K once for all three V heads.
             lane, wave = tid % WAVE_SIZE, tid // WAVE_SIZE
@@ -178,7 +177,7 @@ def _build_verify(
                 scaled = qk * scale
                 for i in range_constexpr(VECTOR_WIDTH):
                     fx.ptr_store(scaled[i], ptr + i)
-            gpu.barrier()
+            lds_barrier()
 
             state_type = T.f32 if fp32_state else T.bf16
             src_buf = buffer_ptr(
@@ -203,6 +202,8 @@ def _build_verify(
                 # The engine chooses one of these snapshots next round.
                 for t, tiles in fx.range(Int32(0), count, Int32(1), init=[tile]):
                     t = Int32(t)
+                    # Start the uniform snapshot-slot load before the dot products.
+                    dest = Int64(rocdl.s_buffer_load(index_buf, index_row + t))
                     x_base = shared.projected.ptr + t * local_channels
                     q = fx.Vector.from_elements(
                         [
@@ -232,7 +233,6 @@ def _build_verify(
                             Float32(fx.BFloat16(o)),
                             shared.output.ptr + t * value_channels + head_offset + row,
                         )
-                    dest = Int64(fx.ptr_load(shared.dest.ptr + t))
                     if dest > 0:
                         dst = buffer_ptr(
                             state + dest * state_slot_stride * state_bytes, state_type
@@ -244,7 +244,7 @@ def _build_verify(
                                 vectors[part, None], dst + state_offset + offsets[part]
                             )
                     yield [h]
-            gpu.barrier()
+            lds_barrier()
 
             # A wave emits one token's complete gated FP8 value head.
             t = head_thread // WAVE_SIZE

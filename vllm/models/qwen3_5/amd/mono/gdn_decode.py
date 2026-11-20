@@ -8,7 +8,7 @@ from functools import lru_cache
 import flydsl.compiler as flyc
 import flydsl.expr as fx
 import torch
-from flydsl.expr import gpu, range_constexpr
+from flydsl.expr import gpu, range_constexpr, rocdl
 from flydsl.expr import math as fmath
 from flydsl.expr.typing import Float32, Int32, Int64, Stream, T
 
@@ -20,6 +20,7 @@ from .common import (
     buffer_ptr,
     conv_result,
     exp,
+    lds_barrier,
     load_conv_weights,
     load_fp32_vec,
     rsqrt,
@@ -71,10 +72,8 @@ def _build_decode(
 
     @fx.struct
     class Shared:
-        q: fx.Array[Float32, HEAD_DIM, 16]
-        k: fx.Array[Float32, HEAD_DIM, 16]
-        q_squares: fx.Array[Float32, partials, 16]
-        k_squares: fx.Array[Float32, partials, 16]
+        qk: fx.Array[Float32, 2 * HEAD_DIM, 16]
+        qk_squares: fx.Array[Float32, 2 * partials, 16]
         v: fx.Array[Float32, heads_per_block * HEAD_DIM, 16]
         output: fx.Array[Float32, heads_per_block * HEAD_DIM, 16]
         decay: fx.Array[Float32, heads_per_block, 16]
@@ -107,7 +106,7 @@ def _build_decode(
         key_head = head // VALUES_PER_KEY
         group = token * value_heads + head
         head_offset = local_head * HEAD_DIM
-        slot = Int64(fx.ptr_load(buffer_ptr(indices, T.i32) + token))
+        slot = Int64(rocdl.s_buffer_load(buffer_ptr(indices, T.i32), token))
         q_ptr = buffer_ptr(quantized, T.i32) + group * WAVE_SIZE + head_thread
         scale_ptr = buffer_ptr(scales, T.f32) + group
         if slot > 0:
@@ -120,39 +119,25 @@ def _build_decode(
             )
             input_base = token * projection_width
 
-            if tid < HEAD_DIM:
-                q_channel = key_head * HEAD_DIM + tid
-                k_channel = q_channel + key_heads * HEAD_DIM
-                q = Float32(
+            # Give Q and K separate producer waves and each channel one writer.
+            if tid < 2 * HEAD_DIM:
+                qk_head = key_head + tid // HEAD_DIM * key_heads
+                channel = qk_head * HEAD_DIM + tid % HEAD_DIM
+                qk = Float32(
                     _conv_silu(
                         x_buf,
                         input_base,
                         w_buf,
-                        q_channel,
+                        channel,
                         conv_buf,
                         conv_channel_stride,
                         conv_time_stride,
                     )
                 )
-                k = Float32(
-                    _conv_silu(
-                        x_buf,
-                        input_base,
-                        w_buf,
-                        k_channel,
-                        conv_buf,
-                        conv_channel_stride,
-                        conv_time_stride,
-                    )
-                )
-                fx.ptr_store(q, shared.q.ptr + tid)
-                fx.ptr_store(k, shared.k.ptr + tid)
-                q_square = sum_lanes(q * q, WAVE_SIZE)
-                k_square = sum_lanes(k * k, WAVE_SIZE)
+                fx.ptr_store(qk, shared.qk.ptr + tid)
+                square_sum = sum_lanes(qk * qk, WAVE_SIZE)
                 if tid % WAVE_SIZE == 0:
-                    wave = tid // WAVE_SIZE
-                    fx.ptr_store(q_square, shared.q_squares.ptr + wave)
-                    fx.ptr_store(k_square, shared.k_squares.ptr + wave)
+                    fx.ptr_store(square_sum, shared.qk_squares.ptr + tid // WAVE_SIZE)
 
             if head_thread < HEAD_DIM:
                 channel = qk_width + head * HEAD_DIM + head_thread
@@ -181,12 +166,12 @@ def _build_decode(
                     exp(-exp(log_rate) * softplus), shared.decay.ptr + local_head
                 )
                 fx.ptr_store(sigmoid(b), shared.beta.ptr + local_head)
-            gpu.barrier()
+            lds_barrier()
 
             q_square, k_square = Float32(0.0), Float32(0.0)
             for wave in range_constexpr(partials):
-                q_square += fx.ptr_load(shared.q_squares.ptr + wave)
-                k_square += fx.ptr_load(shared.k_squares.ptr + wave)
+                q_square += fx.ptr_load(shared.qk_squares.ptr + wave)
+                k_square += fx.ptr_load(shared.qk_squares.ptr + partials + wave)
             q_scale = rsqrt(q_square + 1e-6) * HEAD_DIM**-0.5
             k_scale = rsqrt(k_square + 1e-6)
             k_lane = head_thread % k_lanes
@@ -194,25 +179,9 @@ def _build_decode(
             for part in range_constexpr(vector_steps):
                 offset = (part * k_lanes + k_lane) * VECTOR_WIDTH
                 offsets.append(offset)
-                q_parts.append(
-                    fx.Vector.from_elements(
-                        [
-                            fx.ptr_load(shared.q.ptr + offset + i)
-                            for i in range(VECTOR_WIDTH)
-                        ],
-                        Float32,
-                    )
-                    * q_scale
-                )
+                q_parts.append(load_fp32_vec(shared.qk.ptr + offset) * q_scale)
                 k_parts.append(
-                    fx.Vector.from_elements(
-                        [
-                            fx.ptr_load(shared.k.ptr + offset + i)
-                            for i in range(VECTOR_WIDTH)
-                        ],
-                        Float32,
-                    )
-                    * k_scale
+                    load_fp32_vec(shared.qk.ptr + HEAD_DIM + offset) * k_scale
                 )
             decay = fx.ptr_load(shared.decay.ptr + local_head)
             beta = fx.ptr_load(shared.beta.ptr + local_head)
@@ -238,17 +207,11 @@ def _build_decode(
                 result = Float32(fx.BFloat16(sum_lanes(result, k_lanes)))
                 if k_lane == 0:
                     fx.ptr_store(result, shared.output.ptr + head_offset + row)
-            gpu.barrier()
+            lds_barrier()
 
             if head_thread < WAVE_SIZE:
                 col = head_thread * VECTOR_WIDTH
-                values = fx.Vector.from_elements(
-                    [
-                        fx.ptr_load(shared.output.ptr + head_offset + col + i)
-                        for i in range(VECTOR_WIDTH)
-                    ],
-                    Float32,
-                )
+                values = load_fp32_vec(shared.output.ptr + head_offset + col)
                 z_offset = input_base + conv_width + head * HEAD_DIM + col
                 gates = load_fp32_vec(x_buf + z_offset)
                 weights = load_fp32_vec(buffer_ptr(norm_weight, norm_type) + col)

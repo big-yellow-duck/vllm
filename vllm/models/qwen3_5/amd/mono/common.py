@@ -4,6 +4,8 @@
 """FlyDSL device functions shared by the Qwen GDN kernels."""
 
 import flydsl.expr as fx
+from flydsl._mlir import ir
+from flydsl._mlir.dialects import llvm
 from flydsl.expr import range_constexpr, rocdl
 from flydsl.expr.typing import Float32, T
 
@@ -12,6 +14,19 @@ HEAD_DIM = 128
 VALUES_PER_KEY = 3
 WAVE_SIZE = 32
 VECTOR_WIDTH = HEAD_DIM // WAVE_SIZE
+
+
+def lds_barrier():
+    """Synchronize a gfx12 workgroup at a shared-memory handoff."""
+    # Other waves consume only LDS here. Kernel completion publishes the
+    # convolution and recurrent cache stores to the next dispatch.
+    local = ir.Attribute.parse('#llvm.mmra_tag<"amdgpu-synchronize-as":"local">')
+    release = llvm.fence(llvm.AtomicOrdering.release, syncscope="workgroup")
+    release.attributes["llvm.mmra"] = local
+    rocdl.s_barrier_signal(-1)
+    rocdl.s_barrier_wait(-1)
+    acquire = llvm.fence(llvm.AtomicOrdering.acquire, syncscope="workgroup")
+    acquire.attributes["llvm.mmra"] = local
 
 
 def buffer_ptr(addr, dtype):
