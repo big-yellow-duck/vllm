@@ -234,7 +234,10 @@ class Qwen3_5DecoderLayer(Qwen3NextDecoderLayer):
                 and not envs.VLLM_ROCM_USE_AITER
                 and not envs.VLLM_BATCH_INVARIANT
                 and vllm_config.lora_config is None
-                and vllm_config.speculative_config is None
+                and (
+                    vllm_config.speculative_config is None
+                    or vllm_config.speculative_config.use_dflash()
+                )
                 and model_config.dtype == torch.bfloat16
                 and parallel_config.tensor_parallel_size in (1, 2)
                 and config.model_type == "qwen3_5_text"
@@ -248,7 +251,7 @@ class Qwen3_5DecoderLayer(Qwen3NextDecoderLayer):
                 from vllm.platforms.rocm import on_rdna4
 
                 if on_rdna4():
-                    from .flydsl_gdn_decode import fused_gdn_fp8
+                    from .mono.dispatch import fused_gdn_fp8
 
                     fused_fp8 = fused_gdn_fp8
             self.linear_attn = QwenGatedDeltaNetAttention(

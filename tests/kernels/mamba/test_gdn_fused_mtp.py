@@ -201,6 +201,7 @@ def test_fused_forward_uses_packed_entrypoint() -> None:
     layer = types.SimpleNamespace(
         prefix=PREFIX,
         enable_fused_gdn_spec_decode=True,
+        _fused_gdn_fp8=None,
         _ba_stream=None,
         norm=types.SimpleNamespace(
             weight=torch.empty(V, dtype=torch.bfloat16, device=device)
@@ -425,3 +426,132 @@ def test_fused_model_path_matches_reference(
         atol=3e-2,
         rtol=3e-2,
     )
+
+
+@pytest.mark.parametrize(
+    "state_dtype,dim_first", [(torch.bfloat16, False), (torch.float32, True)]
+)
+@torch.inference_mode()
+def test_flydsl_gdn_verify_preserves_accepted_prefix(
+    state_dtype: torch.dtype, dim_first: bool
+) -> None:
+    if not current_platform.is_rocm():
+        pytest.skip("FlyDSL GDN verification requires ROCm")
+    from vllm.platforms.rocm import on_rdna4
+
+    if not on_rdna4():
+        pytest.skip("FlyDSL GDN verification requires RDNA4")
+    pytest.importorskip("flydsl")
+
+    from vllm.model_executor.layers.mamba.ops.causal_conv1d import causal_conv1d_update
+    from vllm.model_executor.layers.quantization.utils.fp8_utils import (
+        per_token_group_quant_fp8,
+    )
+    from vllm.models.qwen3_5.amd.mono.gdn_verify import flydsl_gdn_spec_decode
+    from vllm.models.qwen3_5.common.fused_gdn_gated_norm import (
+        fused_gdn_gated_rms_norm,
+    )
+    from vllm.third_party.flash_linear_attention.ops.fused_sigmoid_gating import (
+        fused_sigmoid_gating_delta_rule_update,
+    )
+
+    device = torch.device("cuda")
+    generator = torch.Generator(device=device).manual_seed(42)
+    key_heads, value_heads, cap = 2, 6, 8
+    qk_width, v_width = key_heads * K, value_heads * V
+    conv_width = 2 * qk_width + v_width
+    lengths = (8, 3, 0)
+    tokens = sum(lengths)
+
+    def rand(*shape, scale=1.0, dtype=torch.bfloat16):
+        return (torch.randn(shape, generator=generator, device=device) * scale).to(
+            dtype
+        )
+
+    # The second request starts from its eighth snapshot and writes three new
+    # snapshots. The padding row has no state and the other slots stay intact.
+    indices = torch.tensor(
+        [list(range(8, 0, -1)), list(range(16, 8, -1)), [0] * cap],
+        dtype=torch.int32,
+        device=device,
+    )
+    starts = torch.tensor([0, 8, tokens, tokens], dtype=torch.int32, device=device)
+    untouched = torch.tensor([0, 9, 10, 11, 12, 13], device=device)
+    conv = rand(17, conv_width, cap + CONV_KERNEL - 2, scale=0.25)
+    if not dim_first:
+        conv = conv.transpose(1, 2).contiguous().transpose(1, 2)
+    state = rand(17, value_heads, V, K, scale=0.03, dtype=state_dtype)
+    conv_ref, state_ref = conv.clone(), state.clone()
+    weight = rand(conv_width, CONV_KERNEL, scale=0.3)
+    norm = 1 + rand(V, scale=0.1)
+    log_a = rand(value_heads, dtype=torch.float32, scale=0.2) - 3
+    bias = rand(value_heads, scale=0.2)
+    q = torch.empty((tokens, v_width), dtype=torch.float8_e4m3fn, device=device)
+    scales = torch.empty((tokens, value_heads), dtype=torch.float32, device=device)
+
+    for accepted_prefix in ([5, 8, 1], [3, 1, 1], [8, 2, 1]):
+        accepted = torch.tensor(accepted_prefix, dtype=torch.int32, device=device)
+        qkvz = rand(tokens, conv_width + v_width, scale=0.5)
+        ba = rand(tokens, 2 * value_heads, scale=0.2)
+        b, a = ba.chunk(2, dim=1)
+        qkv, gate = qkvz.split((conv_width, v_width), dim=1)
+        x = causal_conv1d_update(
+            qkv,
+            conv_ref,
+            weight,
+            None,
+            "silu",
+            conv_state_indices=indices[:, 0],
+            num_accepted_tokens=accepted,
+            query_start_loc=starts,
+            max_query_len=cap,
+            out=torch.empty_like(qkv),
+        )
+        query, key, value = x.split((qk_width, qk_width, v_width), dim=1)
+        out, _ = fused_sigmoid_gating_delta_rule_update(
+            A_log=log_a,
+            a=a,
+            b=b,
+            dt_bias=bias,
+            q=query.reshape(1, tokens, key_heads, K),
+            k=key.reshape(1, tokens, key_heads, K),
+            v=value.reshape(1, tokens, value_heads, V),
+            initial_state=state_ref,
+            cu_seqlens=starts,
+            ssm_state_indices=indices,
+            num_accepted_tokens=accepted,
+            use_qk_l2norm_in_kernel=True,
+        )
+        out = out.reshape(tokens, v_width)
+        fused_gdn_gated_rms_norm(
+            out, gate, norm, out, EPS, value_heads, V, True, "silu"
+        )
+        ref, ref_scales = per_token_group_quant_fp8(out, V, use_ue8m0=False)
+        flydsl_gdn_spec_decode(
+            qkvz,
+            ba,
+            weight,
+            conv,
+            state,
+            indices,
+            starts,
+            accepted,
+            log_a,
+            bias,
+            norm,
+            q,
+            scales,
+            EPS,
+        )
+
+        torch.testing.assert_close(conv, conv_ref, atol=0, rtol=0)
+        torch.testing.assert_close(
+            state[untouched], state_ref[untouched], atol=0, rtol=0
+        )
+        state_error = state.float() - state_ref.float()
+        assert state_error.norm() < 0.001 * state_ref.float().norm()
+        actual = q.float().reshape(tokens, value_heads, V) * scales.unsqueeze(-1)
+        expected = ref.float().reshape(tokens, value_heads, V) * ref_scales.unsqueeze(
+            -1
+        )
+        assert (actual - expected).norm() < 0.01 * expected.norm()

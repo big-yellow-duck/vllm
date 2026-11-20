@@ -8,27 +8,25 @@ from functools import lru_cache
 import flydsl.compiler as flyc
 import flydsl.expr as fx
 import torch
-from aiter.ops.flydsl.kernels import buffer_ops as bo
 from flydsl.expr import gpu, range_constexpr, rocdl
 from flydsl.expr import math as fmath
 from flydsl.expr.typing import Float32, Int32, Int64, Stream, T
 
-_HEAD_DIM = 128
-_WAVE_SIZE = 32
-_VECTOR_WIDTH = _HEAD_DIM // _WAVE_SIZE
+from .common import HEAD_DIM, VECTOR_WIDTH, WAVE_SIZE, buffer_ptr, load_fp32_vec
+
 _FP8_MAX = 448.0
 
 
 def _gated_norm_fp8(values, gates, weights, eps):
     square_sum = (values * values).reduce(fx.ReductionOp.ADD)
     for shift in range_constexpr(4, -1, -1):
-        square_sum += square_sum.shuffle_xor(1 << shift, _WAVE_SIZE)
-    variance = square_sum * (1.0 / _HEAD_DIM) + eps
+        square_sum += square_sum.shuffle_xor(1 << shift, WAVE_SIZE)
+    variance = square_sum * (1.0 / HEAD_DIM) + eps
     rstd = Float32(rocdl.rsq(T.f32, variance.ir_value()))
 
     normalized = []
     absmax = Float32(1e-10)
-    for i in range_constexpr(_VECTOR_WIDTH):
+    for i in range_constexpr(VECTOR_WIDTH):
         exponent = gates[i] * -1.4426950408889634
         exp = Float32(rocdl.exp2(T.f32, exponent.ir_value()))
         denominator = Float32(1.0) + exp
@@ -39,7 +37,7 @@ def _gated_norm_fp8(values, gates, weights, eps):
         normalized.append(rounded)
         absmax = Float32(fx.max(absmax, fmath.absf(rounded)))
     for shift in range_constexpr(4, -1, -1):
-        peer = absmax.shuffle_xor(1 << shift, _WAVE_SIZE)
+        peer = absmax.shuffle_xor(1 << shift, WAVE_SIZE)
         absmax = Float32(fx.max(absmax, peer))
     scale = absmax * (1.0 / _FP8_MAX)
     reciprocal = Float32(rocdl.rcp(T.f32, scale.ir_value()))
@@ -51,7 +49,7 @@ def _gated_norm_fp8(values, gates, weights, eps):
 
 @lru_cache(maxsize=8)
 def _build_gated_norm_quant(device: int, fp32_weight: bool, waves_per_block: int):
-    threads = waves_per_block * _WAVE_SIZE
+    threads = waves_per_block * WAVE_SIZE
 
     @flyc.kernel(known_block_size=[threads, 1, 1])
     def qwen_gdn_gated_norm_quant(
@@ -67,46 +65,26 @@ def _build_gated_norm_quant(device: int, fp32_weight: bool, waves_per_block: int
         eps: Float32,
     ):
         tid = gpu.thread_idx.x
-        lane = tid % _WAVE_SIZE
-        group = gpu.block_idx.x * waves_per_block + tid // _WAVE_SIZE
+        lane = tid % WAVE_SIZE
+        group = gpu.block_idx.x * waves_per_block + tid // WAVE_SIZE
         if group < groups:
             token = group // heads
-            column = (group % heads) * _HEAD_DIM + lane * _VECTOR_WIDTH
-            values = fx.Vector(
-                bo.buffer_load(
-                    bo.create_buffer_resource_from_addr(x),
-                    token * stride_x + column,
-                    vec_width=_VECTOR_WIDTH,
-                    dtype=T.bf16,
-                )
-            ).to(Float32)
-            gates = fx.Vector(
-                bo.buffer_load(
-                    bo.create_buffer_resource_from_addr(gate),
-                    token * stride_gate + column,
-                    vec_width=_VECTOR_WIDTH,
-                    dtype=T.bf16,
-                )
-            ).to(Float32)
-            weights = fx.Vector(
-                bo.buffer_load(
-                    bo.create_buffer_resource_from_addr(weight),
-                    lane * _VECTOR_WIDTH,
-                    vec_width=_VECTOR_WIDTH,
-                    dtype=T.f32 if fp32_weight else T.bf16,
-                )
-            ).to(Float32)
+            column = (group % heads) * HEAD_DIM + lane * VECTOR_WIDTH
+            values = load_fp32_vec(buffer_ptr(x, T.bf16) + token * stride_x + column)
+            gates = load_fp32_vec(
+                buffer_ptr(gate, T.bf16) + token * stride_gate + column
+            )
+            weight_type = T.f32 if fp32_weight else T.bf16
+            weights = load_fp32_vec(
+                buffer_ptr(weight, weight_type) + lane * VECTOR_WIDTH
+            )
 
             packed, scale = _gated_norm_fp8(values, gates, weights, eps)
-            bo.buffer_store(
-                packed,
-                bo.create_buffer_resource_from_addr(quantized),
-                group * _WAVE_SIZE + lane,
+            fx.ptr_store(
+                packed, buffer_ptr(quantized, T.i32) + group * WAVE_SIZE + lane
             )
             if lane == 0:
-                bo.buffer_store(
-                    scale, bo.create_buffer_resource_from_addr(scales), group
-                )
+                fx.ptr_store(scale, buffer_ptr(scales, T.f32) + group)
 
     @flyc.jit
     def launch(
@@ -155,7 +133,7 @@ def gated_norm_quant(
 ) -> None:
     if not x.numel():
         return
-    heads = x.shape[1] // _HEAD_DIM
+    heads = x.shape[1] // HEAD_DIM
     launch = _build_gated_norm_quant(x.get_device(), weight.dtype == torch.float32, 1)
     launch(
         x.data_ptr(),

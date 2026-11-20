@@ -202,13 +202,12 @@ def test_flydsl_gdn_decode_cache_and_fp8_output(
     if not on_rdna4():
         pytest.skip("FlyDSL GDN decode requires RDNA4")
     pytest.importorskip("flydsl")
-    pytest.importorskip("aiter.ops.flydsl.kernels.buffer_ops")
 
     from vllm.model_executor.layers.mamba.ops.causal_conv1d import causal_conv1d_update
     from vllm.model_executor.layers.quantization.utils.fp8_utils import (
         per_token_group_quant_fp8,
     )
-    from vllm.models.qwen3_5.amd.flydsl_gdn_decode import flydsl_gdn_decode
+    from vllm.models.qwen3_5.amd.mono.gdn_decode import flydsl_gdn_decode
     from vllm.models.qwen3_5.common.fused_gdn_gated_norm import fused_gdn_gated_rms_norm
     from vllm.third_party.flash_linear_attention.ops.fused_recurrent import (
         fused_recurrent_gated_delta_rule_packed_decode,
