@@ -355,7 +355,10 @@ def test_rdna4_geometry_rejects_unsupported_head_and_rope(head_dim, rope_dim):
         TunedHipOctave(head_dim, rope_dim, "gfx1201")
 
 
-@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+# This test calls the prefill kernel directly. RDNA3/CDNA3 prefill takes FP16.
+@pytest.mark.parametrize(
+    "dtype", [torch.float16, torch.bfloat16] if ARCH == "rdna4" else [torch.float16]
+)
 @pytest.mark.parametrize(
     "cache_dtype,query_lens,group,path",
     [
