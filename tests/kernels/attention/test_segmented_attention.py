@@ -92,6 +92,8 @@ def _make_paged_attention_case(
     sliding_window: int = 0,
     softcap: float = 0.0,
     sinks: torch.Tensor | None = None,
+    mm_ranges: dict[int, list[tuple[int, int]]] | None = None,
+    mm_prefix_clamp_sliding_window: bool = False,
 ):
     device = torch.device("cuda:0")
     generator = torch.Generator(device=device).manual_seed(419)
@@ -186,14 +188,30 @@ def _make_paged_attention_case(
             scores = softcap * torch.tanh(scores / softcap)
         query_positions = context_len + torch.arange(query_len, device=device)
         key_positions = torch.arange(seq_len, device=device)
-        causal_mask = key_positions[None, :] > query_positions[:, None]
+        visible = torch.ones((query_len, seq_len), device=device, dtype=torch.bool)
         if causal:
-            scores.masked_fill_(causal_mask[None], -float("inf"))
+            visible &= key_positions[None, :] <= query_positions[:, None]
         if sliding_window > 0:
-            window_mask = key_positions[None, :] < (
-                query_positions[:, None] - sliding_window + 1
+            past_bound = key_positions[None, :] > (
+                query_positions[:, None] - sliding_window
             )
-            scores.masked_fill_(window_mask[None], -float("inf"))
+            visible &= past_bound
+            if mm_ranges is not None and not causal:
+                visible &= (
+                    key_positions[None, :] - query_positions[:, None]
+                ) < sliding_window
+        for start, end in (mm_ranges or {}).get(seq, []):
+            same_image = (
+                (start < end)
+                & (query_positions[:, None] >= start)
+                & (query_positions[:, None] <= end)
+                & (key_positions[None, :] >= start)
+                & (key_positions[None, :] <= end)
+            )
+            if mm_prefix_clamp_sliding_window and sliding_window > 0:
+                same_image &= past_bound
+            visible |= same_image
+        scores.masked_fill_(~visible[None], -float("inf"))
         if sinks is not None:
             sink_scores = sinks.float()[:, None, None].expand(-1, query_len, 1)
             probabilities = torch.cat((scores, sink_scores), dim=-1).softmax(-1)
@@ -1595,3 +1613,196 @@ def test_segmented_scratch_is_stable_and_isolated_across_runtime_lanes(monkeypat
                 not in pointers
             )
     assert len(pointers) == 8
+
+
+@pytest.mark.parametrize("fp8", [False, True])
+@pytest.mark.parametrize("splits", [1, 4])
+@pytest.mark.parametrize(
+    "head_size,kv_heads,window,clamp,causal",
+    [
+        (64, 4, 0, False, True),
+        (128, 1, 8, False, True),
+        (256, 4, 8, True, True),
+        (512, 1, 0, False, True),
+        (256, 2, 8, True, False),
+        (512, 1, 8, False, False),
+    ],
+)
+@torch.inference_mode()
+def test_segmented_mm_prefix_matches_dense_reference(
+    fp8, splits, head_size, kv_heads, window, clamp, causal
+):
+    """Ragged image/text rows reopen image keys before split reduction."""
+    if fp8 and not on_gfx12x():
+        pytest.skip("FP8 segmented attention requires gfx12")
+    from vllm.v1.attention.backends.utils import compute_mm_prefix_range_tensor
+
+    ranges = {0: [(0, 70), (72, 76)], 1: [], 2: [(1000, 2000)], 3: [(123, 137)]}
+    options = dict(
+        num_heads=8,
+        num_kv_heads=kv_heads,
+        head_size=head_size,
+        block_size=16,
+        fp8=fp8,
+        causal=causal,
+        sliding_window=window,
+        mm_prefix_clamp_sliding_window=clamp,
+    )
+    case = _make_paged_attention_case(
+        [16, 3, 0, 5], [61, 37, 29, 124], mm_ranges=ranges, **options
+    )
+    mm = compute_mm_prefix_range_tensor(ranges, 4, case["query"].device)
+    assert mm is not None
+    output = torch.empty_like(case["query"])
+
+    def run():
+        _run_segmented_case(
+            case,
+            output,
+            16,
+            force_splits=splits,
+            sliding_window=window - 1,
+            causal=causal,
+            mm_prefix_range=mm,
+            mm_prefix_clamp_sliding_window=clamp,
+        )
+
+    run()
+    reference = case["reference"]
+    relative = (output.float() - reference).norm(dim=-1) / reference.norm(
+        dim=-1
+    ).clamp_min(1e-6)
+    assert torch.isfinite(output).all() and relative.max().item() < 0.01
+    if fp8 and head_size == 512 and window == 0 and splits == 4:
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph):
+            run()
+        changed = {0: [(0, 65), (69, 74)], 3: [(125, 128)]}
+        mm.copy_(compute_mm_prefix_range_tensor(changed, 4, output.device))
+        graph.replay()
+        torch.accelerator.synchronize()
+        reference = _make_paged_attention_case(
+            [16, 3, 0, 5], [61, 37, 29, 124], mm_ranges=changed, **options
+        )["reference"]
+        relative = (output.float() - reference).norm(dim=-1) / reference.norm(
+            dim=-1
+        ).clamp_min(1e-6)
+        assert torch.isfinite(output).all() and relative.max().item() < 0.01
+
+
+@pytest.mark.parametrize("fp8", [False, True])
+@pytest.mark.parametrize(
+    "count,overlap,clamp,causal",
+    [
+        (1, False, True, True),
+        (4, False, True, True),
+        (4, True, False, True),
+        (16, False, False, False),
+    ],
+)
+@torch.inference_mode()
+def test_segmented_mm_image_islands_match_dense_reference(
+    fp8, count, overlap, clamp, causal
+):
+    """Independent images keep gaps; overlapping ranges form a connected union."""
+    if fp8 and not on_gfx12x():
+        pytest.skip("FP8 segmented attention requires gfx12")
+    from vllm.v1.attention.backends.utils import compute_mm_prefix_range_tensor
+
+    stride = 12 if overlap else 24
+    ranges = {0: [(2030 + i * stride, 2049 + i * stride) for i in range(count)]}
+    case = _make_paged_attention_case(
+        [256],
+        [2000],
+        num_heads=8,
+        num_kv_heads=4,
+        head_size=256,
+        block_size=16,
+        fp8=fp8,
+        causal=causal,
+        sliding_window=8,
+        mm_ranges=ranges,
+        mm_prefix_clamp_sliding_window=clamp,
+    )
+    output = torch.empty_like(case["query"])
+    _run_segmented_case(
+        case,
+        output,
+        256,
+        sliding_window=7,
+        causal=causal,
+        mm_prefix_range=compute_mm_prefix_range_tensor(ranges, 1, output.device),
+        mm_prefix_clamp_sliding_window=clamp,
+        mm_prefix_max_span=20,
+    )
+    reference = case["reference"]
+    relative = (output.float() - reference).norm(dim=-1) / reference.norm(
+        dim=-1
+    ).clamp_min(1e-6)
+    assert torch.isfinite(output).all() and relative.max().item() < 0.01
+
+
+@pytest.mark.parametrize("fp8", [False, True])
+@pytest.mark.parametrize(
+    "query_len,window,clamp,causal,softcap",
+    [
+        (1, 8, True, True, 0.0),
+        (1, 8, False, False, 0.0),
+        (16, 8, True, True, 1.0),
+        (16, 0, False, False, 1.0),
+    ],
+)
+@torch.inference_mode()
+def test_segmented_mm_decode_and_fallback_match_dense_reference(
+    fp8, query_len, window, clamp, causal, softcap
+):
+    """Single-query routing and unified softcap fallback preserve image masks."""
+    if fp8 and not on_gfx12x():
+        pytest.skip("FP8 segmented attention requires gfx12")
+    from vllm.v1.attention.backends.utils import compute_mm_prefix_range_tensor
+    from vllm.v1.attention.ops.segmented_attention import segmented_attention
+
+    ranges = {0: [(0, 70), (72, 76)], 1: []}
+    case = _make_paged_attention_case(
+        [query_len, 1],
+        [61, 37],
+        num_heads=8,
+        num_kv_heads=1,
+        head_size=512,
+        block_size=16,
+        fp8=fp8,
+        causal=causal,
+        sliding_window=window,
+        softcap=softcap,
+        mm_ranges=ranges,
+        mm_prefix_clamp_sliding_window=clamp,
+    )
+    output = torch.empty_like(case["query"])
+    segmented_attention(
+        query=case["query"],
+        key=None,
+        value=None,
+        output=output,
+        kv_cache_dtype="fp8" if fp8 else "auto",
+        key_cache=case["key_cache"],
+        value_cache=case["value_cache"],
+        block_table=case["block_table"],
+        query_start_loc=case["starts"],
+        seq_lens=case["seq_lens"],
+        max_seq_len=case["max_seq_len"],
+        max_query_len=query_len,
+        k_scale=case["k_scale"],
+        v_scale=case["v_scale"],
+        sm_scale=512**-0.5,
+        softcap=softcap,
+        sliding_window=window - 1,
+        causal=causal,
+        mm_prefix_range=compute_mm_prefix_range_tensor(ranges, 2, output.device),
+        mm_prefix_clamp_sliding_window=clamp,
+        use_tuned_config=False,
+    )
+    reference = case["reference"]
+    relative = (output.float() - reference).norm(dim=-1) / reference.norm(
+        dim=-1
+    ).clamp_min(1e-6)
+    assert torch.isfinite(output).all() and relative.max().item() < 0.01

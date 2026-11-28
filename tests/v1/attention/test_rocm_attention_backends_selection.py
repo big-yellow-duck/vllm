@@ -146,7 +146,7 @@ def test_segmented_attention_uses_dedicated_backend_components():
     assert RocmSegmentedAttentionBackend.supports_non_causal()
     assert RocmSegmentedAttentionBackend.supports_sliding_window()
     assert RocmSegmentedAttentionBackend.supports_sink()
-    assert not RocmSegmentedAttentionBackend.supports_mm_prefix()
+    assert RocmSegmentedAttentionBackend.supports_mm_prefix()
 
 
 @pytest.mark.parametrize(
@@ -281,24 +281,43 @@ def test_segmented_attention_is_opt_in(monkeypatch):
     assert path == AttentionBackendEnum.ROCM_SEGMENTED_ATTN.get_path()
 
 
-def test_segmented_attention_rejects_mm_prefix_at_selection(monkeypatch):
+@pytest.mark.parametrize(
+    "rdna,gfx12,kv_cache_dtype,error",
+    [
+        pytest.param(False, False, "auto", "requires AMD RDNA GPUs", id="cdna"),
+        pytest.param(True, False, "auto", None, id="rdna3-bf16"),
+        pytest.param(True, False, "fp8", "requires gfx12", id="rdna3-fp8"),
+        pytest.param(True, True, "fp8", None, id="rdna4-fp8"),
+    ],
+)
+def test_segmented_attention_mm_prefix_selection(
+    monkeypatch, rdna, gfx12, kv_cache_dtype, error
+):
     from vllm.platforms import rocm
     from vllm.platforms.rocm import RocmPlatform
 
-    monkeypatch.setattr(rocm, "on_rdna", lambda: True)
+    monkeypatch.setattr(rocm, "on_rdna", lambda: rdna)
+    monkeypatch.setattr(rocm, "on_gfx12x", lambda: gfx12)
     config = AttentionSelectorConfig(
         head_size=128,
         dtype=torch.bfloat16,
-        kv_cache_dtype="auto",
+        kv_cache_dtype=kv_cache_dtype,
         block_size=32,
         use_mm_prefix=True,
     )
 
-    with pytest.raises(ValueError, match="multimodal token full attention"):
-        RocmPlatform.get_attn_backend_cls(
+    if error:
+        with pytest.raises(ValueError, match=error):
+            RocmPlatform.get_attn_backend_cls(
+                selected_backend=AttentionBackendEnum.ROCM_SEGMENTED_ATTN,
+                attn_selector_config=config,
+            )
+    else:
+        path = RocmPlatform.get_attn_backend_cls(
             selected_backend=AttentionBackendEnum.ROCM_SEGMENTED_ATTN,
             attn_selector_config=config,
         )
+        assert path == AttentionBackendEnum.ROCM_SEGMENTED_ATTN.get_path()
 
 
 def test_segmented_attention_forward_uses_dedicated_dispatch(monkeypatch):

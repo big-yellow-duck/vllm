@@ -12,6 +12,8 @@ from vllm.utils.math_utils import cdiv, next_power_of_2
 
 KVUpcastMode = Literal["normal", "native1", "native4"]
 KV_UPCAST_MODES: tuple[KVUpcastMode, ...] = ("normal", "native1", "native4")
+MMPrefixMode = Literal["none", "clamped", "unclamped"]
+MM_PREFIX_SPAN_BUCKETS = (256, 576, 1152, 2048, 4096, 8192)
 MAX_QUERY_LEN = 8192
 MAX_SPLITS = 64
 MAX_LONG_EXTEND_WORKSPACE_BYTES = 32 * 1024 * 1024
@@ -76,6 +78,35 @@ def segmented_query_capacity(max_query_len: int) -> int:
     return 1 << (max_query_len - 1).bit_length()
 
 
+def segmented_mm_prefix_bucket(span: int, ranges: int) -> tuple[int, int]:
+    """Bound image span and range-loop work without inspecting device tensors."""
+    if span <= 0 or ranges <= 0:
+        return 0, 0
+    span_bucket = next((s for s in MM_PREFIX_SPAN_BUCKETS if s >= span), span)
+    return span_bucket, 1 << (ranges - 1).bit_length()
+
+
+def segmented_attention_span(
+    max_seq_len: int,
+    max_query_len: int,
+    sliding_window: int,
+    mm_prefix_mode: MMPrefixMode = "none",
+    mm_prefix_max_span: int = 0,
+) -> int:
+    """Bound the visited KV span, including reopened past and future image keys."""
+    if sliding_window < 0:
+        return max_seq_len
+    if mm_prefix_mode == "none":
+        return min(max_seq_len, sliding_window + max_query_len)
+    if mm_prefix_max_span <= 0:
+        return max_seq_len
+    future = mm_prefix_max_span - 1
+    past = sliding_window
+    if mm_prefix_mode == "unclamped":
+        past = max(past, future)
+    return min(max_seq_len, max_query_len + past + future)
+
+
 def _query_capacity_buckets() -> tuple[int, ...]:
     return tuple(1 << exponent for exponent in range(MAX_QUERY_LEN.bit_length()))
 
@@ -128,6 +159,16 @@ def segmented_kv_upcast_mode(config: Mapping[str, object]) -> KVUpcastMode:
     return mode
 
 
+def segmented_mm_qk_loop_options(
+    config: SegmentedLaunchConfig, dim: int
+) -> tuple[int | None, int | None]:
+    """Return the QK loop scheduling hints for an image-prefix launch."""
+    # A full-width tile has a single QK iteration, so neither hint applies.
+    if config["bk"] == dim:
+        return None, None
+    return config.get("qk_pipeline"), config.get("qk_unroll")
+
+
 @_cache_config_selector
 def select_segmented_config(
     batch: int,
@@ -140,8 +181,19 @@ def select_segmented_config(
     *,
     sliding_window: int = -1,
     native_fp8: bool = True,
+    mm_prefix_mode: MMPrefixMode = "none",
+    mm_prefix_max_span: int = 0,
+    mm_prefix_max_ranges: int = 0,
 ) -> SegmentedAttentionConfig:
     """Select launch geometry and KV conversion for the attention workload."""
+    if mm_prefix_mode != "none":
+        max_seq_len = segmented_attention_span(
+            max_seq_len,
+            max_query_len,
+            sliding_window,
+            mm_prefix_mode,
+            mm_prefix_max_span,
+        )
     cfg = _select_segmented_launch_config(
         batch, max_query_len, max_seq_len, hq, hk, dim, fp8
     )
@@ -157,6 +209,79 @@ def select_segmented_config(
         native_fp8,
         sliding_window,
     )
+    mm_image_tile = (
+        (mm_prefix_mode == "clamped" or (mm_prefix_mode == "unclamped" and fp8))
+        and dim == 256
+        and max_query_len >= 256
+        and sliding_window >= 511
+        and hq // hk <= 4
+        and (not fp8 or native_fp8)
+        and not cfg.get("pv_split", False)
+    )
+    short_groups = (
+        batch * hk * cdiv(max_query_len * (hq // hk), 32)
+        if mm_prefix_mode != "none"
+        else 0
+    )
+    mm_short_tile = (
+        mm_prefix_mode != "none"
+        and dim == 256
+        and 32 < max_query_len <= 128
+        and max_seq_len <= 128
+        and (max_seq_len > 64 or (not fp8 and short_groups < 64))
+        and mm_prefix_max_ranges <= 1
+        and hq // hk <= 4
+        and (not fp8 or native_fp8)
+    )
+    if mm_short_tile:
+        narrow = not fp8 and short_groups < 64
+        cfg.update(
+            {
+                "bm": 16 if narrow else 32,
+                "bn": 64 if narrow else 128,
+                "bk": 128 if narrow else 64,
+                "warps": 4 if narrow else 8,
+                "stages": 1,
+                "splits": 1,
+                "waves_per_eu": 2,
+                "pv_split": False,
+                "prefix_fast": False,
+                "qk_pipeline": None,
+                "qk_unroll": None,
+            }
+        )
+    if mm_image_tile:
+        cfg.update(
+            {
+                "bm": 64,
+                "bn": 64,
+                "bk": 64,
+                "warps": 8,
+                "stages": 1,
+                "waves_per_eu": 6,
+                "pv_split": False,
+                "prefix_fast": False,
+                "qk_pipeline": None,
+                "qk_unroll": None,
+            }
+        )
+        groups = batch * hk * cdiv(max_query_len * (hq // hk), cfg["bm"])
+        splits = min(32, next_power_of_2(cdiv(64, groups)))
+        while splits > 1 and max_seq_len < splits * cfg["bn"] * 2:
+            splits //= 2
+        cfg["splits"] = splits
+        if (
+            max_query_len >= 1024
+            and mm_prefix_max_span > 0
+            and max_query_len > 4 * mm_prefix_max_span * max(1, mm_prefix_max_ranges)
+        ):
+            if fp8:
+                cfg.update({"bn": 32, "warps": 4})
+            else:
+                # Sparse-image prompts retain the wide BF16 accumulator schedule.
+                cfg.update({"stages": 3, "pv_split": True, "qk_pipeline": 3})
+    if mm_prefix_mode != "none":
+        cfg["qk_pipeline"], cfg["qk_unroll"] = segmented_mm_qk_loop_options(cfg, dim)
     mode: KVUpcastMode = (
         _select_segmented_kv_upcast(
             cfg, batch, max_query_len, max_seq_len, hq, hk, dim, sliding_window
@@ -164,6 +289,8 @@ def select_segmented_config(
         if fp8 and native_fp8
         else "normal"
     )
+    if (mm_image_tile or mm_short_tile) and fp8 and native_fp8:
+        mode = "native4"
     return SegmentedAttentionConfig(**cfg, kv_upcast=mode)
 
 
